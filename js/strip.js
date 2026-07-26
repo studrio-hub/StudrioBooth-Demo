@@ -51,15 +51,15 @@ const stripModule = {
   },
 
   loadImage(src) {
-  if (this._imageCache.has(src)) return this._imageCache.get(src);
-  const promise = new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
-  this._imageCache.set(src, promise);
-  return promise;
+    if (this._imageCache.has(src)) return this._imageCache.get(src);
+    const promise = new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+    this._imageCache.set(src, promise);
+    return promise;
   },
 
   /* Crop-to-fill: fills the exact w x h box, cropping overflow — never stretches. */
@@ -145,30 +145,201 @@ const stripModule = {
     return canvas;
   },
 
+  /*
+   * LIVE VIDEO STRIP — used only on the digital gallery page as a
+   * DOM-based fallback (real <video> elements positioned over slots).
+   * Falls back to the still photo if a slot has no video.
+   */
+  renderLive(containerEl, { frameType, selectedShots, designId }) {
+    const config = LAYOUT_CONFIGS[frameType];
+    if (!config) throw new Error(`Unknown frame type: ${frameType}`);
+
+    const design = this.getDesign(designId);
+    const overlayPath = design && design.overlays && design.overlays[frameType];
+    const copies = frameType === "2x6" ? 2 : 1;
+    const slotsPerCopy = config.photoSlots.length / copies;
+
+    containerEl.innerHTML = "";
+    containerEl.classList.add("live-strip-row");
+
+    for (let c = 0; c < copies; c++) {
+      const wrap = document.createElement("div");
+      wrap.className = "live-strip-wrap";
+      wrap.style.aspectRatio = `${config.canvasWidth / copies} / ${config.canvasHeight}`;
+
+      for (let i = 0; i < slotsPerCopy; i++) {
+        const slotIndex = c * slotsPerCopy + i;
+        const slot = config.photoSlots[slotIndex];
+        const shot = selectedShots[config.slotToPhotoIndex[slotIndex]];
+
+        // Convert absolute px coords into % relative to this single strip's own width
+        const stripWidth = config.canvasWidth / copies;
+        const localX = slot.x - c * stripWidth;
+        const leftPct = (localX / stripWidth) * 100;
+        const topPct = (slot.y / config.canvasHeight) * 100;
+        const widthPct = (slot.w / stripWidth) * 100;
+        const heightPct = (slot.h / config.canvasHeight) * 100;
+
+        const media = document.createElement(shot && shot.videoUrl ? "video" : "img");
+        media.className = "live-strip-media";
+        media.style.left = `${leftPct}%`;
+        media.style.top = `${topPct}%`;
+        media.style.width = `${widthPct}%`;
+        media.style.height = `${heightPct}%`;
+        media.style.borderRadius = `${config.slotCornerRadiusPct || 0}%`;
+
+        if (shot && shot.videoUrl) {
+          media.src = shot.videoUrl;
+          media.muted = true;
+          media.autoplay = true;
+          media.loop = true;
+          media.playsInline = true;
+        } else if (shot && shot.imageUrl) {
+          media.src = shot.imageUrl;
+          media.alt = "Selected photo";
+        }
+
+        wrap.appendChild(media);
+      }
+
+      if (overlayPath) {
+        const overlayImg = document.createElement("img");
+        overlayImg.className = "live-strip-overlay";
+        overlayImg.src = overlayPath;
+        overlayImg.alt = "Frame design";
+        wrap.appendChild(overlayImg);
+      }
+
+      containerEl.appendChild(wrap);
+    }
+  },
+
+  /*
+   * COMBINED VIDEO STRIP EXPORT — records the full composited layout
+   * (all 4 videos playing in their exact slots + frame overlay on top)
+   * into ONE downloadable/shareable .webm file, matching the print
+   * layout exactly but animated. Recording length matches durationMs.
+   */
+  async exportVideoStrip({ frameType, selectedShots, designId, durationMs = 3000, scale = 0.3 }) {
+    const config = LAYOUT_CONFIGS[frameType];
+    if (!config) throw new Error(`Unknown frame type: ${frameType}`);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(config.canvasWidth * scale);
+    canvas.height = Math.round(config.canvasHeight * scale);
+    const ctx = canvas.getContext("2d");
+
+    // Preload hidden <video> elements for every slot that has a video,
+    // and <img> fallbacks for slots that don't.
+    const mediaEls = await Promise.all(
+      config.photoSlots.map((slot, i) => {
+        const shot = selectedShots[config.slotToPhotoIndex[i]];
+        return new Promise((resolve) => {
+          if (shot && shot.videoUrl) {
+            const v = document.createElement("video");
+            v.src = shot.videoUrl;
+            v.muted = true;
+            v.loop = true;
+            v.playsInline = true;
+            v.oncanplay = () => { v.play(); resolve(v); };
+            v.onerror = () => resolve(null);
+          } else if (shot && shot.imageUrl) {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = shot.imageUrl;
+          } else {
+            resolve(null);
+          }
+        });
+      })
+    );
+
+    const design = this.getDesign(designId);
+    const overlayPath = design && design.overlays && design.overlays[frameType];
+    const overlayImg = overlayPath ? await this.loadImage(overlayPath) : null;
+
+    const drawMediaCropFill = (media, x, y, w, h) => {
+      const mw = media.videoWidth || media.width;
+      const mh = media.videoHeight || media.height;
+      const mediaRatio = mw / mh;
+      const boxRatio = w / h;
+      let sx, sy, sw, sh;
+      if (mediaRatio > boxRatio) {
+        sh = mh; sw = sh * boxRatio; sx = (mw - sw) / 2; sy = 0;
+      } else {
+        sw = mw; sh = sw / boxRatio; sx = 0; sy = (mh - sh) / 2;
+      }
+      ctx.drawImage(media, sx, sy, sw, sh, x, y, w, h);
+    };
+
+    const drawFrame = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      config.photoSlots.forEach((slot, i) => {
+        const media = mediaEls[i];
+        if (media) {
+          drawMediaCropFill(media, slot.x * scale, slot.y * scale, slot.w * scale, slot.h * scale);
+        }
+      });
+      if (overlayImg) {
+        ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+      }
+    };
+
+    const stream = canvas.captureStream(30);
+    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    return new Promise((resolve) => {
+      recorder.onstop = () => {
+        mediaEls.forEach((m) => { if (m && m.pause) m.pause(); });
+        resolve(new Blob(chunks, { type: "video/webm" }));
+      };
+
+      let rafId;
+      const tick = () => { drawFrame(); rafId = requestAnimationFrame(tick); };
+      tick();
+
+      recorder.start();
+      setTimeout(() => {
+        cancelAnimationFrame(rafId);
+        recorder.stop();
+      }, durationMs);
+    });
+  },
+
   /* Full-resolution PNG export — exact 2400x3600, all layers composited. */
   async exportPNG(opts) {
     const canvas = await this.compositeLayout(opts);
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   },
 
-  // renderSwatchPicker(...) — leave exactly as it was, no changes needed there
-
-  /* Renders the 7 selectable design swatches into a container (Page 5) */
-  renderSwatchPicker(containerEl, currentDesignId, onSelect) {
+  /* Renders the selectable design swatches into a container (Page 5) */
+  async renderSwatchPicker(containerEl, currentDesignId, onSelect) {
     containerEl.innerHTML = "";
-    STRIP_DESIGNS.forEach((design) => {
+
+    for (const design of STRIP_DESIGNS) {
       const swatch = document.createElement("button");
       swatch.className = "design-swatch" + (design.id === currentDesignId ? " selected" : "");
       swatch.dataset.designId = design.id;
 
-      const preview = document.createElement("div");
-      preview.className = `design-swatch-preview ${design.cssClass}`;
+      const previewWrap = document.createElement("div");
+      previewWrap.className = "design-swatch-preview-wrap";
+
+      const canvas = await this.compositeLayout({
+        frameType: sessionState.frameType || "2x6",
+        selectedShots: sessionState.selectedShots,
+        designId: design.id
+      });
+      canvas.classList.add("design-swatch-canvas");
+      previewWrap.appendChild(canvas);
 
       const name = document.createElement("span");
       name.className = "design-swatch-name";
       name.textContent = design.label;
 
-      swatch.appendChild(preview);
+      swatch.appendChild(previewWrap);
       swatch.appendChild(name);
 
       swatch.addEventListener("click", () => {
@@ -178,7 +349,7 @@ const stripModule = {
       });
 
       containerEl.appendChild(swatch);
-    });
+    }
   }
 };
 
@@ -195,12 +366,12 @@ const designModule = {
     nextBtn: document.getElementById("btnNextFromDesign")
   },
 
-  init() {
+  async init() {
     if (!sessionState.design) {
-      sessionState.design = STRIP_DESIGNS[0].id; // default: Minimal White
+      sessionState.design = STRIP_DESIGNS[0].id;
     }
 
-    stripModule.renderSwatchPicker(this.els.options, sessionState.design, (designId) => {
+    await stripModule.renderSwatchPicker(this.els.options, sessionState.design, (designId) => {
       sessionState.design = designId;
       this.renderPreview();
     });
@@ -220,5 +391,5 @@ const designModule = {
 
 document.getElementById("btnBackFromDesign").addEventListener("click", () => goToPage("selection"));
 document.getElementById("btnNextFromDesign").addEventListener("click", () => {
-  goToPage("printing"); // page 6 — next batch
+  goToPage("printing"); // page 6
 });
