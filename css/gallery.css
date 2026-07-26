@@ -206,7 +206,7 @@ html, body {
 @media (max-width: 380px) {
   .gallery-download-row { gap: 8px; }
   .gallery-download-toggle { padding: 10px; gap: 8px; }
-  .gallery-download-subtitle { display: none; } /* keep just the title on very narrow screens */
+  .gallery-download-subtitle { display: none; }
 }
 
 /* Real, tappable fallback link shown only after a download attempt

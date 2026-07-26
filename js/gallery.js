@@ -125,13 +125,16 @@ const galleryModule = {
      while the fetch is in flight, and on failure shows a real
      tappable link (not an auto-opened tab) so the user always has a
      working way to get the file. */
-bindBigDownloadButton(btn, url, filename) {
+  bindBigDownloadButton(btn, url, filename) {
+    if (!btn) return;
     const subtitleEl = btn.querySelector(".gallery-download-subtitle");
     const originalSubtitle = subtitleEl ? subtitleEl.textContent : "";
     btn.hidden = false;
+    btn.disabled = false;
     this.prefetch(url);
 
     btn.addEventListener("click", () => {
+      console.log("[gallery] Download tapped:", filename, url);
       this.downloadUrl(url, filename, {
         onStart: () => {
           btn.disabled = true;
@@ -142,13 +145,15 @@ bindBigDownloadButton(btn, url, filename) {
           btn.disabled = false;
           btn.classList.remove("is-downloading");
           if (subtitleEl) subtitleEl.textContent = originalSubtitle;
+          console.log("[gallery] Download succeeded:", filename);
         },
-        onError: () => {
+        onError: (e) => {
           btn.disabled = false;
           btn.classList.remove("is-downloading");
           if (subtitleEl) subtitleEl.textContent = "Tap to retry";
+          console.error("[gallery] Download button failed for", filename, e);
           this.showToast("Couldn't download the file — check your connection and tap the button again.");
-          const row = btn.closest(".gallery-download-row");
+          const row = btn.closest(".gallery-download-row") || btn.parentElement;
           const fallback = row.querySelector(".gallery-fallback-link") || (() => {
             const a = document.createElement("a");
             a.className = "gallery-fallback-link";
@@ -224,39 +229,63 @@ bindBigDownloadButton(btn, url, filename) {
       return;
     }
 
-// ---- Single preview: always shown as an autoplaying, muted, looping
-    //      video — the composited strip video if we have one, otherwise
-    //      the live DOM strip (individual videos positioned in the print
-    //      layout) as a fallback. A small tap-to-unmute control sits over
-    //      it; there's no static image preview anymore. ----
-    if (data.finalStripVideoUrl) {
-      this.els.stripContainer.innerHTML = `<video src="${data.finalStripVideoUrl}" autoplay loop muted playsinline></video>`;
-      const videoEl = this.els.stripContainer.querySelector("video");
+    console.log("[gallery] session loaded:", {
+      id: data.id,
+      hasFinalStripUrl: !!data.finalStripUrl,
+      hasFinalStripVideoUrl: !!data.finalStripVideoUrl,
+      fromCloud
+    });
 
-      if (this.els.muteToggle) {
-        this.els.muteToggle.hidden = false;
-        this.els.muteToggle.onclick = () => this.toggleMute(videoEl);
+    // ---- Single preview: always an autoplaying, muted, looping video
+    //      (the composited strip video) with a tap-to-unmute control.
+    //      This is wrapped in its own try/catch — a rendering problem
+    //      here must never prevent the download buttons or the grid
+    //      below from being wired up. ----
+    try {
+      if (data.finalStripVideoUrl) {
+        this.els.stripContainer.innerHTML = `<video src="${data.finalStripVideoUrl}" autoplay loop muted playsinline></video>`;
+        const videoEl = this.els.stripContainer.querySelector("video");
+        videoEl.addEventListener("error", () => {
+          console.error("[gallery] Video element failed to load:", data.finalStripVideoUrl);
+        });
+
+        if (this.els.muteToggle) {
+          this.els.muteToggle.hidden = false;
+          this.els.muteToggle.onclick = () => this.toggleMute(videoEl);
+        }
+      } else if (!fromCloud && typeof stripModule !== "undefined" && stripModule.renderLive) {
+        // Local same-device preview only — renderLive expects Blob
+        // objects on data.photos[i], which cloud sessions never have
+        // (only URL strings), so it must not be called for cloud data.
+        stripModule.renderLive(this.els.stripContainer, {
+          frameType: data.frameType,
+          selectedShots: data.photos,
+          designId: data.design
+        });
+      } else if (data.finalStripUrl) {
+        // Last-resort fallback: no composited video available at all,
+        // so show the static strip image instead of a blank box.
+        this.els.stripContainer.innerHTML = `<img src="${data.finalStripUrl}" alt="Photo strip">`;
+      } else {
+        this.els.stripContainer.innerHTML = `<p class="gallery-status">Your strip is still processing — check back in a moment.</p>`;
+        console.warn("[gallery] No finalStripVideoUrl or finalStripUrl in session data — the composited assets may not have finished uploading.");
       }
-    } else if (typeof stripModule !== "undefined") {
-      stripModule.renderLive(this.els.stripContainer, {
-        frameType: data.frameType,
-        selectedShots: data.photos,
-        designId: data.design
-      });
-    } else if (data.finalStripUrl) {
-      // last-resort fallback if there's truly no video available at all
-      this.els.stripContainer.innerHTML = `<img src="${data.finalStripUrl}" alt="Photo strip">`;
+    } catch (e) {
+      console.error("[gallery] Preview rendering failed:", e);
+      this.els.stripContainer.innerHTML = `<p class="gallery-status">Preview unavailable, but downloads below still work.</p>`;
     }
 
-    // ---- Download buttons: photo downloads the static strip PNG,
-    //      video downloads the composited strip video. Both work off
-    //      the underlying assets regardless of which one is shown
-    //      as the live preview above. ----
+    // ---- Download buttons: bound unconditionally, regardless of
+    //      whether the preview above rendered successfully. ----
     if (data.finalStripUrl) {
       this.bindBigDownloadButton(this.els.downloadPhotoBtn, data.finalStripUrl, `${data.id}-photo-strip.png`);
+    } else {
+      console.warn("[gallery] No finalStripUrl — Download Photo button stays hidden.");
     }
     if (data.finalStripVideoUrl) {
       this.bindBigDownloadButton(this.els.downloadVideoBtn, data.finalStripVideoUrl, `${data.id}-video-strip.webm`);
+    } else {
+      console.warn("[gallery] No finalStripVideoUrl — Download Video button stays hidden.");
     }
 
     // ---- Individual photos/videos grid ----
