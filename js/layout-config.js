@@ -10,6 +10,7 @@ const LAYOUT_CONFIGS = {
     canvasWidth: 2400,
     canvasHeight: 3600,
     dpi: 600,
+    slotCornerRadiusPct: 6,
     // 8 slots = 2 identical strips; strip 2 is strip 1 shifted +1200px on X
     photoSlots: [
       { x: 52,   y: 286.22,  w: 1094, h: 766.77 },
@@ -29,6 +30,7 @@ const LAYOUT_CONFIGS = {
     canvasWidth: 2400,
     canvasHeight: 3600,
     dpi: 600,
+    slotCornerRadiusPct: 6,
     photoSlots: [
       { x: 57.5,    y: 312.78,  w: 1133.27, h: 1563.7 },
       { x: 1213.25, y: 312.78,  w: 1133.27, h: 1563.7 },
