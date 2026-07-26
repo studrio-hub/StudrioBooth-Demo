@@ -251,12 +251,42 @@
         </div>
 
         <button class="btn btn-primary btn-large" id="btnPrint">🖨 PRINT NOW</button>
+        <button class="btn btn-outline" id="btnPreviewGallery">📱 PREVIEW DIGITAL GALLERY</button>
         <button class="btn btn-outline" id="btnNewSession">START NEW SESSION</button>
         <button class="btn btn-outline" id="btnExportPng">⬇ EXPORT PNG</button>
       </div>
 
     </div>
   </section>
+
+  <!-- ===================== PAGE: DIGITAL GALLERY (QR destination) ===================== -->
+<section class="page" id="page-gallery" data-page="gallery">
+  <h1 class="page-title">Your Digital Copy</h1>
+
+  <div class="gallery-layout">
+    <div class="gallery-strip-col">
+  <p class="preview-panel-label">Live Video Strip</p>
+  <div class="strip-preview-wrap">
+    <div class="strip-preview-container" id="galleryStripContainer"></div>
+  </div>
+
+  <p class="preview-panel-label">Photo Strip (Print Design)</p>
+  <div class="strip-preview-wrap">
+    <div class="strip-preview-container" id="galleryPhotoStripContainer"></div>
+  </div>
+</div>
+
+    <div class="gallery-media-col">
+      <p class="preview-panel-label">Photos &amp; Videos</p>
+      <div class="gallery-media-grid" id="galleryMediaGrid"></div>
+    </div>
+  </div>
+
+  <p id="galleryLoading" class="gallery-status">Loading your gallery...</p>
+  <p id="galleryNotFound" class="gallery-status" hidden>
+    Gallery not found on this device. Open this link on the same computer/browser where the session was created.
+  </p>
+</section>
 
   <!-- Print-only layout, hidden on screen, shown only by print.css -->
   <div id="printArea" class="print-only"></div>
@@ -269,8 +299,13 @@
 <script src="js/shooting.js"></script>
 <script src="js/selection.js"></script>
 <script src="js/printing.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/cloud-storage.js"></script>
+<script src="js/gallery.js"></script>
 <script src="js/qr.js"></script>
 <script src="js/app.js"></script>
 <script src="js/boot.js"></script>
+
+
 </body>
 </html>
