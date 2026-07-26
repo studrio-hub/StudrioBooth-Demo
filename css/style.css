@@ -617,3 +617,127 @@ button {
   height: auto;
   max-height: 100%;
 }
+
+/* ================= PHOTO SELECTION: 3:4, no distortion ================= */
+.selection-grid {
+  grid-template-rows: none;
+  grid-auto-rows: min-content;
+  overflow-y: auto;
+  align-content: start;
+}
+.photo-card {
+  aspect-ratio: 3 / 4;
+  background: #000;
+}
+.photo-card img {
+  object-fit: contain; /* shows the full captured frame, never crops/stretches */
+}
+
+/* ================= DESIGN SWATCH: real composite thumbnails ================= */
+.design-swatch-preview-wrap {
+  width: 45%;
+  aspect-ratio: 2 / 3; /* matches the 2400x3600 export canvas ratio */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--panel-light);
+}
+.design-swatch-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* ================= DIGITAL GALLERY PAGE ================= */
+.gallery-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 2vw;
+  flex: 1;
+  min-height: 0;
+}
+.gallery-strip-col, .gallery-media-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+  min-height: 0;
+}
+.gallery-media-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1vh;
+  overflow-y: auto;
+}
+.gallery-media-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 0.6vh;
+}
+.gallery-media-card video { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 6px; background: #000; }
+.gallery-media-label { display: block; font-size: 1.1vh; color: var(--text-dim); text-align: center; margin-top: 0.4vh; }
+
+.gallery-status { text-align: center; font-size: 1.4vh; color: var(--text-dim); margin-top: 2vh; }
+
+/* Gallery is meant to be viewed on a phone (or a same-device test tab) —
+   let it scroll freely instead of being locked to the 16:9 kiosk frame. */
+#kiosk.gallery-mode {
+  position: static;
+  transform: none;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  overflow: visible;
+}
+#kiosk.gallery-mode .page.active {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+
+/* ================= LIVE VIDEO STRIP (Digital Gallery) ================= */
+.live-strip-row {
+  display: flex;
+  gap: 0.8vw;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.live-strip-wrap {
+  position: relative;
+  height: 100%;
+  width: auto;
+  background: #fff;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.live-strip-media {
+  position: absolute;
+  object-fit: cover;
+  background: #000;
+}
+
+.live-strip-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Gives the strip panels on the gallery page a real height so the
+   100% chain above actually has something to resolve against. */
+.gallery-strip-col .strip-preview-wrap {
+  flex: none;
+  height: 32vh;
+}
+.gallery-strip-col .layout-canvas {
+  max-height: 32vh;
+}
