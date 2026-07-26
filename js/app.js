@@ -212,3 +212,6 @@ function resetSessionAndRestart() {
 
 document.getElementById("frameThumb2x6").src = STRIP_DESIGNS[0].overlays["2x6"];
 document.getElementById("frameThumb4x6").src = STRIP_DESIGNS[0].overlays["4x6"];
+document.getElementById("btnPreviewGallery").addEventListener("click", () => {
+  window.open(`${window.location.pathname}?gallery=${sessionState.id}`, "_blank");
+});
