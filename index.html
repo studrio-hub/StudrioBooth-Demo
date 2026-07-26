@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Photobooth Kiosk</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/print.css" media="print">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+<div id="kiosk">
+
+  <!-- ===================== PAGE 0: BOOT / STARTUP ===================== -->
+  <section class="page active" id="page-boot" data-page="boot">
+    <div class="boot-screen">
+      <div class="boot-logo">PHOTOBOOTH</div>
+      <div class="boot-status-list" id="bootStatusList"></div>
+      <div class="boot-spinner" id="bootSpinner"></div>
+      <div class="boot-error" id="bootError" hidden>
+        <p id="bootErrorText">Camera not detected</p>
+        <div class="boot-error-actions">
+          <button class="btn btn-primary" id="btnBootRetry">RETRY CONNECTION</button>
+          <button class="btn btn-outline" id="btnBootRestart">RESTART SETUP</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PAGE 1: DSLR CAMERA SETUP ===================== -->
+  <section class="page" id="page-setup" data-page="setup">
+    <h1 class="page-title">Camera Setup</h1>
+
+    <div class="setup-layout">
+
+      <div class="preview-panel">
+        <div class="preview-frame frame-34">
+          <video id="livePreviewVideo" autoplay playsinline muted></video>
+          <img id="livePreviewImg" alt="Live preview" hidden>
+          <div id="previewPlaceholder" class="preview-placeholder">
+            <p>No live preview yet</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-panel">
+        <div class="status-box" id="statusBox">
+          <p class="status-heading">CAMERA STATUS</p>
+          <p class="status-line" id="statusIndicator">
+            <span class="dot dot-off"></span> DSLR NOT CONNECTED
+          </p>
+          <p class="status-detail" id="statusDetailModel">Camera: —</p>
+          <p class="status-detail" id="statusDetailConn">Connection: —</p>
+          <p class="status-detail" id="statusDetailPreview">Live Preview: —</p>
+          <p class="status-detail mock-tag" id="mockTag" hidden>⚠ Running in MOCK mode (webcam placeholder, no real DSLR bridge found)</p>
+        </div>
+
+        <button class="btn btn-secondary" id="btnConnect">Connect Camera</button>
+
+        <!-- NEW -->
+        <div class="zoom-controls">
+          <p class="zoom-label">Zoom: <span id="zoomLevelLabel">1.0x</span> <span id="zoomTypeLabel" class="zoom-type">(—)</span></p>
+          <div class="zoom-buttons">
+            <button class="btn btn-toggle active" id="btnZoomWide" data-zoom="1.0">1.0x WIDE</button>
+            <button class="btn btn-toggle" id="btnZoomNormal" data-zoom="2.0">2.0x NORMAL</button>
+            <button class="btn btn-toggle" id="btnMirrorToggle">MIRROR</button>
+          </div>
+        </div>
+
+        <button class="btn btn-outline" id="btnTestPhoto">TEST PHOTO</button>
+        <div class="test-photo-preview">
+          <img id="testPhotoImg" alt="Test capture" hidden>
+        </div>
+
+        <button class="btn btn-primary btn-large" id="btnNextFromSetup" disabled>NEXT →</button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== PAGE 2: FRAME SIZE + QUANTITY ===================== -->
+  <section class="page" id="page-frame" data-page="frame">
+    <h1 class="page-title">Choose Your Frame</h1>
+
+    <div class="frame-layout">
+
+      <div class="frame-options">
+        <button class="frame-card" id="frameCard2x6" data-frame="2x6">
+          <div class="frame-card-visual frame-visual-2x6">
+            <img id="frameThumb2x6" class="frame-thumb-img" alt="2x6 preview">
+          </div>
+          <p class="frame-card-title">2x6 PHOTO STRIP</p>
+          <p class="frame-card-sub">2 identical strips per sheet</p>
+        </button>
+
+        <button class="frame-card" id="frameCard4x6" data-frame="4x6">
+          <div class="frame-card-visual frame-visual-4x6">
+            <img id="frameThumb4x6" class="frame-thumb-img" alt="4x6 preview">
+          </div>
+          <p class="frame-card-title">4x6 PHOTO</p>
+          <p class="frame-card-sub">1 photo per sheet</p>
+        </button>
+      </div>
+
+      <div class="quantity-panel">
+        <p class="quantity-label">Quantity (sheets)</p>
+        <div class="quantity-control">
+          <button class="btn btn-square" id="btnQtyMinus">−</button>
+          <span class="quantity-value" id="qtyValue">1</span>
+          <button class="btn btn-square" id="btnQtyPlus">+</button>
+        </div>
+
+        <div class="summary-box" id="frameSummaryBox">
+          <p class="summary-heading">Summary</p>
+          <p id="summaryText">Select a frame type to continue</p>
+        </div>
+
+        <div class="nav-row">
+          <button class="btn btn-outline" id="btnBackFromFrame">← BACK</button>
+          <button class="btn btn-primary btn-large" id="btnNextFromFrame" disabled>NEXT →</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== PAGE 3: DSLR PHOTO SHOOTING ===================== -->
+<section class="page" id="page-shooting" data-page="shooting">
+  <div class="shooting-layout-v2">
+
+    <div class="shooting-preview-col">
+      <div class="shooting-preview-frame frame-landscape">
+        <video id="shootingVideo" autoplay playsinline muted></video>
+        <img id="shootingImg" alt="Live preview" hidden>
+
+        <div class="shot-counter" id="shotCounter">PHOTO 1 OF 8</div>
+
+        <div class="countdown-overlay" id="countdownOverlay">
+          <span id="countdownNumber">8</span>
+        </div>
+
+        <div class="interval-overlay" id="intervalOverlay">
+          <span class="interval-label">NEXT PHOTO IN</span>
+          <span class="interval-number" id="intervalNumber">3</span>
+        </div>
+
+        <div class="recording-badge" id="recordingBadge" hidden>
+          <span class="rec-dot"></span> RECORDING
+        </div>
+
+        <div class="captured-flash" id="capturedFlash"></div>
+      </div>
+
+      <div class="shooting-controls">
+        <button class="btn btn-primary btn-large" id="btnStartShooting">START SESSION</button>
+        <p class="shooting-hint" id="shootingHint">Get ready — the countdown starts when you press start.</p>
+      </div>
+    </div>
+
+    <div class="shooting-gallery-col">
+      <p class="preview-panel-label">Captured Photos</p>
+      <div class="shot-thumbnails-v2" id="shotThumbnails">
+        <!-- filled dynamically with 8 rows -->
+      </div>
+    </div>
+
+  </div>
+</section>
+
+  <!-- ===================== PAGE 4: PHOTO SELECTION ===================== -->
+  <section class="page" id="page-selection" data-page="selection">
+    <h1 class="page-title">Choose 4 Photos <span id="selectionCount" class="selection-count">(0 / 4 selected)</span></h1>
+
+    <div class="selection-layout">
+
+      <div class="selection-grid" id="selectionGrid">
+        <!-- 8 photo cards injected by selection.js -->
+      </div>
+
+      <div class="selection-preview-panel">
+        <p class="preview-panel-label">Strip Preview</p>
+        <div class="strip-preview-wrap">
+          <div class="strip-preview-container" id="stripPreviewContainer">
+            <!-- built dynamically by strip.js -->
+          </div>
+        </div>
+
+        <div class="nav-row">
+          <button class="btn btn-outline" id="btnBackFromSelection">← BACK</button>
+          <button class="btn btn-primary btn-large" id="btnNextFromSelection" disabled>NEXT →</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== PAGE 5: STRIP DESIGN SELECTION ===================== -->
+  <section class="page" id="page-design" data-page="design">
+    <h1 class="page-title">Choose a Strip Design</h1>
+
+    <div class="design-layout">
+
+      <div class="design-options" id="designOptions">
+        <!-- design swatches injected by strip.js -->
+      </div>
+
+      <div class="design-preview-panel">
+        <p class="preview-panel-label">Live Preview</p>
+        <div class="strip-preview-wrap">
+          <div class="strip-preview-container" id="designPreviewContainer">
+            <!-- built dynamically by strip.js -->
+          </div>
+        </div>
+
+        <div class="nav-row">
+          <button class="btn btn-outline" id="btnBackFromDesign">← BACK</button>
+          <button class="btn btn-primary btn-large" id="btnNextFromDesign" disabled>NEXT →</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== PAGE 6: PRINTING + QR CODE ===================== -->
+  <section class="page" id="page-printing" data-page="printing">
+    <h1 class="page-title">All Done!</h1>
+
+    <div class="printing-layout">
+
+      <div class="printing-preview-col">
+        <p class="preview-panel-label">Final Strip</p>
+        <div class="strip-preview-wrap">
+          <div class="strip-preview-container" id="finalStripContainer"></div>
+        </div>
+      </div>
+
+      <div class="printing-summary-col">
+        <div class="summary-box">
+          <p class="summary-heading">Print Summary</p>
+          <p id="printSummaryText">—</p>
+        </div>
+
+        <div class="summary-box">
+          <p class="summary-heading">Digital Copy</p>
+          <div class="qr-wrap">
+            <div id="qrCodeCanvas"></div>
+          </div>
+          <p class="qr-caption">Scan to view your 4 photos + videos</p>
+          <p class="qr-url" id="qrUrlText">—</p>
+        </div>
+
+        <button class="btn btn-primary btn-large" id="btnPrint">🖨 PRINT NOW</button>
+        <button class="btn btn-outline" id="btnPreviewGallery">📱 PREVIEW DIGITAL GALLERY</button>
+        <button class="btn btn-outline" id="btnNewSession">START NEW SESSION</button>
+        <button class="btn btn-outline" id="btnExportPng">⬇ EXPORT PNG</button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Print-only layout, hidden on screen, shown only by print.css -->
+  <div id="printArea" class="print-only"></div>
+</div>
+
+<script src="js/camera-bridge.js"></script>
+<script src="js/camera-controller.js"></script>
+<script src="js/layout-config.js"></script>
+<script src="js/strip.js"></script>
+<script src="js/shooting.js"></script>
+<script src="js/selection.js"></script>
+<script src="js/printing.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/cloud-storage.js"></script>
+<script src="js/qr.js"></script>
+<script src="js/app.js"></script>
+<script src="js/boot.js"></script>
+
+
+</body>
+</html>
