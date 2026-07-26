@@ -389,7 +389,11 @@ const designModule = {
   }
 };
 
-document.getElementById("btnBackFromDesign").addEventListener("click", () => goToPage("selection"));
-document.getElementById("btnNextFromDesign").addEventListener("click", () => {
-  goToPage("printing"); // page 6
-});
+const btnBackFromDesign = document.getElementById("btnBackFromDesign");
+const btnNextFromDesign = document.getElementById("btnNextFromDesign");
+if (btnBackFromDesign) btnBackFromDesign.addEventListener("click", () => goToPage("selection"));
+if (btnNextFromDesign) {
+  btnNextFromDesign.addEventListener("click", () => {
+    goToPage("printing"); // page 6
+  });
+}

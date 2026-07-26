@@ -195,15 +195,20 @@ const galleryModule = {
     this.els.muteToggle.setAttribute("aria-label", videoEl.muted ? "Unmute video" : "Mute video");
   },
 
-  async renderFromId(sessionId, fromCloud) {
+async renderFromId(sessionId) {
     this.els.loading.hidden = false;
     this.els.notFound.hidden = true;
 
     let data = null;
+    let dataFromCloud = false;
 
-    if (fromCloud && cloudStorage.isAvailable()) {
+    // Always try cloud storage first when it's configured, regardless of
+    // whether the URL happens to include &cloud=1 — a gallery link should
+    // just work no matter how it was opened (QR scan, preview button, etc).
+    if (cloudStorage.isAvailable()) {
       try {
         data = await cloudStorage.getSession(sessionId);
+        if (data) dataFromCloud = true;
       } catch (e) {
         console.error("[gallery] Cloud fetch failed:", e);
       }
@@ -233,14 +238,9 @@ const galleryModule = {
       id: data.id,
       hasFinalStripUrl: !!data.finalStripUrl,
       hasFinalStripVideoUrl: !!data.finalStripVideoUrl,
-      fromCloud
+      dataFromCloud
     });
 
-    // ---- Single preview: always an autoplaying, muted, looping video
-    //      (the composited strip video) with a tap-to-unmute control.
-    //      This is wrapped in its own try/catch — a rendering problem
-    //      here must never prevent the download buttons or the grid
-    //      below from being wired up. ----
     try {
       if (data.finalStripVideoUrl) {
         this.els.stripContainer.innerHTML = `<video src="${data.finalStripVideoUrl}" autoplay loop muted playsinline></video>`;
@@ -253,7 +253,7 @@ const galleryModule = {
           this.els.muteToggle.hidden = false;
           this.els.muteToggle.onclick = () => this.toggleMute(videoEl);
         }
-      } else if (!fromCloud && typeof stripModule !== "undefined" && stripModule.renderLive) {
+      } else if (!dataFromCloud && typeof stripModule !== "undefined" && stripModule.renderLive) {
         // Local same-device preview only — renderLive expects Blob
         // objects on data.photos[i], which cloud sessions never have
         // (only URL strings), so it must not be called for cloud data.
@@ -263,8 +263,6 @@ const galleryModule = {
           designId: data.design
         });
       } else if (data.finalStripUrl) {
-        // Last-resort fallback: no composited video available at all,
-        // so show the static strip image instead of a blank box.
         this.els.stripContainer.innerHTML = `<img src="${data.finalStripUrl}" alt="Photo strip">`;
       } else {
         this.els.stripContainer.innerHTML = `<p class="gallery-status">Your strip is still processing — check back in a moment.</p>`;
@@ -275,8 +273,6 @@ const galleryModule = {
       this.els.stripContainer.innerHTML = `<p class="gallery-status">Preview unavailable, but downloads below still work.</p>`;
     }
 
-    // ---- Download buttons: bound unconditionally, regardless of
-    //      whether the preview above rendered successfully. ----
     if (data.finalStripUrl) {
       this.bindBigDownloadButton(this.els.downloadPhotoBtn, data.finalStripUrl, `${data.id}-photo-strip.png`);
     } else {
@@ -288,7 +284,6 @@ const galleryModule = {
       console.warn("[gallery] No finalStripVideoUrl — Download Video button stays hidden.");
     }
 
-    // ---- Individual photos/videos grid ----
     this.els.grid.innerHTML = "";
     data.photos.forEach((p, i) => {
       const card = document.createElement("div");
@@ -311,14 +306,11 @@ const galleryModule = {
       this.bindGridDownloadButton(card.querySelector(".gallery-media-download"), mediaUrl, filename);
       this.els.grid.appendChild(card);
     });
-  }
-};
+}
 
-/* Read ?gallery=<id>&cloud=1 from the URL on load */
 (function init() {
   const params = new URLSearchParams(window.location.search);
   const galleryId = params.get("gallery");
-  const fromCloud = params.get("cloud") === "1";
 
   if (!galleryId) {
     document.getElementById("galleryLoading").hidden = true;
@@ -326,5 +318,5 @@ const galleryModule = {
     return;
   }
 
-  galleryModule.renderFromId(galleryId, fromCloud);
+  galleryModule.renderFromId(galleryId);
 })();
