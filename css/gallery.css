@@ -8,8 +8,10 @@
   --bg: #f4f5f7;
   --panel: #ffffff;
   --panel-light: #eef0f3;
+  --panel-dark: #16171a;
   --accent: #ff5c8a;
   --accent-dark: #d6416c;
+  --error: #e0483f;
   --text: #1c1e21;
   --text-dim: #666b73;
   --border: #d9dce1;
@@ -69,17 +71,21 @@ html, body {
   margin-bottom: 12px;
 }
 
-/* Media frame holds either the composited photo strip or the live/recorded video strip.
-   Scales proportionally, never overflows the viewport, touch-friendly (no fixed px). */
+/* Media frame holds either the composited photo strip or the live/recorded
+   video strip. Scales proportionally, never overflows the viewport, and
+   is a positioning context for the mute toggle. Dark backdrop makes the
+   strip itself pop, similar to a real digital-copy preview. */
 .gallery-media-frame {
+  position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
+  min-height: 120px;
   max-height: 70vh;
   overflow: hidden;
   border-radius: 8px;
-  background: var(--panel-light);
+  background: var(--panel-dark);
 }
 
 .gallery-media-frame img,
@@ -125,6 +131,26 @@ html, body {
   pointer-events: none;
 }
 
+/* Tap-to-mute/unmute control overlaid on the looping video strip */
+.gallery-mute-toggle {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+}
+.gallery-mute-toggle:active { transform: scale(0.92); }
+
 .gallery-download-btn {
   display: block;
   width: 100%;
@@ -144,7 +170,19 @@ html, body {
 .btn:active { transform: scale(0.98); }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-dark); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary:disabled { opacity: 0.7; cursor: wait; }
+.btn-primary.is-downloading { background: var(--accent-dark); }
+
+/* Real, tappable fallback link shown only after a download attempt
+   actually fails — never used as a silent default */
+.gallery-fallback-link {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--accent-dark);
+  text-decoration: underline;
+}
 
 /* Individual photo/video grid — responsive columns */
 .gallery-media-grid {
@@ -199,12 +237,30 @@ html, body {
   flex-shrink: 0;
 }
 .gallery-media-download:active { transform: scale(0.92); }
+.gallery-media-download:disabled { opacity: 0.6; cursor: wait; }
 
 .gallery-status {
   text-align: center;
   color: var(--text-dim);
   font-size: 0.95rem;
   margin-top: 24px;
+}
+
+/* Toast for genuine download failures — brief, dismisses itself */
+.gallery-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  background: var(--panel-dark);
+  color: #fff;
+  font-size: 0.85rem;
+  padding: 10px 16px;
+  border-radius: 999px;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  z-index: 10;
 }
 
 .gallery-footer {
@@ -223,7 +279,7 @@ html, body {
     grid-template-columns: 1fr 1fr;
     gap: 24px;
   }
-  .gallery-block:nth-child(3) {
+  .gallery-block-full {
     grid-column: 1 / -1; /* individual photos/videos block spans full width */
   }
 }

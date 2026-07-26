@@ -18,15 +18,7 @@
   <main class="gallery-main">
 
     <section class="gallery-block">
-      <h2 class="gallery-block-title">Live Video Strip</h2>
-      <div class="gallery-media-frame" id="galleryStripContainer"></div>
-      <button class="btn btn-primary gallery-download-btn" id="btnDownloadVideo" hidden>
-        ⬇ Download Video
-      </button>
-    </section>
-
-    <section class="gallery-block">
-      <h2 class="gallery-block-title">Photo Strip</h2>
+      <h2 class="gallery-block-title">Digital Photo Strip</h2>
       <div class="gallery-media-frame" id="galleryPhotoStripContainer"></div>
       <button class="btn btn-primary gallery-download-btn" id="btnDownloadPhoto" hidden>
         ⬇ Download Photo
@@ -34,6 +26,16 @@
     </section>
 
     <section class="gallery-block">
+      <h2 class="gallery-block-title">Digital Video Strip</h2>
+      <div class="gallery-media-frame" id="galleryStripContainer">
+        <button class="gallery-mute-toggle" id="galleryMuteToggle" hidden aria-label="Unmute video">🔇</button>
+      </div>
+      <button class="btn btn-primary gallery-download-btn" id="btnDownloadVideo" hidden>
+        ⬇ Download Video
+      </button>
+    </section>
+
+    <section class="gallery-block gallery-block-full">
       <h2 class="gallery-block-title">Individual Photos &amp; Videos</h2>
       <div class="gallery-media-grid" id="galleryMediaGrid"></div>
     </section>
@@ -45,6 +47,7 @@
     We couldn't find this gallery. If you're testing locally, open this link
     on the same device/browser where the session was created.
   </p>
+  <p id="galleryToast" class="gallery-toast" hidden></p>
 
   <footer class="gallery-footer">
     <p>Powered by Studrio Booth</p>

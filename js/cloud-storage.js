@@ -54,7 +54,8 @@ const cloudStorage = {
     const uploadedPhotos = await Promise.all(
       sessionData.photos.map(async (p, i) => {
         const imageUrl = p.image ? await this.uploadBlob(p.image, `sessions/${sessionData.id}/photo-${i}.jpg`) : null;
-        return { id: p.id, imageUrl };
+        const videoUrl = p.video ? await this.uploadBlob(p.video, `sessions/${sessionData.id}/video-${i}.webm`) : null;
+        return { id: p.id, imageUrl, videoUrl };
       })
     );
 
