@@ -79,7 +79,7 @@ const cloudStorage = {
     const jsonBlob = new Blob([JSON.stringify(sessionJson)], { type: "application/json" });
     await this.uploadBlob(jsonBlob, `sessions/${sessionData.id}/session.json`);
 
-    return { url: `${window.location.origin}${window.location.pathname}?gallery=${sessionData.id}&cloud=1` };
+    return { url: `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionData.id}&cloud=1` };
   },
 
   async getSession(sessionId) {

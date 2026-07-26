@@ -11,7 +11,7 @@ const mediaStorage = {
     if (cloudStorage.isAvailable()) {
       try {
         const result = await cloudStorage.saveSession(sessionData);
-        galleryStore.saveSession(sessionData).catch(() => {}); // best-effort local backup too
+        galleryStore.saveSession(sessionData).catch(() => {});
         return result;
       } catch (e) {
         console.error("[mediaStorage] Cloud save failed, falling back to local-only:", e);
@@ -20,7 +20,7 @@ const mediaStorage = {
 
     console.warn("[mediaStorage] Saving locally to IndexedDB (same-device preview only). Configure cloud-storage.js to make the QR code work on other phones.");
     await galleryStore.saveSession(sessionData);
-    return { url: `${window.location.origin}${window.location.pathname}?gallery=${sessionData.id}` };
+    return { url: `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionData.id}` };
   }
 };
 
@@ -63,7 +63,7 @@ const qrModule = {
       galleryUrl = gallery.url;
     } catch (e) {
       console.error("Gallery creation failed:", e);
-      galleryUrl = `${window.location.origin}${window.location.pathname}?gallery=${sessionState.id}`;
+      galleryUrl = `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionState.id}`;
     }
 
     urlText.textContent = galleryUrl;

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Digital Copy — Studrio Booth</title>
+<link rel="stylesheet" href="css/gallery.css">
+</head>
+<body>
+
+<div id="galleryPage">
+
+  <header class="gallery-header">
+    <h1>Your Digital Copy</h1>
+    <p class="gallery-sub">Studrio Booth</p>
+  </header>
+
+  <main class="gallery-main">
+
+    <section class="gallery-block">
+      <h2 class="gallery-block-title">Live Video Strip</h2>
+      <div class="gallery-media-frame" id="galleryStripContainer"></div>
+      <button class="btn btn-primary gallery-download-btn" id="btnDownloadVideo" hidden>
+        ⬇ Download Video
+      </button>
+    </section>
+
+    <section class="gallery-block">
+      <h2 class="gallery-block-title">Photo Strip</h2>
+      <div class="gallery-media-frame" id="galleryPhotoStripContainer"></div>
+      <button class="btn btn-primary gallery-download-btn" id="btnDownloadPhoto" hidden>
+        ⬇ Download Photo
+      </button>
+    </section>
+
+    <section class="gallery-block">
+      <h2 class="gallery-block-title">Individual Photos &amp; Videos</h2>
+      <div class="gallery-media-grid" id="galleryMediaGrid"></div>
+    </section>
+
+  </main>
+
+  <p id="galleryLoading" class="gallery-status">Loading your gallery...</p>
+  <p id="galleryNotFound" class="gallery-status" hidden>
+    We couldn't find this gallery. If you're testing locally, open this link
+    on the same device/browser where the session was created.
+  </p>
+
+  <footer class="gallery-footer">
+    <p>Powered by Studrio Booth</p>
+  </footer>
+
+</div>
+
+<script src="js/layout-config.js"></script>
+<script src="js/strip.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/cloud-storage.js"></script>
+<script src="js/gallery.js"></script>
+</body>
+</html>
