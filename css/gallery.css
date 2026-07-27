@@ -1,0 +1,329 @@
+/*
+ * GALLERY.CSS — standalone, responsive styling for gallery.html.
+ * Independent of the kiosk's fixed 16:9 layout (style.css) since
+ * this page is viewed on phones, tablets, and desktops.
+ */
+
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-light: #eef0f3;
+  --panel-dark: #16171a;
+  --accent: #ff5c8a;
+  --accent-dark: #d6416c;
+  --error: #e0483f;
+  --text: #1c1e21;
+  --text-dim: #666b73;
+  --border: #d9dce1;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  min-height: 100%;
+}
+
+#galleryPage {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.gallery-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.gallery-header h1 {
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  font-weight: 800;
+}
+.gallery-sub {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.gallery-main {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.gallery-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.gallery-block-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+
+/* Media frame holds either the composited photo strip or the live/recorded
+   video strip. Scales proportionally, never overflows the viewport, and
+   is a positioning context for the mute toggle. Dark backdrop makes the
+   strip itself pop, similar to a real digital-copy preview. */
+.gallery-media-frame {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 120px;
+  max-height: 70vh;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--panel-dark);
+}
+
+.gallery-media-frame img,
+.gallery-media-frame video,
+.gallery-media-frame .layout-canvas {
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+}
+
+/* Live DOM strip fallback (individual <video> tags positioned over slots)
+   scales as one flexible unit inside the frame */
+.gallery-media-frame .live-strip-row {
+  max-width: 100%;
+  max-height: 70vh;
+  display: flex;
+  gap: 2vw;
+  align-items: center;
+  justify-content: center;
+}
+.gallery-media-frame .live-strip-wrap {
+  position: relative;
+  height: 65vh;
+  max-height: 500px;
+  width: auto;
+  background: #fff;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.gallery-media-frame .live-strip-media {
+  position: absolute;
+  object-fit: cover;
+  background: #000;
+}
+.gallery-media-frame .live-strip-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Tap-to-mute/unmute control overlaid on the looping video strip */
+.gallery-mute-toggle {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+}
+.gallery-mute-toggle:active { transform: scale(0.92); }
+
+.gallery-download-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.gallery-download-toggle {
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: none;
+  background: var(--panel-dark);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease, opacity 0.15s ease;
+  text-align: left;
+}
+.gallery-download-toggle:active { transform: scale(0.98); }
+.gallery-download-toggle:hover { background: #26282c; }
+.gallery-download-toggle:disabled { opacity: 0.6; cursor: wait; }
+.gallery-download-toggle.is-downloading { background: var(--accent-dark); }
+
+.gallery-download-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.gallery-download-labels {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gallery-download-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gallery-download-subtitle {
+  font-size: 0.7rem;
+  color: #b7b9bd;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Small phones: stack labels tighter, icon-first layout still fits two-up */
+@media (max-width: 380px) {
+  .gallery-download-row { gap: 8px; }
+  .gallery-download-toggle { padding: 10px; gap: 8px; }
+  .gallery-download-subtitle { display: none; }
+}
+
+/* Real, tappable fallback link shown only after a download attempt
+   actually fails — never used as a silent default */
+.gallery-fallback-link {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--accent-dark);
+  text-decoration: underline;
+}
+
+/* Individual photo/video grid — responsive columns */
+.gallery-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.gallery-media-card {
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-media-card img,
+.gallery-media-card video {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: #000;
+  display: block;
+}
+
+.gallery-media-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.gallery-media-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.gallery-media-download {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.gallery-media-download:active { transform: scale(0.92); }
+.gallery-media-download:disabled { opacity: 0.6; cursor: wait; }
+
+.gallery-status {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  margin-top: 24px;
+}
+
+/* Toast for genuine download failures — brief, dismisses itself */
+.gallery-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  background: var(--panel-dark);
+  color: #fff;
+  font-size: 0.85rem;
+  padding: 10px 16px;
+  border-radius: 999px;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  z-index: 10;
+}
+
+.gallery-footer {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  margin-top: 32px;
+}
+
+/* ---- Responsive breakpoints ---- */
+
+/* Tablet and up: single centered preview card, comfortably capped in width
+   so the strip video doesn't stretch awkwardly on wide screens */
+@media (min-width: 700px) {
+  .gallery-preview-block {
+    max-width: 420px;
+    margin: 0 auto;
+  }
+}
+
+/* Desktop: a bit more breathing room */
+@media (min-width: 1100px) {
+  #galleryPage { padding: 40px 24px 64px; }
+}
+
+/* Small phones: tighten padding */
+@media (max-width: 380px) {
+  .gallery-block { padding: 12px; }
+  .btn { padding: 12px 16px; font-size: 0.95rem; }
+}
