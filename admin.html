@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studrio Booth — Admin</title>
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+<!-- ===================== LOGIN SCREEN ===================== -->
+<div id="adminLogin" class="admin-login-screen">
+  <form id="loginForm" class="login-card">
+    <p class="login-eyebrow">STUDRIO BOOTH — STAFF ONLY</p>
+    <h1 class="login-title">Control Room</h1>
+
+    <label class="login-field">
+      <span>Email</span>
+      <input type="email" id="loginEmail" required autocomplete="username">
+    </label>
+    <label class="login-field">
+      <span>Password</span>
+      <input type="password" id="loginPassword" required autocomplete="current-password">
+    </label>
+
+    <button type="submit" class="btn-admin btn-admin-primary" id="loginSubmitBtn">Sign in</button>
+    <p class="login-error" id="loginError" hidden></p>
+  </form>
+</div>
+
+<!-- ===================== DASHBOARD ===================== -->
+<div id="adminDashboard" class="admin-dashboard" hidden>
+
+  <header class="admin-header">
+    <div class="admin-header-title">
+      <p class="admin-eyebrow">STUDRIO BOOTH</p>
+      <h1>Control Room</h1>
+    </div>
+    <div class="admin-header-actions">
+      <button class="btn-admin btn-admin-outline" id="btnRefresh">↻ Refresh</button>
+      <button class="btn-admin btn-admin-ghost" id="btnLogout">Sign out</button>
+    </div>
+  </header>
+
+  <!-- Mechanical odometer-style counters — a nod to real coin-op
+       photobooth counters rather than a generic stats-card row -->
+  <section class="counter-row" id="counterRow">
+    <div class="counter-unit">
+      <p class="counter-label">Photostrips Taken</p>
+      <div class="counter-digits" id="statStrips">— — —</div>
+    </div>
+    <div class="counter-unit">
+      <p class="counter-label">Copies Printed</p>
+      <div class="counter-digits" id="statPrints">— — —</div>
+    </div>
+    <div class="counter-unit">
+      <p class="counter-label">Storage Used</p>
+      <div class="counter-digits" id="statStorage">— — —</div>
+    </div>
+  </section>
+
+  <section class="gallery-section">
+    <div class="gallery-section-head">
+      <h2>Sessions</h2>
+      <p class="gallery-count" id="sessionCount"></p>
+    </div>
+
+    <p class="admin-status" id="galleryStatus">Loading sessions…</p>
+    <p class="admin-status admin-status-empty" id="galleryEmpty" hidden>
+      No sessions yet. They'll show up here the moment a guest finishes a photostrip.
+    </p>
+
+    <div class="filmstrip-grid" id="filmstripGrid"></div>
+  </section>
+
+</div>
+
+<!-- Delete confirmation modal — consistent with the kiosk's own
+     custom modal (index.html), never a native confirm() -->
+<div class="admin-modal-overlay" id="deleteModal" hidden>
+  <div class="admin-modal-box">
+    <p class="admin-modal-message">Delete this session and all its photos/videos? This can't be undone.</p>
+    <div class="admin-modal-actions">
+      <button class="btn-admin btn-admin-outline" id="btnCancelDelete">Cancel</button>
+      <button class="btn-admin btn-admin-danger" id="btnConfirmDelete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<p class="admin-toast" id="adminToast" hidden></p>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/cloud-storage.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>
