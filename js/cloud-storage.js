@@ -87,15 +87,16 @@ const cloudStorage = {
     // dashboard listing would miss this one entry.
     try {
       const client = getSupabaseClient();
-      await client.from("sessions").insert({
+      const { error } = await client.from("sessions").insert({
         id: sessionData.id,
         frame_type: sessionData.frameType,
         design: sessionData.design,
         final_strip_url: finalStripUrl,
         final_strip_video_url: finalStripVideoUrl
       });
+      if (error) throw error; // insert() doesn't throw on RLS/API errors on its own — must check explicitly
     } catch (e) {
-      console.warn("[cloudStorage] Could not mirror session into sessions table:", e);
+      console.error("[cloudStorage] Could not mirror session into sessions table:", e.message || e);
     }
 
     return { url: `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionData.id}` };
@@ -115,9 +116,10 @@ const cloudStorage = {
   async logPrintEvent(sessionId, quantity) {
     try {
       const client = getSupabaseClient();
-      await client.from("print_events").insert({ session_id: sessionId, quantity: quantity || 1 });
+      const { error } = await client.from("print_events").insert({ session_id: sessionId, quantity: quantity || 1 });
+      if (error) throw error;
     } catch (e) {
-      console.warn("[cloudStorage] Could not log print event:", e);
+      console.error("[cloudStorage] Could not log print event:", e.message || e);
     }
   }
 };
