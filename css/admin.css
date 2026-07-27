@@ -294,14 +294,28 @@ button, input { font-family: inherit; }
 
 .filmstrip-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 8px 10px 4px;
 }
 .filmstrip-actions .btn-admin {
-  flex: 1;
   padding: 8px 8px;
   font-size: 0.78rem;
   text-align: center;
+}
+.filmstrip-actions .btn-admin-primary {
+  width: 100%;
+}
+.filmstrip-actions .btn-admin-primary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.filmstrip-actions-row {
+  display: flex;
+  gap: 8px;
+}
+.filmstrip-actions-row .btn-admin {
+  flex: 1;
 }
 
 /* ---------------------------------------------------------

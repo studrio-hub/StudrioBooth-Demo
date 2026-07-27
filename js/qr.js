@@ -49,6 +49,27 @@ const qrModule = {
       designId: sessionState.design
     });
 
+    // The gallery URL is fully deterministic from the session id (same
+    // formula mediaStorage.createGallery() falls back to), so it can be
+    // computed before the upload even starts — which lets us bake the
+    // QR into a print-ready strip up front, not just at print time.
+    // This gives the admin dashboard a reprint-ready file for every
+    // session, even ones the guest never actually printed.
+    const galleryUrl = `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionState.id}`;
+
+    urlText.textContent = "Preparing reprint copy...";
+    let printReadyPng = null;
+    try {
+      printReadyPng = await stripModule.exportPrintPNG({
+        frameType: sessionState.frameType,
+        selectedShots: sessionState.selectedShots,
+        designId: sessionState.design,
+        qrText: galleryUrl
+      });
+    } catch (e) {
+      console.warn("[qrModule] Could not prepare print-ready (QR-baked) copy:", e);
+    }
+
     urlText.textContent = "Uploading...";
     const galleryPayload = {
       id: sessionState.id,
@@ -56,35 +77,32 @@ const qrModule = {
       design: sessionState.design,
       finalStripPng,
       finalStripVideo,
+      printReadyPng,
       photos: sessionState.selectedShots.map((s) => ({
         id: s.id,
         image: s.image
       }))
     };
 
-    let galleryUrl;
+    let resolvedGalleryUrl;
     try {
       const gallery = await mediaStorage.createGallery(galleryPayload);
-      galleryUrl = gallery.url;
+      resolvedGalleryUrl = gallery.url;
     } catch (e) {
       console.error("Gallery creation failed:", e);
-      galleryUrl = `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionState.id}`;
+      resolvedGalleryUrl = galleryUrl;
     }
 
-    urlText.textContent = galleryUrl;
-    sessionState.galleryUrl = galleryUrl;
-    resolveGalleryUrl(galleryUrl);
+    urlText.textContent = resolvedGalleryUrl;
+    sessionState.galleryUrl = resolvedGalleryUrl;
+    resolveGalleryUrl(resolvedGalleryUrl);
 
     new QRCode(container, {
-      text: galleryUrl,
+      text: resolvedGalleryUrl,
       width: 220,
       height: 220,
       colorDark: "#000000",
       colorLight: "#ffffff",
-      // L = lowest error-correction overhead → fewer modules needed for
-      // the same URL, so each module renders bigger and scans easier.
-      // Safe here because the URL is short and machine-printed (no risk
-      // of smudging/damage the way a handled paper card would have).
       correctLevel: QRCode.CorrectLevel.L
     });
   }

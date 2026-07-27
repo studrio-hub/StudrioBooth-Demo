@@ -133,14 +133,23 @@
           <p class="filmstrip-meta">${formatDate(session.created_at)}</p>
         </div>
         <div class="filmstrip-actions">
-          <button class="btn-admin btn-admin-outline" data-action="download">⬇ Save</button>
-          <button class="btn-admin btn-admin-ghost" data-action="delete">Delete</button>
+          <button class="btn-admin btn-admin-primary" data-action="reprint" ${session.print_ready_url ? "" : "disabled"}>🖨 Reprint Copy</button>
+          <div class="filmstrip-actions-row">
+            <button class="btn-admin btn-admin-outline" data-action="download">⬇ Save</button>
+            <button class="btn-admin btn-admin-ghost" data-action="delete">Delete</button>
+          </div>
         </div>
       `;
 
       card.querySelector('[data-action="download"]').addEventListener("click", (e) => {
         downloadFile(session.final_strip_url, `${session.id}-strip.png`, e.currentTarget);
       });
+      const reprintBtn = card.querySelector('[data-action="reprint"]');
+      if (session.print_ready_url) {
+        reprintBtn.addEventListener("click", () => {
+          downloadFile(session.print_ready_url, `${session.id}-strip-print-ready.png`, reprintBtn);
+        });
+      }
       card.querySelector('[data-action="delete"]').addEventListener("click", () => {
         pendingDeleteId = session.id;
         els.deleteModal.hidden = false;

@@ -67,6 +67,14 @@ const cloudStorage = {
       ? await this.uploadBlob(sessionData.finalStripVideo, `sessions/${sessionData.id}/strip-live.webm`)
       : null;
 
+    // QR-baked, print-ready copy — same file format used for physical
+    // printing (see printing.js) — stored so the admin dashboard can
+    // always hand out a reprint-ready file, even for sessions the guest
+    // never actually sent to the printer.
+    const printReadyUrl = sessionData.printReadyPng
+      ? await this.uploadBlob(sessionData.printReadyPng, `sessions/${sessionData.id}/strip-print.png`)
+      : null;
+
     const sessionJson = {
       id: sessionData.id,
       frameType: sessionData.frameType,
@@ -74,6 +82,7 @@ const cloudStorage = {
       photos: uploadedPhotos,
       finalStripUrl,
       finalStripVideoUrl,
+      printReadyUrl,
       createdAt: new Date().toISOString()
     };
 
@@ -92,7 +101,8 @@ const cloudStorage = {
         frame_type: sessionData.frameType,
         design: sessionData.design,
         final_strip_url: finalStripUrl,
-        final_strip_video_url: finalStripVideoUrl
+        final_strip_video_url: finalStripVideoUrl,
+        print_ready_url: printReadyUrl
       });
       if (error) throw error; // insert() doesn't throw on RLS/API errors on its own — must check explicitly
     } catch (e) {
