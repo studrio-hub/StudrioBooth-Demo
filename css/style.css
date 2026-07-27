@@ -2,8 +2,8 @@
   --bg: #f4f5f7;
   --panel: #ffffff;
   --panel-light: #eef0f3;
-  --accent: #ff5c8a;
-  --accent-dark: #d6416c;
+  --accent: #f0c231;
+  --accent-dark: #c9a028;
   --text: #1c1e21;
   --text-dim: #666b73;
   --ok: #1fae63;
@@ -19,7 +19,7 @@ html, body {
   height: 100%;
   background: var(--bg);  
   overflow: hidden;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   color: var(--text);
 }
 
@@ -219,6 +219,14 @@ button {
 .interval-countdown-bottom .interval-number { font-size: 2vh; font-weight: 800; }
 
 /* ================= PAGE 1: SETUP ================= */
+.setup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5vh;
+}
+.setup-header .page-title { margin-bottom: 0; }
+
 .setup-layout {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
@@ -546,7 +554,7 @@ button {
   top: 0.5vh;
   left: 0.5vh;
   background: rgba(0,0,0,0.6);
-  color: var(--text);
+  color: #fff;
   font-size: 1.1vh;
   font-weight: 700;
   padding: 0.3vh 0.7vh;
@@ -572,17 +580,6 @@ button {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
-}
-
-.photo-card-video-tag {
-  position: absolute;
-  bottom: 0.5vh;
-  left: 0.5vh;
-  font-size: 0.95vh;
-  color: var(--text-dim);
-  background: rgba(0,0,0,0.5);
-  padding: 0.2vh 0.6vh;
-  border-radius: 4px;
 }
 
 .selection-preview-panel, .design-preview-panel {
@@ -769,14 +766,11 @@ button {
 
 /* ================= STUDRIO LOGO (Page 1 only) ================= */
 .studio-logo {
-  position: absolute;
-  left: 81.563%;
-  top: 6.944%;
-  width: 15.417%;
-  height: 8.148%;
+  height: 5vh;
+  width: auto;
+  max-width: 14vw;
   object-fit: contain;
   pointer-events: none;
-  z-index: 5;
 }
 
 /* ================= 60-SECOND KIOSK TIMER (Pages 2, 4, 5, 6) ================= */

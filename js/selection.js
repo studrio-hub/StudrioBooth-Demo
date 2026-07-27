@@ -40,7 +40,6 @@ const selectionModule = {
           <img src="${shot.imageUrl}" alt="Photo ${shot.id}">
           <span class="photo-card-badge">PHOTO ${shot.id}</span>
           <span class="photo-card-check">✓</span>
-          <span class="photo-card-video-tag">${shot.videoUrl ? "🎬 video" : "no video"}</span>
         `;
 
         card.addEventListener("click", () => this.toggleShot(shot.id));

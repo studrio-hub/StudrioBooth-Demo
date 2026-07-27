@@ -16,23 +16,30 @@ const printingModule = {
   },
 
   async init() {
-    kioskTimer.start(60, () => this.endSessionOnTimeout());
-
     this.els.doneBtn.disabled = true;
 
     await this.renderPreview();
     this.renderSummary();
 
-    // Done stays disabled until the digital copy has finished uploading
-    // (or definitively failed) — sessionState.galleryUrlPromise is set
-    // synchronously the moment qrModule.generateAndRender() starts.
+    // The 60s timer now starts only once the QR code has finished
+    // uploading and is on screen — sessionState.galleryUrlPromise is set
+    // synchronously the moment qrModule.generateAndRender() starts, and
+    // resolves right as the QR is rendered into #qrCodeCanvas.
     const galleryPromise = sessionState.galleryUrlPromise;
     if (galleryPromise) {
       galleryPromise
-        .then(() => { this.els.doneBtn.disabled = false; })
-        .catch(() => { this.els.doneBtn.disabled = false; }); // don't trap the guest if the upload failed
+        .then(() => {
+          this.els.doneBtn.disabled = false;
+          kioskTimer.start(60, () => this.endSessionOnTimeout());
+        })
+        .catch(() => {
+          // Don't trap the guest if the upload failed — still start the timer.
+          this.els.doneBtn.disabled = false;
+          kioskTimer.start(60, () => this.endSessionOnTimeout());
+        });
     } else {
       this.els.doneBtn.disabled = false;
+      kioskTimer.start(60, () => this.endSessionOnTimeout());
     }
   },
 

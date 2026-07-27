@@ -16,9 +16,6 @@ const sessionState = {
 function goToPage(pageName) {
   document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
   document.querySelector(`.page[data-page="${pageName}"]`).classList.add("active");
-
-  const logo = document.getElementById("studioLogo");
-  if (logo) logo.hidden = pageName !== "setup";
 }
 
 /* ---------------- PAGE 1: SETUP ---------------- */
@@ -182,7 +179,8 @@ function resetSessionAndRestart() {
   // Re-lock Done for the next guest's session
   const doneBtn = document.getElementById("btnDone");
   if (doneBtn) doneBtn.disabled = true;
-
+  
+  cameraController.attachPreview(setupEls.video, setupEls.img);
   goToPage("setup");
 }
 

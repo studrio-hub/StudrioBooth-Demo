@@ -9,8 +9,8 @@
   --panel: #ffffff;
   --panel-light: #eef0f3;
   --panel-dark: #16171a;
-  --accent: #ff5c8a;
-  --accent-dark: #d6416c;
+  --accent: #f0c231;
+  --accent-dark: #c9a028;
   --error: #e0483f;
   --text: #1c1e21;
   --text-dim: #666b73;
@@ -23,7 +23,7 @@
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   min-height: 100%;
 }
 
