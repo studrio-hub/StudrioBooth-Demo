@@ -102,7 +102,7 @@ const shootingModule = {
     if (videoStarted) {
       this.els.recordingBadge.hidden = true;
       try {
-        videoBlob = await cameraController.stopVideoRecording();
+        videoBlob = await cameraController.stopVideoRecording(imageBlob);
       } catch (e) {
         console.warn("Video recording failed to stop:", e);
       }

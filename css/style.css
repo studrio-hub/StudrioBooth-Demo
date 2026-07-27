@@ -195,6 +195,7 @@ button {
 .interval-preview {
   position: absolute; inset: 0; display: none;
   background: #000;
+  z-index: 2;
 }
 .interval-preview.show { display: block; }
 .interval-preview img { width: 100%; height: 100%; object-fit: cover; }
@@ -417,6 +418,8 @@ button {
   font-size: 1.6vh;
   font-weight: 700;
   letter-spacing: 0.05em;
+  color: #fff;
+  z-index: 4; /* above .interval-preview so it stays visible between shots */
 }
 
 .countdown-overlay {
@@ -704,6 +707,9 @@ button {
   gap: 1.2vh;
   min-height: 0;
   overflow-y: auto;
+  /* Clears the floating 60s kiosk-timer circle pinned top-right so the
+     "Print Summary" box never renders underneath it. */
+  padding-top: 7.5vh;
 }
 
 #printSummaryText { font-size: 1.3vh; line-height: 1.7; white-space: pre-line; }

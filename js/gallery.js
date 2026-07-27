@@ -17,6 +17,11 @@
     downloadVideoBtn: document.getElementById("btnDownloadVideo")
   };
 
+  function extOf(url, fallback) {
+    const m = /\.([a-zA-Z0-9]+)(?:\?.*)?$/.exec(url || "");
+    return m ? m[1] : fallback;
+  }
+
   function downloadFile(url, filename, btn) {
     if (!url) return;
     const subtitleEl = btn.querySelector(".gallery-download-subtitle");
@@ -106,7 +111,7 @@
     if (videoUrl && els.downloadVideoBtn) {
       els.downloadVideoBtn.hidden = false;
       els.downloadVideoBtn.addEventListener("click", () => {
-        downloadFile(videoUrl, `${data.id}-video-strip.webm`, els.downloadVideoBtn);
+        downloadFile(videoUrl, `${data.id}-video-strip.${extOf(videoUrl, "webm")}`, els.downloadVideoBtn);
       });
     }
 
@@ -115,7 +120,7 @@
     photos.forEach((p, i) => {
       const isVideo = !!p.videoUrl;
       const mediaUrl = p.videoUrl || p.imageUrl || "";
-      const filename = `${data.id}-photo-${i + 1}.${isVideo ? "webm" : "jpg"}`;
+      const filename = `${data.id}-photo-${i + 1}.${isVideo ? extOf(mediaUrl, "webm") : "jpg"}`;
 
       const card = document.createElement("div");
       card.className = "gallery-media-card";

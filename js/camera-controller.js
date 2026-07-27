@@ -151,9 +151,9 @@ const cameraController = {
     throw new Error("Camera not connected");
   },
 
-  async stopVideoRecording() {
+  async stopVideoRecording(freezeBlob) {
     if (this.mode === "real") return realCameraBridge.stopVideoRecording();
-    if (this.mode === "mock") return mockCameraBridge.stopVideoRecording();
+    if (this.mode === "mock") return mockCameraBridge.stopVideoRecording(freezeBlob);
     throw new Error("Camera not connected");
   },
 

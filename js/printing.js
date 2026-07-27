@@ -16,10 +16,7 @@ const printingModule = {
   },
 
   async init() {
-    kioskTimer.start(60, () => {
-      // Time's up — auto-trigger printing, same as a manual tap.
-      if (this.els.printBtn && !this.els.printBtn.disabled) this.els.printBtn.click();
-    });
+    kioskTimer.start(60, () => this.endSessionOnTimeout());
 
     this.els.doneBtn.disabled = true;
 
@@ -37,6 +34,19 @@ const printingModule = {
     } else {
       this.els.doneBtn.disabled = false;
     }
+  },
+
+  /* Guest never pressed Done — show a brief notice, then reset the
+     kiosk for the next guest, same as tapping Done → Proceed. */
+  endSessionOnTimeout() {
+    const modal = document.getElementById("endingSessionModal");
+    modal.hidden = false;
+    modal.classList.add("show");
+    setTimeout(() => {
+      modal.classList.remove("show");
+      modal.hidden = true;
+      resetSessionAndRestart();
+    }, 3000);
   },
 
   async renderPreview() {
@@ -139,10 +149,12 @@ const printingModule = {
 document.getElementById("btnPrint").addEventListener("click", () => printingModule.print());
 
 document.getElementById("btnDone").addEventListener("click", () => {
+  kioskTimer.hide();
   document.getElementById("confirmModal").classList.add("show");
 });
 document.getElementById("btnConfirmBack").addEventListener("click", () => {
   document.getElementById("confirmModal").classList.remove("show");
+  kioskTimer.start(60, () => printingModule.endSessionOnTimeout());
 });
 document.getElementById("btnConfirmProceed").addEventListener("click", () => {
   document.getElementById("confirmModal").classList.remove("show");

@@ -230,11 +230,12 @@ function renderPreviewWindow(win, data) {
     const mediaTag = isVideo
       ? `<video src="${mediaUrl}" muted loop autoplay playsinline></video>`
       : `<img src="${mediaUrl}" alt="Photo ${i + 1}">`;
+    const videoExt = (mediaUrl.match(/\.([a-zA-Z0-9]+)(?:\?.*)?$/) || [])[1] || "webm";
     return `<div class="card">
       ${mediaTag}
       <div class="card-footer">
         <span>Photo ${i + 1}${isVideo ? " • video" : ""}</span>
-        <button class="grid-dl" data-url="${mediaUrl}" data-name="${data.id}-photo-${i + 1}.${isVideo ? "webm" : "jpg"}">⬇</button>
+        <button class="grid-dl" data-url="${mediaUrl}" data-name="${data.id}-photo-${i + 1}.${isVideo ? videoExt : "jpg"}">⬇</button>
       </div>
     </div>`;
   }).join("");
@@ -340,10 +341,15 @@ function renderPreviewWindow(win, data) {
       });
   }
 
+  function extOf(url, fallback) {
+    const m = /\.([a-zA-Z0-9]+)(?:\?.*)?$/.exec(url || "");
+    return m ? m[1] : fallback;
+  }
+
   const photoBtn = document.getElementById("btnDownloadPhoto");
   const videoBtn = document.getElementById("btnDownloadVideo");
   if (photoBtn) photoBtn.addEventListener("click", function () { downloadFile(photoUrl, sessionId + "-photo-strip.png", photoBtn); });
-  if (videoBtn) videoBtn.addEventListener("click", function () { downloadFile(videoUrl, sessionId + "-video-strip.webm", videoBtn); });
+  if (videoBtn) videoBtn.addEventListener("click", function () { downloadFile(videoUrl, sessionId + "-video-strip." + extOf(videoUrl, "webm"), videoBtn); });
 
   document.querySelectorAll(".grid-dl").forEach(function (btn) {
     btn.addEventListener("click", function () {

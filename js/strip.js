@@ -408,14 +408,26 @@ const stripModule = {
     };
 
     const stream = canvas.captureStream(30);
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    // Prefer MP4/H.264 — plays natively on iOS/Android/most phones, unlike
+    // WebM which many mobile browsers (notably Safari/iOS) can't play.
+    const videoMimeCandidates = [
+      "video/mp4;codecs=h264",
+      "video/mp4",
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm"
+    ];
+    const mimeType = videoMimeCandidates.find(
+      (type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)
+    ) || "";
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
     return new Promise((resolve) => {
       recorder.onstop = () => {
         mediaEls.forEach((m) => { if (m && m.pause) m.pause(); });
-        resolve(new Blob(chunks, { type: "video/webm" }));
+        resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
       };
 
       let rafId;

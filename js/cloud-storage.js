@@ -33,6 +33,13 @@ function getSupabaseClient() {
   return _supabaseClient;
 }
 
+// Recording now prefers MP4 when the browser supports it (see camera-bridge.js
+// / strip.js) — this makes sure the uploaded filename's extension always
+// matches what was actually recorded, instead of assuming WebM.
+function videoExtensionFor(blob) {
+  return blob && blob.type && blob.type.includes("mp4") ? "mp4" : "webm";
+}
+
 const cloudStorage = {
   isAvailable() {
     return CLOUD_CONFIG.enabled && typeof supabase !== "undefined"
@@ -54,7 +61,7 @@ const cloudStorage = {
     const uploadedPhotos = await Promise.all(
       sessionData.photos.map(async (p, i) => {
         const imageUrl = p.image ? await this.uploadBlob(p.image, `sessions/${sessionData.id}/photo-${i}.jpg`) : null;
-        const videoUrl = p.video ? await this.uploadBlob(p.video, `sessions/${sessionData.id}/video-${i}.webm`) : null;
+        const videoUrl = p.video ? await this.uploadBlob(p.video, `sessions/${sessionData.id}/video-${i}.${videoExtensionFor(p.video)}`) : null;
         return { id: p.id, imageUrl, videoUrl };
       })
     );
@@ -64,7 +71,7 @@ const cloudStorage = {
       : null;
 
     const finalStripVideoUrl = sessionData.finalStripVideo
-      ? await this.uploadBlob(sessionData.finalStripVideo, `sessions/${sessionData.id}/strip-live.webm`)
+      ? await this.uploadBlob(sessionData.finalStripVideo, `sessions/${sessionData.id}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}`)
       : null;
 
     // QR-baked, print-ready copy — same file format used for physical
