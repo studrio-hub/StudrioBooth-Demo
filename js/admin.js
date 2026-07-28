@@ -35,6 +35,92 @@
     toast: document.getElementById("adminToast")
   };
 
+  /* ---- Printer preferences: system dialog toggle (admin-only — never
+     exposed in the kiosk UI) + Printer Alignment (scale/offsetX/offsetY).
+     Storage, defaults, and clamping all live in print-alignment.js so the
+     kiosk print job and this page's Test Print stay perfectly in sync. ---- */
+  const alignEls = {
+    systemDialog: document.getElementById("prefSystemDialog"),
+    scale: document.getElementById("alignScale"),
+    scaleValue: document.getElementById("alignScaleValue"),
+    offsetX: document.getElementById("alignOffsetX"),
+    offsetXValue: document.getElementById("alignOffsetXValue"),
+    offsetY: document.getElementById("alignOffsetY"),
+    offsetYValue: document.getElementById("alignOffsetYValue")
+  };
+
+  function applyPrefsToUI(prefs) {
+    alignEls.systemDialog.checked = !!prefs.systemDialog;
+    alignEls.scale.value = prefs.scale;
+    alignEls.scaleValue.textContent = `${prefs.scale}%`;
+    alignEls.offsetX.value = prefs.offsetX;
+    alignEls.offsetXValue.textContent = prefs.offsetX;
+    alignEls.offsetY.value = prefs.offsetY;
+    alignEls.offsetYValue.textContent = prefs.offsetY;
+  }
+
+  function readPrefsFromUI() {
+    return printAlignment.sanitize({
+      systemDialog: alignEls.systemDialog.checked,
+      scale: alignEls.scale.value,
+      offsetX: alignEls.offsetX.value,
+      offsetY: alignEls.offsetY.value
+    });
+  }
+
+  // Live-update the numeric readouts as the sliders move.
+  alignEls.scale.addEventListener("input", () => {
+    alignEls.scaleValue.textContent = `${alignEls.scale.value}%`;
+  });
+  alignEls.offsetX.addEventListener("input", () => {
+    alignEls.offsetXValue.textContent = alignEls.offsetX.value;
+  });
+  alignEls.offsetY.addEventListener("input", () => {
+    alignEls.offsetYValue.textContent = alignEls.offsetY.value;
+  });
+
+  const savePrefsBtn = document.getElementById("btnSavePrefs");
+  const prefSavedMsg = document.getElementById("prefSavedMsg");
+
+  savePrefsBtn.addEventListener("click", () => {
+    printAlignment.savePrefs(readPrefsFromUI());
+    prefSavedMsg.hidden = false;
+    clearTimeout(savePrefsBtn._t);
+    savePrefsBtn._t = setTimeout(() => { prefSavedMsg.hidden = true; }, 2500);
+  });
+
+  /* ---- Test Print: fires a real print job using the CURRENT slider
+     values (not necessarily saved) against a generated alignment test
+     pattern, so the operator can dial in a printer without needing a
+     guest session or touching the camera. ---- */
+  const testPrintBtn = document.getElementById("btnTestPrint");
+  const testPrintMsg = document.getElementById("testPrintMsg");
+
+  testPrintBtn.addEventListener("click", async () => {
+    const prefs = readPrefsFromUI();
+    testPrintBtn.disabled = true;
+    testPrintMsg.hidden = false;
+
+    let testUrl;
+    try {
+      testUrl = await printAlignment.renderTestPatternPNG();
+      printAlignment.openPrintWindow(testUrl, 1, prefs, () => {
+        URL.revokeObjectURL(testUrl);
+        testPrintBtn.disabled = false;
+        testPrintMsg.hidden = true;
+      });
+    } catch (e) {
+      console.error("[admin] Test print failed:", e);
+      if (testUrl) URL.revokeObjectURL(testUrl);
+      testPrintBtn.disabled = false;
+      testPrintMsg.hidden = true;
+      showToast("Test print failed — try again.");
+    }
+  });
+
+  // Populate the UI on load
+  applyPrefsToUI(printAlignment.loadPrefs());
+
   let pendingDeleteId = null;
 
   function showToast(message) {

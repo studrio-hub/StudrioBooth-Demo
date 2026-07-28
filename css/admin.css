@@ -361,3 +361,224 @@ button, input { font-family: inherit; }
   .counter-row { grid-template-columns: 1fr; }
   .admin-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* ---------------------------------------------------------
+ * PRINTER PREFERENCES
+ * --------------------------------------------------------- */
+.printer-prefs-section {
+  margin-bottom: 36px;
+}
+
+.printer-prefs-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 20px 16px;
+}
+
+.pref-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.pref-label-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.pref-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.pref-desc {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.pref-desc code {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  background: var(--panel-light);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--ok);
+}
+
+.pref-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
+/* iOS-style toggle */
+.pref-toggle {
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.pref-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.pref-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.pref-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.pref-toggle input:checked + .pref-toggle-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.pref-toggle input:checked + .pref-toggle-track::after {
+  transform: translateX(20px);
+  background: #fff;
+}
+
+/* Radio option rows */
+.pref-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pref-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.pref-option:hover { border-color: var(--accent); }
+.pref-option input[type="radio"] {
+  flex-shrink: 0;
+  margin-top: 3px;
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.pref-option input[type="radio"]:checked ~ .pref-option-body .pref-option-title {
+  color: var(--accent);
+}
+
+.pref-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pref-option-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pref-option-desc {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.pref-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(240, 194, 49, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(240, 194, 49, 0.35);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.pref-save-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.pref-saved-msg {
+  font-size: 0.85rem;
+  color: var(--ok);
+  font-weight: 600;
+}
+
+/* Printer Alignment sliders */
+.pref-align-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.pref-align-control {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.pref-align-control-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.pref-align-control-head label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pref-align-control-head output {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 2.5em;
+  text-align: right;
+}
+
+.pref-align-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.pref-align-hint {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}

@@ -59,6 +59,84 @@
     </div>
   </section>
 
+  <section class="printer-prefs-section">
+    <div class="gallery-section-head">
+      <h2>Printer Preferences</h2>
+    </div>
+
+    <div class="printer-prefs-card">
+
+      <!-- ① System dialog toggle -->
+      <div class="pref-row">
+        <div class="pref-label-group">
+          <p class="pref-label">Print using system dialog</p>
+          <p class="pref-desc">
+            Off: print jobs fire silently (requires Chrome launched with
+            <code>--kiosk-printing</code>).<br>
+            On: opens the native OS printer dialog so you can choose a printer
+            or adjust per-job settings.
+          </p>
+        </div>
+        <label class="pref-toggle" title="Use system dialog">
+          <input type="checkbox" id="prefSystemDialog">
+          <span class="pref-toggle-track"></span>
+        </label>
+      </div>
+
+      <div class="pref-divider"></div>
+
+      <!-- ② Printer alignment -->
+      <div class="pref-row">
+        <div class="pref-label-group">
+          <p class="pref-label">Printer alignment</p>
+          <p class="pref-desc">
+            Use these to center the print on the photo paper if the printer's
+            output comes out misaligned or cropped. Scale shrinks the strip to
+            leave headroom; Horizontal/Vertical Position then nudge it within
+            that headroom.
+          </p>
+        </div>
+      </div>
+
+      <div class="pref-align-grid">
+        <div class="pref-align-control">
+          <div class="pref-align-control-head">
+            <label for="alignScale">Scale</label>
+            <output id="alignScaleValue" for="alignScale">100%</output>
+          </div>
+          <input type="range" id="alignScale" min="80" max="100" step="1" value="100">
+          <p class="pref-align-hint">80%–100% of the print size</p>
+        </div>
+
+        <div class="pref-align-control">
+          <div class="pref-align-control-head">
+            <label for="alignOffsetX">Horizontal Position</label>
+            <output id="alignOffsetXValue" for="alignOffsetX">0</output>
+          </div>
+          <input type="range" id="alignOffsetX" min="-15" max="15" step="1" value="0">
+          <p class="pref-align-hint">Negative = left, positive = right</p>
+        </div>
+
+        <div class="pref-align-control">
+          <div class="pref-align-control-head">
+            <label for="alignOffsetY">Vertical Position</label>
+            <output id="alignOffsetYValue" for="alignOffsetY">0</output>
+          </div>
+          <input type="range" id="alignOffsetY" min="-15" max="15" step="1" value="0">
+          <p class="pref-align-hint">Negative = up, positive = down</p>
+        </div>
+      </div>
+
+      <div class="pref-save-row">
+        <button class="btn-admin btn-admin-primary" id="btnSavePrefs">Save Preferences</button>
+        <button class="btn-admin btn-admin-outline" id="btnTestPrint">🖨 Test Print</button>
+        <span class="pref-saved-msg" id="prefSavedMsg" hidden>✓ Saved</span>
+        <span class="pref-saved-msg" id="testPrintMsg" hidden>Sending test print…</span>
+      </div>
+
+    </div>
+  </section>
+
   <section class="gallery-section">
     <div class="gallery-section-head">
       <h2>Sessions</h2>
@@ -91,6 +169,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/cloud-storage.js"></script>
+<script src="js/print-alignment.js"></script>
 <script src="js/admin.js"></script>
 </body>
 </html>

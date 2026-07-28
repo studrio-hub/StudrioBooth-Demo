@@ -1,9 +1,10 @@
 /*
  * PRINTING LOGIC — Page 6
- * Builds the on-screen final preview, generates the print-only PNG
- * (with the QR code baked in), and opens an isolated popup window to
- * print it at exact 4x6in size — fully isolated from the kiosk's own
- * style.css so nothing here can be affected by shared page styles.
+ * Builds the on-screen final preview and generates the print-only PNG
+ * (with the QR code baked in). The actual popup/print-window plumbing and
+ * the scale/alignment math now live in js/print-alignment.js (loaded
+ * before this file) so the kiosk print job and the Admin "Test Print"
+ * button share identical logic.
  */
 
 const printingModule = {
@@ -80,21 +81,17 @@ const printingModule = {
   async print() {
     kioskTimer.hide();
 
-    // Open the window FIRST, synchronously, before any await — popup
-    // blockers only allow window.open() when it's a direct result of
-    // the click. Filling it in can happen after.
-    const printWindow = window.open("", "_blank", "width=400,height=600");
-    if (!printWindow) {
-      alert("Please allow pop-ups for this site to print.");
-      return;
-    }
+    // Printer preferences (system dialog is admin-only and never surfaced
+    // here; scale/offsetX/offsetY are the Printer Alignment settings) —
+    // shared logic lives in js/print-alignment.js so the kiosk and the
+    // Admin "Test Print" button always agree on the math.
+    const prefs = printAlignment.loadPrefs();
 
     this.els.printBtn.disabled = true;
     this.els.printBtn.textContent = "Preparing...";
 
-    // Wait for the gallery URL (from qr.js) so the QR baked into the
-    // print output is always correct, even if the upload is still in
-    // flight when the guest taps "PRINT NOW".
+    // Wait for the gallery URL so the QR baked into the print output is
+    // always correct, even if the upload is still in flight.
     const galleryUrl = sessionState.galleryUrlPromise
       ? await sessionState.galleryUrlPromise
       : sessionState.galleryUrl;
@@ -107,49 +104,15 @@ const printingModule = {
     });
     const pngUrl = URL.createObjectURL(pngBlob);
 
-    const sheetsHtml = Array.from({ length: sessionState.quantity })
-      .map(() => `<div class="sheet"><img src="${pngUrl}"></div>`)
-      .join("");
-
-    const printDoc = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Print</title>
-<style>
-  @page { size: 4in 6in; margin: 0; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 4in; height: 6in; background: #fff; }
-  .sheet { width: 4in; height: 6in; page-break-after: always; break-after: page; }
-  .sheet:last-child { page-break-after: auto; break-after: auto; }
-  .sheet img { display: block; width: 4in; height: 6in; }
-</style>
-</head>
-<body>${sheetsHtml}</body>
-</html>`;
-
-    printWindow.document.open();
-    printWindow.document.write(printDoc);
-    printWindow.document.close();
-
-    const firstImg = printWindow.document.querySelector(".sheet img");
-    const triggerPrint = () => {
-      printWindow.focus();
-      printWindow.print();
-    };
-    if (firstImg.complete) {
-      triggerPrint();
-    } else {
-      firstImg.onload = triggerPrint;
-    }
-    printWindow.onafterprint = () => printWindow.close();
+    printAlignment.openPrintWindow(pngUrl, sessionState.quantity, prefs, () => {
+      URL.revokeObjectURL(pngUrl);
+      this.els.printBtn.disabled = false;
+      this.els.printBtn.textContent = "🖨 PRINT NOW";
+    });
 
     // Fire-and-forget: log this print job for the admin dashboard's
-    // "copies printed" stat. Never blocks or fails the actual print.
+    // "copies printed" stat.
     cloudStorage.logPrintEvent(sessionState.id, sessionState.quantity);
-
-    this.els.printBtn.disabled = false;
-    this.els.printBtn.textContent = "🖨 PRINT NOW";
   }
 };
 
