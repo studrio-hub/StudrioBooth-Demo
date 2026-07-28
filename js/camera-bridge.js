@@ -61,6 +61,111 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/*
+ * remuxToMp4 — re-encodes a raw MediaRecorder blob into a properly
+ * finalized, social-media-compatible MP4.
+ *
+ * WHY: MediaRecorder produces fragmented WebM or fragmented MP4 — both
+ * lack the required "moov" atom at the start of the file (fast-start /
+ * web-optimized). Instagram, TikTok, and most social apps reject these
+ * files with "Can't access media" or "Unsupported format". The fix is
+ * to decode every frame from the raw blob and re-encode them into a
+ * proper MP4 container using the browser's native WebCodecs API + the
+ * mp4-muxer library (loaded in index.html — tiny, zero server deps).
+ *
+ * Falls back to returning the original blob if WebCodecs isn't available
+ * (older browsers) — the video still plays in the browser gallery, just
+ * may not be uploadable to every social platform.
+ */
+async function remuxToMp4(inputBlob) {
+  // WebCodecs + mp4-muxer are required. Fall back gracefully.
+  if (typeof VideoDecoder === "undefined" || typeof Muxer === "undefined") {
+    console.warn("[remux] WebCodecs or mp4-muxer not available — returning original blob");
+    return inputBlob;
+  }
+
+  const url = URL.createObjectURL(inputBlob);
+  try {
+    // Decode every frame from the source blob using a hidden <video> +
+    // ImageCapture approach, then re-encode through VideoEncoder.
+    const video = document.createElement("video");
+    video.src = url;
+    video.muted = true;
+    video.playsInline = true;
+
+    await new Promise((resolve, reject) => {
+      video.onloadedmetadata = resolve;
+      video.onerror = reject;
+    });
+
+    const width = Math.floor(video.videoWidth / 2) * 2;   // must be even
+    const height = Math.floor(video.videoHeight / 2) * 2;
+    const fps = 30;
+    const durationMs = Math.round(video.duration * 1000);
+
+    const muxer = new Muxer({
+      target: new ArrayBufferTarget(),
+      video: {
+        codec: "avc",          // H.264 — universally supported
+        width,
+        height,
+        frameRate: fps
+      },
+      fastStart: "in-memory"  // puts moov at start — required for social apps
+    });
+
+    const encodedChunks = [];
+    const encoder = new VideoEncoder({
+      output: (chunk, meta) => {
+        muxer.addVideoChunk(chunk, meta);
+      },
+      error: (e) => console.error("[remux] VideoEncoder error:", e)
+    });
+
+    encoder.configure({
+      codec: "avc1.42001f",   // H.264 Baseline Profile, Level 3.1
+      width,
+      height,
+      bitrate: 2_500_000,     // 2.5 Mbps — good quality for social
+      framerate: fps,
+      latencyMode: "quality",
+      hardwareAcceleration: "prefer-hardware"
+    });
+
+    // Seek through the video frame by frame via canvas capture.
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    const totalFrames = Math.round(video.duration * fps);
+    for (let i = 0; i < totalFrames; i++) {
+      const timestamp = i / fps;
+      video.currentTime = timestamp;
+      await new Promise((resolve) => { video.onseeked = resolve; });
+
+      ctx.drawImage(video, 0, 0, width, height);
+      const frame = new VideoFrame(canvas, { timestamp: Math.round(timestamp * 1_000_000) });
+      encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 }); // keyframe every 2s
+      frame.close();
+
+      // Yield to the browser every 10 frames to avoid blocking the UI
+      if (i % 10 === 0) await new Promise((r) => setTimeout(r, 0));
+    }
+
+    await encoder.flush();
+    muxer.finalize();
+
+    const { buffer } = muxer.target;
+    return new Blob([buffer], { type: "video/mp4" });
+  } catch (e) {
+    console.error("[remux] Failed — returning original blob:", e);
+    return inputBlob;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 const realCameraBridge = {
   async checkAvailable() {
     try {
@@ -208,7 +313,7 @@ const mockCameraBridge = {
       }
     }
 
-    return new Promise((resolve) => {
+    const rawBlob = await new Promise((resolve) => {
       this._recorder.onstop = () => {
         this._recording = false;
         if (this._recordRafId) cancelAnimationFrame(this._recordRafId);
@@ -217,6 +322,10 @@ const mockCameraBridge = {
       };
       this._recorder.stop();
     });
+
+    // Re-mux into a properly finalized MP4 so social media apps (Instagram,
+    // TikTok, etc.) can open the file without "Can't access media" errors.
+    return remuxToMp4(rawBlob);
   },
 
   async disconnect() {

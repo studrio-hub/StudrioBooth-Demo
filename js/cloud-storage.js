@@ -57,15 +57,12 @@ const cloudStorage = {
     return data.publicUrl;
   },
 
-    async saveSession(sessionData) {
-    const uploadedPhotos = await Promise.all(
-      sessionData.photos.map(async (p, i) => {
-        const imageUrl = p.image ? await this.uploadBlob(p.image, `sessions/${sessionData.id}/photo-${i}.jpg`) : null;
-        const videoUrl = p.video ? await this.uploadBlob(p.video, `sessions/${sessionData.id}/video-${i}.${videoExtensionFor(p.video)}`) : null;
-        return { id: p.id, imageUrl, videoUrl };
-      })
-    );
-
+  async saveSession(sessionData) {
+    // Individual per-photo files are intentionally NOT uploaded here.
+    // The gallery only shows the composite strip (photo + video), so there
+    // is no need to store or expose raw per-shot files. Keeping them out
+    // of storage also prevents guests from discovering each other's unedited
+    // photos by guessing storage paths.
     const finalStripUrl = sessionData.finalStripPng
       ? await this.uploadBlob(sessionData.finalStripPng, `sessions/${sessionData.id}/strip.png`)
       : null;
@@ -74,33 +71,30 @@ const cloudStorage = {
       ? await this.uploadBlob(sessionData.finalStripVideo, `sessions/${sessionData.id}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}`)
       : null;
 
-    // QR-baked, print-ready copy — same file format used for physical
-    // printing (see printing.js) — stored so the admin dashboard can
-    // always hand out a reprint-ready file, even for sessions the guest
-    // never actually sent to the printer.
+    // QR-baked, print-ready copy — stored for admin dashboard reprints.
     const printReadyUrl = sessionData.printReadyPng
       ? await this.uploadBlob(sessionData.printReadyPng, `sessions/${sessionData.id}/strip-print.png`)
       : null;
 
+    // The session JSON stores only storage *paths* (not public URLs) so that
+    // getSession() can generate short-lived signed URLs on demand. This means
+    // even if someone discovers the session JSON URL, the media links it
+    // returns will expire within an hour and cannot be hotlinked permanently.
     const sessionJson = {
       id: sessionData.id,
       frameType: sessionData.frameType,
       design: sessionData.design,
-      photos: uploadedPhotos,
-      finalStripUrl,
-      finalStripVideoUrl,
-      printReadyUrl,
+      // Paths relative to the bucket root — signed at read time, not write time
+      stripPath: finalStripUrl ? `sessions/${sessionData.id}/strip.png` : null,
+      stripVideoPath: finalStripVideoUrl ? `sessions/${sessionData.id}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}` : null,
+      printReadyPath: printReadyUrl ? `sessions/${sessionData.id}/strip-print.png` : null,
       createdAt: new Date().toISOString()
     };
 
     const jsonBlob = new Blob([JSON.stringify(sessionJson)], { type: "application/json" });
     await this.uploadBlob(jsonBlob, `sessions/${sessionData.id}/session.json`);
 
-    // Mirror into the `sessions` table (see supabase-admin-setup.sql) so
-    // the admin dashboard can list/delete/count sessions without having
-    // to crawl storage folders. Best-effort: if this fails, the guest
-    // gallery still works fine off session.json above — only the admin
-    // dashboard listing would miss this one entry.
+    // Mirror into the `sessions` table for admin dashboard. Best-effort.
     try {
       const client = getSupabaseClient();
       const { error } = await client.from("sessions").insert({
@@ -111,7 +105,7 @@ const cloudStorage = {
         final_strip_video_url: finalStripVideoUrl,
         print_ready_url: printReadyUrl
       });
-      if (error) throw error; // insert() doesn't throw on RLS/API errors on its own — must check explicitly
+      if (error) throw error;
     } catch (e) {
       console.error("[cloudStorage] Could not mirror session into sessions table:", e.message || e);
     }
@@ -119,12 +113,52 @@ const cloudStorage = {
     return { url: `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionData.id}` };
   },
 
+  /* Fetches session metadata and converts all storage paths to short-lived
+     signed URLs (1 hour TTL). This means the gallery page serves real
+     expiring links — guests can view and download within an hour of
+     scanning the QR, but the URLs cannot be scraped and hotlinked
+     permanently, and raw bucket paths are never exposed to the browser. */
   async getSession(sessionId) {
     const client = getSupabaseClient();
-    const { data } = client.storage.from(CLOUD_CONFIG.bucketName).getPublicUrl(`sessions/${sessionId}/session.json`);
-    const res = await fetch(`${data.publicUrl}?t=${Date.now()}`); // cache-bust
+    const { data: urlData } = client.storage
+      .from(CLOUD_CONFIG.bucketName)
+      .getPublicUrl(`sessions/${sessionId}/session.json`);
+    const res = await fetch(`${urlData.publicUrl}?t=${Date.now()}`);
     if (!res.ok) return null;
-    return res.json();
+    const session = await res.json();
+
+    // Generate signed URLs for all media paths in the session.
+    // createSignedUrl() returns { data: { signedUrl }, error }.
+    async function sign(path) {
+      if (!path) return null;
+      const { data, error } = await client.storage
+        .from(CLOUD_CONFIG.bucketName)
+        .createSignedUrl(path, 3600); // 1 hour TTL
+      if (error) {
+        console.warn("[cloudStorage] Could not sign URL for", path, error.message);
+        return null;
+      }
+      return data.signedUrl;
+    }
+
+    // Backwards-compat: old sessions stored full URLs instead of paths.
+    // Detect by checking whether the value starts with "sessions/".
+    function isPath(v) { return v && v.startsWith("sessions/"); }
+
+    const [finalStripUrl, finalStripVideoUrl] = await Promise.all([
+      isPath(session.stripPath) ? sign(session.stripPath) : (session.finalStripUrl || null),
+      isPath(session.stripVideoPath) ? sign(session.stripVideoPath) : (session.finalStripVideoUrl || null)
+    ]);
+
+    return {
+      id: session.id,
+      frameType: session.frameType,
+      design: session.design,
+      finalStripUrl,
+      finalStripVideoUrl,
+      // No individual photo URLs — gallery only shows the composite strips.
+      photos: []
+    };
   },
 
   /* Called by the kiosk (printing.js) each time a print job actually

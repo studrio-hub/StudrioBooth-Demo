@@ -766,11 +766,12 @@ button {
 
 /* ================= STUDRIO LOGO (Page 1 only) ================= */
 .studio-logo {
-  height: 5vh;
+  height: 8vh;
   width: auto;
-  max-width: 14vw;
+  max-width: 20vw;
   object-fit: contain;
   pointer-events: none;
+  flex-shrink: 0;
 }
 
 /* ================= 60-SECOND KIOSK TIMER (Pages 2, 4, 5, 6) ================= */

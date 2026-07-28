@@ -10,7 +10,6 @@
   const els = {
     stripContainer: document.getElementById("galleryStripContainer"),
     muteToggle: document.getElementById("galleryMuteToggle"),
-    grid: document.getElementById("galleryMediaGrid"),
     loading: document.getElementById("galleryLoading"),
     notFound: document.getElementById("galleryNotFound"),
     downloadPhotoBtn: document.getElementById("btnDownloadPhoto"),
@@ -54,30 +53,6 @@
       });
   }
 
-  function downloadGridItem(url, filename, btn) {
-    btn.textContent = "⏳";
-    btn.disabled = true;
-    fetch(url)
-      .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.blob(); })
-      .then((blob) => {
-        const objUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = objUrl;
-        a.download = filename;
-        a.rel = "noopener";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
-        btn.textContent = "⬇";
-        btn.disabled = false;
-      })
-      .catch(() => {
-        btn.textContent = "⚠";
-        btn.disabled = false;
-      });
-  }
-
   function render(data) {
     const photoUrl = data.finalStripUrl || null;
     const videoUrl = data.finalStripVideoUrl || null;
@@ -115,28 +90,6 @@
       });
     }
 
-    // ---- Individual photos/videos grid ----
-    els.grid.innerHTML = "";
-    photos.forEach((p, i) => {
-      const isVideo = !!p.videoUrl;
-      const mediaUrl = p.videoUrl || p.imageUrl || "";
-      const filename = `${data.id}-photo-${i + 1}.${isVideo ? extOf(mediaUrl, "webm") : "jpg"}`;
-
-      const card = document.createElement("div");
-      card.className = "gallery-media-card";
-      card.innerHTML = `
-        ${isVideo
-          ? `<video src="${mediaUrl}" muted loop autoplay playsinline></video>`
-          : `<img src="${mediaUrl}" alt="Photo ${i + 1}">`}
-        <div class="gallery-media-card-footer">
-          <span class="gallery-media-label">Photo ${i + 1}${isVideo ? " • video" : ""}</span>
-          <button class="gallery-media-download" title="Download" aria-label="Download Photo ${i + 1}">⬇</button>
-        </div>
-      `;
-      const dlBtn = card.querySelector(".gallery-media-download");
-      dlBtn.addEventListener("click", () => downloadGridItem(mediaUrl, filename, dlBtn));
-      els.grid.appendChild(card);
-    });
   }
 
   async function init() {

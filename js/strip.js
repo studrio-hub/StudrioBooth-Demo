@@ -425,9 +425,13 @@ const stripModule = {
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
     return new Promise((resolve) => {
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         mediaEls.forEach((m) => { if (m && m.pause) m.pause(); });
-        resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
+        const rawBlob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+        // Re-mux into a properly finalized MP4 so the downloaded video can
+        // be posted to Instagram, TikTok, etc. without "Can't access media".
+        const finalBlob = await remuxToMp4(rawBlob);
+        resolve(finalBlob);
       };
 
       let rafId;
