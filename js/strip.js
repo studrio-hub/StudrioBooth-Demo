@@ -457,11 +457,11 @@ const stripModule = {
      4x6 gets a single QR. Units match the 2400x3600 @ 600dpi canvas. */
   QR_PLACEMENTS: {
     "2x6": [
-      { x: 52,   y: 3347, w: 240, h: 240 },
-      { x: 1254, y: 3347, w: 240, h: 240 }
+      { x: 881,  y: 33.09, w: 250, h: 250 },
+      { x: 2081, y: 33.09, w: 250, h: 250 }
     ],
     "4x6": [
-      { x: 57, y: 3343, w: 240, h: 240 }
+      { x: 2089, y: 34.09, w: 250, h: 250 }
     ]
   },
 
