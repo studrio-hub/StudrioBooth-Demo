@@ -416,6 +416,52 @@ button, input { font-family: inherit; }
   margin: 16px 0;
 }
 
+.pref-row-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* Printer Setup: agent online/offline indicator */
+.agent-status {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.agent-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.2s ease;
+}
+.agent-status.is-online .agent-status-dot { background: var(--ok); }
+.agent-status.is-offline .agent-status-dot { background: var(--danger); }
+.agent-status.is-online { color: var(--ok); }
+.agent-status.is-offline { color: var(--danger); }
+
+.printer-select {
+  width: 100%;
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  padding: 10px 12px;
+  border-radius: 8px;
+  appearance: none;
+}
+.printer-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.printer-select:not(:disabled):focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* iOS-style toggle */
 .pref-toggle {
   flex-shrink: 0;

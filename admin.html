@@ -66,22 +66,40 @@
 
     <div class="printer-prefs-card">
 
-      <!-- ① System dialog toggle -->
+      <!-- ① Printer Setup — talks to the local print-agent (see /print-agent) -->
       <div class="pref-row">
         <div class="pref-label-group">
-          <p class="pref-label">Print using system dialog</p>
+          <p class="pref-label">Printer Setup</p>
           <p class="pref-desc">
-            Off: print jobs fire silently (requires Chrome launched with
-            <code>--kiosk-printing</code>).<br>
-            On: opens the native OS printer dialog so you can choose a printer
-            or adjust per-job settings.
+            The kiosk never shows a print dialog. The
+            <code>studio-booth-print-agent</code> running on this Pi sends
+            every job straight to the printer selected below via CUPS.
           </p>
         </div>
-        <label class="pref-toggle" title="Use system dialog">
-          <input type="checkbox" id="prefSystemDialog">
-          <span class="pref-toggle-track"></span>
-        </label>
+        <span class="agent-status" id="agentStatus">
+          <span class="agent-status-dot" id="agentStatusDot"></span>
+          <span id="agentStatusText">Checking agent…</span>
+        </span>
       </div>
+
+      <div class="pref-row pref-row-stack">
+        <label class="pref-label" for="printerSelect">Target printer</label>
+        <select id="printerSelect" class="printer-select" disabled>
+          <option value="">— Agent offline —</option>
+        </select>
+      </div>
+
+      <div class="pref-save-row">
+        <button class="btn-admin btn-admin-primary" id="btnSavePrinter" disabled>Save Printer</button>
+        <button class="btn-admin btn-admin-outline" id="btnOpenCups">Open Printer Settings ↗</button>
+        <span class="pref-saved-msg" id="printerSavedMsg" hidden>✓ Saved</span>
+      </div>
+      <p class="pref-desc" style="margin-top:8px;">
+        "Open Printer Settings" opens CUPS' own admin page
+        (<code>localhost:631</code>) to add a printer and set its native
+        paper size, orientation, and quality — the real OS-level driver
+        screen, not something this app reimplements.
+      </p>
 
       <div class="pref-divider"></div>
 

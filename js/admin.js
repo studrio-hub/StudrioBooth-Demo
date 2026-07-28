@@ -35,12 +35,81 @@
     toast: document.getElementById("adminToast")
   };
 
-  /* ---- Printer preferences: system dialog toggle (admin-only — never
-     exposed in the kiosk UI) + Printer Alignment (scale/offsetX/offsetY).
-     Storage, defaults, and clamping all live in print-alignment.js so the
-     kiosk print job and this page's Test Print stay perfectly in sync. ---- */
+  /* ---- Printer Setup: talks to the local print-agent (print-agent/) to
+     list real CUPS printers, show whether the agent is reachable, and save
+     which printer the kiosk should target. ---- */
+  const printerEls = {
+    status: document.getElementById("agentStatus"),
+    statusDot: document.getElementById("agentStatusDot"),
+    statusText: document.getElementById("agentStatusText"),
+    select: document.getElementById("printerSelect"),
+    saveBtn: document.getElementById("btnSavePrinter"),
+    savedMsg: document.getElementById("printerSavedMsg"),
+    openCupsBtn: document.getElementById("btnOpenCups")
+  };
+
+  function setAgentOnlineUI(isOnline) {
+    printerEls.status.classList.toggle("is-online", isOnline);
+    printerEls.status.classList.toggle("is-offline", !isOnline);
+    printerEls.select.disabled = !isOnline;
+    printerEls.saveBtn.disabled = !isOnline;
+    testPrintBtn.disabled = !isOnline;
+  }
+
+  async function refreshPrinterSetup() {
+    const health = await printAlignment.checkAgentHealth();
+    if (!health.online) {
+      printerEls.statusText.textContent = "Agent offline";
+      setAgentOnlineUI(false);
+      printerEls.select.innerHTML = '<option value="">— Agent offline —</option>';
+      return;
+    }
+    printerEls.statusText.textContent = "Agent connected";
+    setAgentOnlineUI(true);
+
+    try {
+      const { printers, configured, cupsDefault } = await printAlignment.listPrinters();
+      if (!printers.length) {
+        printerEls.select.innerHTML = '<option value="">— No printers found in CUPS —</option>';
+        printerEls.select.disabled = true;
+        printerEls.saveBtn.disabled = true;
+        return;
+      }
+      const current = configured || cupsDefault || printers[0].name;
+      printerEls.select.innerHTML = printers
+        .map((p) => `<option value="${p.name}" ${p.name === current ? "selected" : ""}>${p.name}${p.isCupsDefault ? " (CUPS default)" : ""}</option>`)
+        .join("");
+    } catch (e) {
+      console.error("[admin] Failed to list printers:", e);
+      printerEls.select.innerHTML = '<option value="">— Couldn\'t load printers —</option>';
+    }
+  }
+
+  printerEls.saveBtn.addEventListener("click", async () => {
+    const name = printerEls.select.value;
+    if (!name) return;
+    printerEls.saveBtn.disabled = true;
+    try {
+      await printAlignment.setConfiguredPrinter(name);
+      printerEls.savedMsg.hidden = false;
+      clearTimeout(printerEls.saveBtn._t);
+      printerEls.saveBtn._t = setTimeout(() => { printerEls.savedMsg.hidden = true; }, 2500);
+    } catch (e) {
+      console.error("[admin] Failed to save printer:", e);
+      showToast("Couldn't save printer — check the agent and try again.");
+    } finally {
+      printerEls.saveBtn.disabled = false;
+    }
+  });
+
+  printerEls.openCupsBtn.addEventListener("click", () => {
+    window.open("http://localhost:631/printers", "_blank", "noopener");
+  });
+
+  /* ---- Printer Alignment (scale/offsetX/offsetY). Storage, defaults, and
+     clamping all live in print-alignment.js so the kiosk print job and
+     this page's Test Print stay perfectly in sync. ---- */
   const alignEls = {
-    systemDialog: document.getElementById("prefSystemDialog"),
     scale: document.getElementById("alignScale"),
     scaleValue: document.getElementById("alignScaleValue"),
     offsetX: document.getElementById("alignOffsetX"),
@@ -50,7 +119,6 @@
   };
 
   function applyPrefsToUI(prefs) {
-    alignEls.systemDialog.checked = !!prefs.systemDialog;
     alignEls.scale.value = prefs.scale;
     alignEls.scaleValue.textContent = `${prefs.scale}%`;
     alignEls.offsetX.value = prefs.offsetX;
@@ -61,7 +129,6 @@
 
   function readPrefsFromUI() {
     return printAlignment.sanitize({
-      systemDialog: alignEls.systemDialog.checked,
       scale: alignEls.scale.value,
       offsetX: alignEls.offsetX.value,
       offsetY: alignEls.offsetY.value
@@ -89,10 +156,10 @@
     savePrefsBtn._t = setTimeout(() => { prefSavedMsg.hidden = true; }, 2500);
   });
 
-  /* ---- Test Print: fires a real print job using the CURRENT slider
-     values (not necessarily saved) against a generated alignment test
-     pattern, so the operator can dial in a printer without needing a
-     guest session or touching the camera. ---- */
+  /* ---- Test Print: fires a real print job through the agent using the
+     CURRENT slider values (not necessarily saved) against a generated
+     alignment test pattern, so the operator can dial in a printer without
+     needing a guest session or touching the camera. ---- */
   const testPrintBtn = document.getElementById("btnTestPrint");
   const testPrintMsg = document.getElementById("testPrintMsg");
 
@@ -104,22 +171,20 @@
     let testUrl;
     try {
       testUrl = await printAlignment.renderTestPatternPNG();
-      printAlignment.openPrintWindow(testUrl, 1, prefs, () => {
-        URL.revokeObjectURL(testUrl);
-        testPrintBtn.disabled = false;
-        testPrintMsg.hidden = true;
-      });
+      await printAlignment.sendPrintJob(testUrl, 1, prefs);
     } catch (e) {
       console.error("[admin] Test print failed:", e);
+      showToast(`Test print failed: ${e.message}`);
+    } finally {
       if (testUrl) URL.revokeObjectURL(testUrl);
       testPrintBtn.disabled = false;
       testPrintMsg.hidden = true;
-      showToast("Test print failed — try again.");
     }
   });
 
   // Populate the UI on load
   applyPrefsToUI(printAlignment.loadPrefs());
+  refreshPrinterSetup();
 
   let pendingDeleteId = null;
 

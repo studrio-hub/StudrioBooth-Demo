@@ -81,10 +81,9 @@ const printingModule = {
   async print() {
     kioskTimer.hide();
 
-    // Printer preferences (system dialog is admin-only and never surfaced
-    // here; scale/offsetX/offsetY are the Printer Alignment settings) —
-    // shared logic lives in js/print-alignment.js so the kiosk and the
-    // Admin "Test Print" button always agree on the math.
+    // Printer Alignment settings (scale/offsetX/offsetY) — shared logic
+    // lives in js/print-alignment.js so the kiosk and the Admin "Test
+    // Print" button always agree on the math and the agent call.
     const prefs = printAlignment.loadPrefs();
 
     this.els.printBtn.disabled = true;
@@ -104,15 +103,26 @@ const printingModule = {
     });
     const pngUrl = URL.createObjectURL(pngBlob);
 
-    printAlignment.openPrintWindow(pngUrl, sessionState.quantity, prefs, () => {
+    this.els.printBtn.textContent = "Sending to printer...";
+
+    // Goes straight to the local print-agent -> CUPS -> printer. No browser
+    // print dialog appears at any point — see js/print-alignment.js.
+    try {
+      await printAlignment.sendPrintJob(pngUrl, sessionState.quantity, prefs);
+      this.els.printBtn.textContent = "🖨 PRINT NOW";
+      // Fire-and-forget: log this print job for the admin dashboard's
+      // "copies printed" stat. Only logged on a confirmed successful send.
+      cloudStorage.logPrintEvent(sessionState.id, sessionState.quantity);
+    } catch (e) {
+      console.error("[printing] Print job failed:", e);
+      this.els.printBtn.textContent = "⚠ Print failed — ask staff for help";
+      setTimeout(() => {
+        this.els.printBtn.textContent = "🖨 PRINT NOW";
+      }, 4000);
+    } finally {
       URL.revokeObjectURL(pngUrl);
       this.els.printBtn.disabled = false;
-      this.els.printBtn.textContent = "🖨 PRINT NOW";
-    });
-
-    // Fire-and-forget: log this print job for the admin dashboard's
-    // "copies printed" stat.
-    cloudStorage.logPrintEvent(sessionState.id, sessionState.quantity);
+    }
   }
 };
 
