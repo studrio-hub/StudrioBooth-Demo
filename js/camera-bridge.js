@@ -262,25 +262,38 @@ const mockCameraBridge = {
    * this makes the cut from "live video" to "photo just taken" read as
    * one continuous shot instead of an abrupt jump.
    */
-  async startVideoRecording() {
+  /*
+   * zoom   — digital zoom level (1.0 = no crop, 2.0 = 2× crop, etc.)
+   * mirror — whether to horizontally flip the frame, matching the preview
+   *
+   * Both parameters mirror exactly what cameraController._applyPreviewTransform()
+   * applies visually. The CSS transform on the <video> element is display-only;
+   * this is what actually bakes the crop + flip into the recorded pixels.
+   */
+  async startVideoRecording(zoom = 1.0, mirror = false) {
     if (!this._stream) return;
     const videoEl = this._videoEl;
 
+    const srcW = videoEl.videoWidth || 1280;
+    const srcH = videoEl.videoHeight || 720;
+
+    // Output canvas is always full source resolution so quality is preserved.
     const canvas = document.createElement("canvas");
-    canvas.width = videoEl.videoWidth || 1280;
-    canvas.height = videoEl.videoHeight || 720;
+    canvas.width = srcW;
+    canvas.height = srcH;
     this._recordCanvas = canvas;
     this._recordCtx = canvas.getContext("2d");
     this._freezeImage = null;
     this._recording = true;
+    this._recordZoom = Math.max(1.0, zoom);
+    this._recordMirror = !!mirror;
 
     const drawFrame = () => {
       if (!this._recording) return;
       const ctx = this._recordCtx;
-      if (this._freezeImage) {
-        ctx.drawImage(this._freezeImage, 0, 0, canvas.width, canvas.height);
-      } else if (videoEl.readyState >= 2) {
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      const source = this._freezeImage || (videoEl.readyState >= 2 ? videoEl : null);
+      if (source) {
+        this._drawZoomedMirrored(ctx, source, srcW, srcH, this._recordZoom, this._recordMirror);
       }
       this._recordRafId = requestAnimationFrame(drawFrame);
     };
@@ -296,6 +309,43 @@ const mockCameraBridge = {
   },
 
   /*
+   * Draws `source` into `ctx` (canvas width × height) with the same
+   * crop-then-scale logic that _cropToZoom() uses for still photos,
+   * plus an optional horizontal mirror baked into the canvas transform.
+   *
+   * This keeps the recorded video visually identical to:
+   *   - the live preview transform (CSS scale + scaleX(-1) for mirror)
+   *   - the still photo crop (_cropToZoom in camera-controller.js)
+   */
+  _drawZoomedMirrored(ctx, source, outW, outH, zoom, mirror) {
+    // Pre-rendered freeze frames (see stopVideoRecording) have already had
+    // zoom and mirror baked in by capturePhoto(). Draw them 1:1 with no
+    // further transformation so they match the preceding live frames exactly.
+    if (source._isPreRendered) {
+      ctx.drawImage(source, 0, 0, outW, outH);
+      return;
+    }
+
+    const srcW = source.videoWidth || source.naturalWidth || outW;
+    const srcH = source.videoHeight || source.naturalHeight || outH;
+
+    // Centered crop region matching _cropToZoom()
+    const cropW = srcW / zoom;
+    const cropH = srcH / zoom;
+    const sx = (srcW - cropW) / 2;
+    const sy = (srcH - cropH) / 2;
+
+    ctx.save();
+    if (mirror) {
+      // Flip horizontally around the canvas center
+      ctx.translate(outW, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(source, sx, sy, cropW, cropH, 0, 0, outW, outH);
+    ctx.restore();
+  },
+
+  /*
    * freezeBlob (optional) — the still photo just captured. When provided,
    * the last ~600ms of the clip holds on that exact photo instead of
    * cutting off mid-motion, so the handoff into the between-shots preview
@@ -306,7 +356,25 @@ const mockCameraBridge = {
 
     if (freezeBlob) {
       try {
-        this._freezeImage = await blobToImage(freezeBlob);
+        // freezeBlob is the already-processed still: _cropToZoom() and
+        // capturePhoto(mirror) have already been applied to it.
+        // Loading it into _freezeImage as-is means _drawZoomedMirrored
+        // would double-apply zoom and mirror during the freeze segment.
+        //
+        // Solution: pre-render the freeze frame onto a canvas that matches
+        // the record canvas dimensions, with NO zoom/mirror transform,
+        // then use that pre-rendered canvas as the freeze source instead.
+        // _drawZoomedMirrored will draw it 1:1, which is exactly right.
+        const rawImg = await blobToImage(freezeBlob);
+        const w = this._recordCanvas.width;
+        const h = this._recordCanvas.height;
+        const preRendered = document.createElement("canvas");
+        preRendered.width = w;
+        preRendered.height = h;
+        preRendered.getContext("2d").drawImage(rawImg, 0, 0, w, h);
+        // Tag it so _drawZoomedMirrored skips zoom+mirror for this source
+        preRendered._isPreRendered = true;
+        this._freezeImage = preRendered;
         await wait(600);
       } catch (e) {
         console.warn("Could not blend captured photo into video ending:", e);

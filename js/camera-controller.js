@@ -147,7 +147,9 @@ const cameraController = {
 
   async startVideoRecording() {
     if (this.mode === "real") return realCameraBridge.startVideoRecording();
-    if (this.mode === "mock") return mockCameraBridge.startVideoRecording();
+    // Pass the current zoom level and mirror state so the mock bridge bakes
+    // the same crop + flip into the recorded pixels that the guest sees on screen.
+    if (this.mode === "mock") return mockCameraBridge.startVideoRecording(this.zoomLevel, this.mirrorEnabled);
     throw new Error("Camera not connected");
   },
 
