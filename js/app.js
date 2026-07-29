@@ -1,0 +1,247 @@
+/*
+ * APP.JS — global session state + page navigation + wiring for
+ * Page 1 (setup) and Page 2 (frame/quantity).
+ */
+
+const sessionState = {
+  id: Date.now().toString(36), // short, still unique, keeps the QR's encoded text as compact as possible
+  frameType: null,   // "2x6" | "4x6"
+  quantity: 1,
+  shots: [],          // filled by shooting.js
+  selectedShots: [],   // filled on Page 4 (next batch)
+  design: null         // filled on Page 5 (next batch)
+};
+
+/* ---------------- Navigation ---------------- */
+function goToPage(pageName) {
+  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+  document.querySelector(`.page[data-page="${pageName}"]`).classList.add("active");
+}
+
+/* ---------------- PAGE 1: SETUP ---------------- */
+const setupEls = {
+  video: document.getElementById("livePreviewVideo"),
+  img: document.getElementById("livePreviewImg"),
+  placeholder: document.getElementById("previewPlaceholder"),
+  zoomLevelLabel: document.getElementById("zoomLevelLabel"),
+  zoomTypeLabel: document.getElementById("zoomTypeLabel"),
+  nextBtn: document.getElementById("btnNextFromSetup")
+};
+
+let currentZoom = 1.0;
+
+// Camera connection now happens automatically on boot (see boot.js) — the
+// home screen no longer has a manual "Connect Camera" button or a mock-mode
+// warning. Kept as a no-op so boot.js's existing renderCameraStatus(status)
+// call stays harmless.
+function renderCameraStatus(status) {}
+
+const btnZoomWide = document.getElementById("btnZoomWide");
+const btnZoomNormal = document.getElementById("btnZoomNormal");
+const btnMirrorToggle = document.getElementById("btnMirrorToggle");
+
+btnZoomWide.addEventListener("click", () => setFixedZoom(1.0));
+btnZoomNormal.addEventListener("click", () => setFixedZoom(2.0));
+
+async function setFixedZoom(level) {
+  await updateZoom(level);
+  btnZoomWide.classList.toggle("active", level === 1.0);
+  btnZoomNormal.classList.toggle("active", level === 2.0);
+}
+
+let mirrorEnabled = false;
+btnMirrorToggle.addEventListener("click", () => {
+  mirrorEnabled = !mirrorEnabled;
+  btnMirrorToggle.classList.toggle("active", mirrorEnabled);
+  cameraController.setMirror(mirrorEnabled); // updates the combined zoom+mirror transform
+});
+
+async function updateZoom(level) {
+  level = Math.max(1.0, Math.min(5.0, level));
+  try {
+    const result = await cameraController.setZoom(level);
+    currentZoom = result.level;
+    setupEls.zoomLevelLabel.textContent = `${currentZoom.toFixed(1)}x`;
+    setupEls.zoomTypeLabel.textContent = `(${result.type})`;
+  } catch (e) {
+    alert("Connect the camera before adjusting zoom.");
+  }
+}
+
+setupEls.nextBtn.addEventListener("click", () => {
+  goToPage("frame");
+  kioskTimer.start(60, proceedFromFrame);
+});
+
+/* ---------------- PAGE 2: FRAME + QUANTITY ---------------- */
+
+/*
+ * Pricing rules (both frame types share the same structure):
+ *   1 copy  = ₱50
+ *   2 copies = ₱75  (+₱25)
+ *   3 copies = ₱100 (+₱25 each)
+ *   n copies = ₱50 + (n-1) × ₱25
+ */
+const FRAME_NAMES = {
+  "2x6": "Long Frame",
+  "4x6": "Wide Frame"
+};
+
+function calcPrice(qty) {
+  return 50 + Math.max(0, qty - 1) * 25;
+}
+
+const frameEls = {
+  card2x6: document.getElementById("frameCard2x6"),
+  card4x6: document.getElementById("frameCard4x6"),
+  qtyValue: document.getElementById("qtyValue"),
+  qtyMinus: document.getElementById("btnQtyMinus"),
+  qtyPlus: document.getElementById("btnQtyPlus"),
+  labelPill: document.getElementById("qtyLabelPill"),
+  pricePill: document.getElementById("qtyPricePill"),
+  backBtn: document.getElementById("btnBackFromFrame"),
+  nextBtn: document.getElementById("btnNextFromFrame")
+};
+
+frameEls.card2x6.addEventListener("click", () => selectFrame("2x6"));
+frameEls.card4x6.addEventListener("click", () => selectFrame("4x6"));
+
+function selectFrame(type) {
+  sessionState.frameType = type;
+  frameEls.card2x6.classList.toggle("selected", type === "2x6");
+  frameEls.card4x6.classList.toggle("selected", type === "4x6");
+  frameEls.nextBtn.disabled = false;
+  updateFramePricing();
+}
+
+frameEls.qtyMinus.addEventListener("click", () => setQuantity(sessionState.quantity - 1));
+frameEls.qtyPlus.addEventListener("click", () => setQuantity(sessionState.quantity + 1));
+
+function setQuantity(qty) {
+  sessionState.quantity = Math.max(1, Math.min(20, qty));
+  frameEls.qtyValue.textContent = sessionState.quantity;
+  updateFramePricing();
+}
+
+function updateFramePricing() {
+  const qty = sessionState.quantity;
+
+  if (!sessionState.frameType) {
+    frameEls.labelPill.textContent = "Select a frame";
+    frameEls.pricePill.textContent = "—";
+    return;
+  }
+
+  const name = FRAME_NAMES[sessionState.frameType];
+
+  // "2 Long Frame" / "1 Wide Frame"  — matches the reference exactly
+  // For 2x6: 1 sheet = 2 identical strips, so label says "2 Long Frame" for qty 1.
+  // The print quantity (sheets) is sessionState.quantity; the strip count for 2x6
+  // is qty × 2, but the label simply mirrors the reference's wording.
+  if (sessionState.frameType === "2x6") {
+    frameEls.labelPill.textContent = `${qty * 2} ${name}`;
+  } else {
+    frameEls.labelPill.textContent = `${qty} ${name}`;
+  }
+
+  frameEls.pricePill.textContent = `₱${calcPrice(qty)}`;
+}
+
+frameEls.backBtn.addEventListener("click", () => {
+  kioskTimer.hide();
+  goToPage("setup");
+});
+frameEls.nextBtn.addEventListener("click", () => {
+  kioskTimer.hide();
+
+  // Update the frame size indicator shown bottom-left on the shooting screen
+  const indicatorText = document.getElementById("shootingFrameIndicatorText");
+  if (indicatorText) {
+    const name = FRAME_NAMES[sessionState.frameType] || sessionState.frameType;
+    const size = sessionState.frameType === "2x6" ? "2×6" : "4×6";
+    indicatorText.textContent = `${name} · ${size}`;
+  }
+
+  goToPage("shooting");
+  shootingModule.startSession();
+});
+
+/* Time's up on Page 2 without a frame being selected — return to Home.
+   We do NOT auto-advance to shooting; the guest must make an active choice. */
+function proceedFromFrame() {
+  kioskTimer.hide();
+  goToPage("setup");
+}
+
+/* ---------------- PAGE 6 wiring + session reset ---------------- */
+
+// Hook into the design page's "NEXT" button (defined in strip.js) to init page 6.
+// Auto-print is triggered inside printingModule.init() immediately after navigating.
+const _origDesignNext = document.getElementById("btnNextFromDesign");
+_origDesignNext.addEventListener("click", async () => {
+  // Fire immediately — sessionState.galleryUrlPromise is assigned
+  // synchronously at the very start of generateAndRender(), so
+  // printingModule.init() can safely read it right after this call.
+  qrModule.generateAndRender();
+  await printingModule.init();
+});
+
+/* Done button on Page 6 — shows the "End session?" confirmation modal.
+   The button stays disabled until printingModule enables it after upload. */
+document.getElementById("btnPrintingDone").addEventListener("click", () => {
+  kioskTimer.hide(); // pause the 60s countdown while modal is open
+  document.getElementById("confirmModal").hidden = false;
+  document.getElementById("confirmModal").classList.add("show");
+});
+
+/* Confirmation modal — wired for both the Done button path and the
+   auto-timeout "End Session" path used by printingModule.endSessionOnTimeout(). */
+document.getElementById("btnConfirmBack").addEventListener("click", () => {
+  const m = document.getElementById("confirmModal");
+  m.classList.remove("show");
+  m.hidden = true;
+  // Resume the 60s timer after the guest cancels
+  kioskTimer.start(60, () => printingModule.endSessionOnTimeout());
+});
+document.getElementById("btnConfirmProceed").addEventListener("click", () => {
+  const m = document.getElementById("confirmModal");
+  m.classList.remove("show");
+  m.hidden = true;
+  resetSessionAndRestart();
+});
+
+function resetSessionAndRestart() {
+  kioskTimer.hide();
+
+  // Revoke old blob URLs to avoid memory leaks
+  sessionState.shots.forEach((s) => {
+    if (s.imageUrl) URL.revokeObjectURL(s.imageUrl);
+    if (s.videoUrl) URL.revokeObjectURL(s.videoUrl);
+  });
+
+  sessionState.id = Date.now().toString(36);
+  sessionState.frameType = null;
+  sessionState.quantity = 1;
+  sessionState.shots = [];
+  sessionState.selectedShots = [];
+  sessionState.design = null;
+  sessionState.galleryUrl = null;
+  sessionState.galleryUrlPromise = null;
+
+  // Reset Page 6 Done button
+  document.getElementById("btnPrintingDone").disabled = true;
+
+  // Reset Page 2 UI
+  document.getElementById("frameCard2x6").classList.remove("selected");
+  document.getElementById("frameCard4x6").classList.remove("selected");
+  document.getElementById("btnNextFromFrame").disabled = true;
+  document.getElementById("qtyValue").textContent = "1";
+  document.getElementById("qtyLabelPill").textContent = "Select a frame";
+  document.getElementById("qtyPricePill").textContent = "—";
+
+  cameraController.attachPreview(setupEls.video, setupEls.img);
+  goToPage("setup");
+}
+
+document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";
+document.getElementById("frameThumb4x6").src = "assets/designs/4x6_Strip_Thumbnail.png";
