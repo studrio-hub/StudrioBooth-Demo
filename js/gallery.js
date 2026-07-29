@@ -1,9 +1,14 @@
 /*
- * GALLERY.JS — standalone digital gallery logic for gallery.html.
+ * GALLERY.JS — standalone digital gallery logic for g/index.html.
  * Ported directly from the proven kiosk "Preview Digital Gallery"
  * popup logic — cloud-only, no local IndexedDB fallback, no
  * dependency on stripModule/layout-config. Simpler and matches
  * what's already confirmed working.
+ *
+ * URL format: https://studrio.cc/g/{sessionId}
+ * The session ID is the last non-empty path segment of
+ * window.location.pathname, e.g. "/g/2ydgshd" → "2ydgshd".
+ * There is no ?gallery= query param in this format.
  */
 
 (function () {
@@ -56,7 +61,6 @@
   function render(data) {
     const photoUrl = data.finalStripUrl || null;
     const videoUrl = data.finalStripVideoUrl || null;
-    const photos = Array.isArray(data.photos) ? data.photos : [];
 
     // ---- Main strip preview ----
     if (videoUrl) {
@@ -89,12 +93,21 @@
         downloadFile(videoUrl, `${data.id}-video-strip.${extOf(videoUrl, "webm")}`, els.downloadVideoBtn);
       });
     }
+  }
 
+  function getSessionIdFromPath() {
+    // URL format: https://studrio.cc/g/{sessionId}
+    // pathname is "/g/2ydgshd" — take the last non-empty segment.
+    const segments = window.location.pathname.split("/").filter(Boolean);
+    const id = segments[segments.length - 1];
+    // Reject "g" itself (bare /g/ with no ID) and anything that looks
+    // like a filename with an extension (shouldn't happen, but be safe).
+    if (!id || id === "g" || /\.\w+$/.test(id)) return null;
+    return id;
   }
 
   async function init() {
-    const params = new URLSearchParams(window.location.search);
-    const galleryId = params.get("gallery");
+    const galleryId = getSessionIdFromPath();
 
     if (!galleryId) {
       els.loading.hidden = true;

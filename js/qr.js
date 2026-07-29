@@ -6,7 +6,14 @@
  * (see gallery.js / cloud-storage.js). If Supabase is unavailable, the QR
  * still resolves to the deterministic gallery URL so printing/QR-baking
  * can proceed, it just won't have media behind it until Supabase is fixed.
+ *
+ * Gallery URL format: https://studrio.cc/g/{sessionId}
+ * e.g. https://studrio.cc/g/2ydgshd
+ * gallery.html lives at /g/index.html and reads the session ID from the
+ * last path segment of window.location.pathname.
  */
+
+const GALLERY_BASE_URL = "https://studrio.cc/g/";
 
 const mediaStorage = {
   async createGallery(sessionData) {
@@ -19,7 +26,7 @@ const mediaStorage = {
     // configured/available, the QR still resolves to the deterministic
     // gallery URL, it just won't have any media behind it yet.
     console.warn("[mediaStorage] Cloud storage unavailable — QR will point to a gallery URL with no uploaded media. Check cloud-storage.js CLOUD_CONFIG.");
-    return { url: `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionData.id}` };
+    return { url: `${GALLERY_BASE_URL}${sessionData.id}` };
   }
 };
 
@@ -55,13 +62,12 @@ const qrModule = {
       durationMs: perShotDurationMs + 500 // small buffer past the loop point
     });
 
-    // The gallery URL is fully deterministic from the session id (same
-    // formula mediaStorage.createGallery() falls back to), so it can be
-    // computed before the upload even starts — which lets us bake the
-    // QR into a print-ready strip up front, not just at print time.
-    // This gives the admin dashboard a reprint-ready file for every
-    // session, even ones the guest never actually printed.
-    const galleryUrl = `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionState.id}`;
+    // The gallery URL is fully deterministic from the session id, so it can
+    // be computed before the upload even starts — which lets us bake the QR
+    // into a print-ready strip up front, not just at print time. This gives
+    // the admin dashboard a reprint-ready file for every session, even ones
+    // the guest never actually printed.
+    const galleryUrl = `${GALLERY_BASE_URL}${sessionState.id}`;
 
     let printReadyPng = null;
     try {

@@ -12,13 +12,16 @@
  * small session.json file inside the same public bucket — no separate
  * database table needed. Until enabled, the app automatically keeps
  * using local-only IndexedDB storage (same-device preview).
+ *
+ * Gallery URL format: https://studrio.cc/g/{sessionId}
  */
 
 const CLOUD_CONFIG = {
   enabled: true, // flip to true once the values below are filled in
   supabaseUrl: "https://oismyjlhnlfavrdfvabg.supabase.co",      // e.g. "https://xxxxx.supabase.co"
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pc215amxobmxmYXZyZGZ2YWJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMTI3OTMsImV4cCI6MjEwMDU4ODc5M30.TLGFzBFDYJsWUErTVV8yP2SlpkL9LzEPoFKV2R3hBGE",  // the "anon public" key from Project Settings → API
-  bucketName: "photobooth"
+  bucketName: "photobooth",
+  galleryBaseUrl: "https://studrio.cc/g/"
 };
 
 let _supabaseClient = null;
@@ -110,7 +113,7 @@ const cloudStorage = {
       console.error("[cloudStorage] Could not mirror session into sessions table:", e.message || e);
     }
 
-    return { url: `${window.location.origin}${window.location.pathname.replace("index.html", "")}gallery.html?gallery=${sessionData.id}` };
+    return { url: `${CLOUD_CONFIG.galleryBaseUrl}${sessionData.id}` };
   },
 
   /* Fetches session metadata and converts all storage paths to short-lived
