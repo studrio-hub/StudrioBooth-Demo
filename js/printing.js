@@ -47,9 +47,14 @@ const printingModule = {
     // Start the looping video strip immediately in the center column
     this._renderVideoLoop();
 
-    // Hide the QR code, show uploading state until the promise resolves
-    this.els.qrWrap.hidden = true;
-    this.els.qrUploading.hidden = false;
+    // Hide the QR code, show uploading state until the promise resolves.
+    // Uses inline style.display rather than the `hidden` attribute — if
+    // style.css has a rule targeting these elements with higher specificity
+    // than the browser's default [hidden] { display: none }, the hidden
+    // attribute can get silently overridden and the element stays visible
+    // even though this code ran correctly. Inline styles always win.
+    this.els.qrWrap.style.display = "none";
+    this.els.qrUploading.style.display = "";
 
     // Fire print immediately in the background — guests see the video
     // loop while this happens; they don't need to tap anything.
@@ -111,8 +116,8 @@ const printingModule = {
     if (this._qrReadyCalled) return;
     this._qrReadyCalled = true;
 
-    this.els.qrUploading.hidden = true;
-    this.els.qrWrap.hidden = false;
+    this.els.qrUploading.style.display = "none";
+    this.els.qrWrap.style.display = "";
 
     // Enable Done button now that the upload is confirmed (or failed gracefully)
     const doneBtn = document.getElementById("btnPrintingDone");
