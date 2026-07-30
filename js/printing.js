@@ -12,6 +12,12 @@
  * The actual popup/print-window plumbing and scale/alignment math live in
  * js/print-alignment.js (loaded before this file) so the kiosk print job
  * and the Admin "Test Print" button share identical logic.
+ *
+ * RELIABILITY: qr.js guarantees sessionState.galleryUrlPromise resolves
+ * (never hangs) via its own try/catch/finally + upload timeout. As a
+ * second, independent line of defense — a kiosk should never trust a
+ * single point of failure to unstick a guest — _onQrReady() is also
+ * force-called by a hard failsafe timer below if it hasn't already fired.
  */
 
 const printingModule = {
@@ -27,6 +33,9 @@ const printingModule = {
   },
 
   async init() {
+    // Reset per-session so _onQrReady()'s guard works correctly on repeat visits.
+    this._qrReadyCalled = false;
+
     // Keep Done button disabled until upload is complete
     const doneBtn = document.getElementById("btnPrintingDone");
     if (doneBtn) doneBtn.disabled = true;
@@ -56,6 +65,19 @@ const printingModule = {
     } else {
       this._onQrReady();
     }
+
+    // Absolute failsafe. qr.js's generateAndRender() guarantees the promise
+    // above settles within ~20s under its own contract — but a kiosk should
+    // never depend on exactly one thing going right. If _onQrReady() somehow
+    // still hasn't fired by 25s (e.g. galleryUrlPromise itself was replaced
+    // or never wired up correctly), force it open anyway rather than leave
+    // the guest staring at "Uploading…" until the page times out entirely.
+    setTimeout(() => {
+      if (!this._qrReadyCalled) {
+        console.warn("[printing] Gallery URL promise did not settle in time — forcing QR panel open.");
+        this._onQrReady();
+      }
+    }, 25000);
   },
 
   /* Render the looping video strip in the center column.
@@ -80,9 +102,15 @@ const printingModule = {
     });
   },
 
-  /* Called once the gallery upload resolves (success or failure).
-     Enables the Done button — the guest can now end their session. */
+  /* Called once the gallery upload resolves (success or failure), or by
+     the failsafe timer if it never does. Enables the Done button — the
+     guest can now end their session. Guarded so it only ever runs once
+     per session (the .then/.catch pair above and the failsafe timer can
+     both fire; the second call must be a no-op). */
   _onQrReady() {
+    if (this._qrReadyCalled) return;
+    this._qrReadyCalled = true;
+
     this.els.qrUploading.hidden = true;
     this.els.qrWrap.hidden = false;
 

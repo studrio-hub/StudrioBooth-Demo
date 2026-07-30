@@ -15,9 +15,18 @@
  * would 404 since there is no file at that path. The hash is read entirely
  * client-side by gallery.js, so GitHub Pages just serves /g/index.html and
  * everything works with zero hosting configuration.
+ *
+ * RELIABILITY CONTRACT: sessionState.galleryUrlPromise MUST resolve —
+ * never reject, never hang — no matter what happens during export or
+ * upload. printing.js awaits this promise to know when to hide its
+ * "Uploading…" indicator and start the 60s kiosk timer. If this promise
+ * never settles, the guest is stuck on Page 6 forever. Everything below
+ * is wrapped so that a single guaranteed resolveGalleryUrl() call always
+ * happens, via a try/catch/finally plus an upload timeout.
  */
 
 const GALLERY_BASE_URL = "https://studrio.cc/g/#";
+const UPLOAD_TIMEOUT_MS = 20000; // never let a stalled upload hang the guest
 
 const mediaStorage = {
   async createGallery(sessionData) {
@@ -41,80 +50,102 @@ const qrModule = {
 
     // Lets printingModule.init() wait for the gallery URL to exist even
     // if auto-print fires before this upload finishes.
-    // Note: #qrUrlText was removed from index.html — upload state is now
-    // shown via #qrUploading in printing.js. No urlText references here.
     let resolveGalleryUrl;
     sessionState.galleryUrlPromise = new Promise((resolve) => { resolveGalleryUrl = resolve; });
 
-    const finalStripPng = await stripModule.exportPNG({
-      frameType: sessionState.frameType,
-      selectedShots: sessionState.selectedShots,
-      designId: sessionState.design
-    });
+    // Deterministic fallback — known immediately, with zero async work.
+    // Whatever else happens below, this is what the QR/print output will
+    // use if exports or the upload fail or hang.
+    const fallbackGalleryUrl = `${GALLERY_BASE_URL}${sessionState.id}`;
+    let resolvedGalleryUrl = fallbackGalleryUrl;
 
-    // Per-shot videos run ~8.6s each (shootingModule.countdownSeconds of 8s
-    // plus the ~600ms captured-still freeze tail — see shooting.js and
-    // camera-bridge.js stopVideoRecording()). exportVideoStrip()'s default
-    // durationMs (3000) cuts off before a single loop finishes, producing a
-    // truncated-looking export. Record a bit past one full per-shot cycle
-    // so the uploaded strip-live video shows a complete loop.
-    const perShotDurationMs = (shootingModule.countdownSeconds * 1000) + 600;
-    const finalStripVideo = await stripModule.exportVideoStrip({
-      frameType: sessionState.frameType,
-      selectedShots: sessionState.selectedShots,
-      designId: sessionState.design,
-      durationMs: perShotDurationMs + 500 // small buffer past the loop point
-    });
-
-    // The gallery URL is fully deterministic from the session id, so it can
-    // be computed before the upload even starts — which lets us bake the QR
-    // into a print-ready strip up front, not just at print time.
-    const galleryUrl = `${GALLERY_BASE_URL}${sessionState.id}`;
-
-    let printReadyPng = null;
     try {
-      printReadyPng = await stripModule.exportPrintPNG({
+      const finalStripPng = await stripModule.exportPNG({
+        frameType: sessionState.frameType,
+        selectedShots: sessionState.selectedShots,
+        designId: sessionState.design
+      });
+
+      // Per-shot videos run ~8.6s each (shootingModule.countdownSeconds of 8s
+      // plus the ~600ms captured-still freeze tail — see shooting.js and
+      // camera-bridge.js stopVideoRecording()). exportVideoStrip()'s default
+      // durationMs (3000) cuts off before a single loop finishes, producing a
+      // truncated-looking export. Record a bit past one full per-shot cycle
+      // so the uploaded strip-live video shows a complete loop.
+      const perShotDurationMs = (shootingModule.countdownSeconds * 1000) + 600;
+      const finalStripVideo = await stripModule.exportVideoStrip({
         frameType: sessionState.frameType,
         selectedShots: sessionState.selectedShots,
         designId: sessionState.design,
-        qrText: galleryUrl
+        durationMs: perShotDurationMs + 500 // small buffer past the loop point
+      });
+
+      let printReadyPng = null;
+      try {
+        printReadyPng = await stripModule.exportPrintPNG({
+          frameType: sessionState.frameType,
+          selectedShots: sessionState.selectedShots,
+          designId: sessionState.design,
+          qrText: fallbackGalleryUrl
+        });
+      } catch (e) {
+        console.warn("[qrModule] Could not prepare print-ready (QR-baked) copy:", e);
+      }
+
+      const galleryPayload = {
+        id: sessionState.id,
+        frameType: sessionState.frameType,
+        design: sessionState.design,
+        finalStripPng,
+        finalStripVideo,
+        printReadyPng,
+        photos: sessionState.selectedShots.map((s) => ({
+          id: s.id,
+          image: s.image
+        }))
+      };
+
+      // Race the actual upload against a hard timeout. A stalled fetch
+      // (bad wifi, Supabase hiccup) can hang with no rejection at all —
+      // without this, the promise above would never resolve and the
+      // guest would be stuck on "Uploading…" indefinitely.
+      const timeout = new Promise((resolve) => {
+        setTimeout(() => resolve({ url: fallbackGalleryUrl, timedOut: true }), UPLOAD_TIMEOUT_MS);
+      });
+
+      const gallery = await Promise.race([
+        mediaStorage.createGallery(galleryPayload),
+        timeout
+      ]);
+
+      if (gallery && gallery.timedOut) {
+        console.warn(`[qrModule] Gallery upload did not finish within ${UPLOAD_TIMEOUT_MS}ms — using fallback URL. The session's media may still finish uploading in the background.`);
+      }
+
+      resolvedGalleryUrl = (gallery && gallery.url) || fallbackGalleryUrl;
+    } catch (e) {
+      // Anything unexpected above (a compositing/export failure, a thrown
+      // upload error) lands here. We must still resolve with *something*.
+      console.error("[qrModule] generateAndRender failed, using fallback gallery URL:", e);
+      resolvedGalleryUrl = fallbackGalleryUrl;
+    } finally {
+      // Guaranteed to run exactly once, regardless of what happened above.
+      // This is the line printing.js is actually waiting on.
+      sessionState.galleryUrl = resolvedGalleryUrl;
+      resolveGalleryUrl(resolvedGalleryUrl);
+    }
+
+    try {
+      new QRCode(container, {
+        text: resolvedGalleryUrl,
+        width: 220,
+        height: 220,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.L
       });
     } catch (e) {
-      console.warn("[qrModule] Could not prepare print-ready (QR-baked) copy:", e);
+      console.error("[qrModule] QR render failed:", e);
     }
-
-    const galleryPayload = {
-      id: sessionState.id,
-      frameType: sessionState.frameType,
-      design: sessionState.design,
-      finalStripPng,
-      finalStripVideo,
-      printReadyPng,
-      photos: sessionState.selectedShots.map((s) => ({
-        id: s.id,
-        image: s.image
-      }))
-    };
-
-    let resolvedGalleryUrl;
-    try {
-      const gallery = await mediaStorage.createGallery(galleryPayload);
-      resolvedGalleryUrl = gallery.url;
-    } catch (e) {
-      console.error("Gallery creation failed:", e);
-      resolvedGalleryUrl = galleryUrl;
-    }
-
-    sessionState.galleryUrl = resolvedGalleryUrl;
-    resolveGalleryUrl(resolvedGalleryUrl);
-
-    new QRCode(container, {
-      text: resolvedGalleryUrl,
-      width: 220,
-      height: 220,
-      colorDark: "#000000",
-      colorLight: "#ffffff",
-      correctLevel: QRCode.CorrectLevel.L
-    });
   }
 };
