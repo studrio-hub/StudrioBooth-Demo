@@ -1,14 +1,14 @@
 /*
  * GALLERY.JS — standalone digital gallery logic for g/index.html.
- * Ported directly from the proven kiosk "Preview Digital Gallery"
- * popup logic — cloud-only, no local IndexedDB fallback, no
- * dependency on stripModule/layout-config. Simpler and matches
- * what's already confirmed working.
+ * Cloud-only, no local IndexedDB fallback, no dependency on
+ * stripModule/layout-config.
  *
- * URL format: https://studrio.cc/g/{sessionId}
- * The session ID is the last non-empty path segment of
- * window.location.pathname, e.g. "/g/2ydgshd" → "2ydgshd".
- * There is no ?gallery= query param in this format.
+ * URL format: https://studrio.cc/g/#<sessionId>
+ * e.g. https://studrio.cc/g/#2ydgshd
+ *
+ * The session ID is read from window.location.hash (everything after "#").
+ * Hash-based routing means GitHub Pages just serves /g/index.html and
+ * requires zero rewrite rules or hosting configuration.
  */
 
 (function () {
@@ -95,19 +95,15 @@
     }
   }
 
-  function getSessionIdFromPath() {
-    // URL format: https://studrio.cc/g/{sessionId}
-    // pathname is "/g/2ydgshd" — take the last non-empty segment.
-    const segments = window.location.pathname.split("/").filter(Boolean);
-    const id = segments[segments.length - 1];
-    // Reject "g" itself (bare /g/ with no ID) and anything that looks
-    // like a filename with an extension (shouldn't happen, but be safe).
-    if (!id || id === "g" || /\.\w+$/.test(id)) return null;
-    return id;
+  function getSessionIdFromHash() {
+    // URL format: https://studrio.cc/g/#2ydgshd
+    // window.location.hash is "#2ydgshd" — strip the leading "#".
+    const hash = window.location.hash.replace(/^#/, "").trim();
+    return hash || null;
   }
 
   async function init() {
-    const galleryId = getSessionIdFromPath();
+    const galleryId = getSessionIdFromHash();
 
     if (!galleryId) {
       els.loading.hidden = true;

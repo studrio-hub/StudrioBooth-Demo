@@ -7,13 +7,17 @@
  * still resolves to the deterministic gallery URL so printing/QR-baking
  * can proceed, it just won't have media behind it until Supabase is fixed.
  *
- * Gallery URL format: https://studrio.cc/g/{sessionId}
- * e.g. https://studrio.cc/g/2ydgshd
- * gallery.html lives at /g/index.html and reads the session ID from the
- * last path segment of window.location.pathname.
+ * Gallery URL format: https://studrio.cc/g/#<sessionId>
+ * e.g. https://studrio.cc/g/#2ydgshd
+ *
+ * The hash fragment is used instead of a path segment (/g/2ydgshd) because
+ * GitHub Pages has no server-side rewrite support — a path like /g/2ydgshd
+ * would 404 since there is no file at that path. The hash is read entirely
+ * client-side by gallery.js, so GitHub Pages just serves /g/index.html and
+ * everything works with zero hosting configuration.
  */
 
-const GALLERY_BASE_URL = "https://studrio.cc/g/";
+const GALLERY_BASE_URL = "https://studrio.cc/g/#";
 
 const mediaStorage = {
   async createGallery(sessionData) {
@@ -64,9 +68,7 @@ const qrModule = {
 
     // The gallery URL is fully deterministic from the session id, so it can
     // be computed before the upload even starts — which lets us bake the QR
-    // into a print-ready strip up front, not just at print time. This gives
-    // the admin dashboard a reprint-ready file for every session, even ones
-    // the guest never actually printed.
+    // into a print-ready strip up front, not just at print time.
     const galleryUrl = `${GALLERY_BASE_URL}${sessionState.id}`;
 
     let printReadyPng = null;

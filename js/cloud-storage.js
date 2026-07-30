@@ -13,15 +13,16 @@
  * database table needed. Until enabled, the app automatically keeps
  * using local-only IndexedDB storage (same-device preview).
  *
- * Gallery URL format: https://studrio.cc/g/{sessionId}
+ * Gallery URL format: https://studrio.cc/g/#<sessionId>
+ * Hash-based so GitHub Pages serves /g/index.html without any rewrite rules.
  */
 
 const CLOUD_CONFIG = {
-  enabled: true, // flip to true once the values below are filled in
-  supabaseUrl: "https://oismyjlhnlfavrdfvabg.supabase.co",      // e.g. "https://xxxxx.supabase.co"
-  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pc215amxobmxmYXZyZGZ2YWJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMTI3OTMsImV4cCI6MjEwMDU4ODc5M30.TLGFzBFDYJsWUErTVV8yP2SlpkL9LzEPoFKV2R3hBGE",  // the "anon public" key from Project Settings → API
+  enabled: true,
+  supabaseUrl: "https://oismyjlhnlfavrdfvabg.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pc215amxobmxmYXZyZGZ2YWJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMTI3OTMsImV4cCI6MjEwMDU4ODc5M30.TLGFzBFDYJsWUErTVV8yP2SlpkL9LzEPoFKV2R3hBGE",
   bucketName: "photobooth",
-  galleryBaseUrl: "https://studrio.cc/g/"
+  galleryBaseUrl: "https://studrio.cc/g/#"
 };
 
 let _supabaseClient = null;
@@ -243,11 +244,7 @@ const adminStorage = {
   },
 
   /* Photostrips taken, total copies printed, and total storage bytes
-     used — for the dashboard's stats panel. Storage usage is computed
-     by walking every session's folder and summing file sizes; fine at
-     kiosk-event scale (dozens–low hundreds of sessions), but if this
-     ever needs to scale to thousands of sessions, move this to a
-     Postgres function reading storage.objects metadata instead. */
+     used — for the dashboard's stats panel. */
   async getStats() {
     const client = getSupabaseClient();
 
@@ -266,7 +263,7 @@ const adminStorage = {
       const { data: files, error } = await client.storage
         .from(CLOUD_CONFIG.bucketName)
         .list(`sessions/${session.id}`);
-      if (error) continue; // skip a folder we can't read rather than fail the whole stats call
+      if (error) continue;
       totalBytes += (files || []).reduce((sum, f) => sum + (f.metadata?.size || 0), 0);
     }
 
