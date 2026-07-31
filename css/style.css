@@ -224,7 +224,121 @@ button {
 .boot-error p { color: var(--off); font-size: 1.6vh; font-weight: 700; }
 .boot-error-actions { display: flex; gap: 1vw; }
 
-/* ================= 3:4 CAMERA PREVIEW (Home + Shooting) ================= */
+/* ================= PAGE HOME: EDITORIAL COLLAGE ================= */
+
+#page-home {
+  padding: 0;
+  background: #fff;
+  overflow: hidden;
+}
+
+/* Collage container — fills the full kiosk, cards positioned absolutely inside */
+.home-collage-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* cards are decorative — don't block the Start button */
+}
+
+/* Individual video card */
+.home-card {
+  position: absolute;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #e8e8e8;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.07);
+  will-change: transform;
+}
+
+/* Two stacked video layers for crossfade rotation */
+.home-card-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity 0.6s ease; /* matches FADE_DURATION in home-collage.js */
+}
+
+/* ── Float animations (4 variants for visual variety) ──────────────────── */
+@keyframes homefloat1 {
+  0%   { transform: translateY(0px) rotate(-0.4deg); }
+  50%  { transform: translateY(-10px) rotate(0.4deg); }
+  100% { transform: translateY(0px) rotate(-0.4deg); }
+}
+@keyframes homefloat2 {
+  0%   { transform: translateY(0px) rotate(0.6deg); }
+  50%  { transform: translateY(-8px) rotate(-0.5deg); }
+  100% { transform: translateY(0px) rotate(0.6deg); }
+}
+@keyframes homefloat3 {
+  0%   { transform: translateY(-4px) rotate(-0.3deg); }
+  50%  { transform: translateY(6px) rotate(0.6deg); }
+  100% { transform: translateY(-4px) rotate(-0.3deg); }
+}
+@keyframes homefloat4 {
+  0%   { transform: translateX(0px) translateY(0px); }
+  33%  { transform: translateX(5px) translateY(-8px); }
+  66%  { transform: translateX(-4px) translateY(-4px); }
+  100% { transform: translateX(0px) translateY(0px); }
+}
+
+.home-card-float-1 { animation: homefloat1 8s ease-in-out infinite; }
+.home-card-float-2 { animation: homefloat2 9s ease-in-out infinite; }
+.home-card-float-3 { animation: homefloat3 10s ease-in-out infinite; }
+.home-card-float-4 { animation: homefloat4 11s ease-in-out infinite; }
+
+/* ── Center overlay — logo + Start button ──────────────────────────────── */
+.home-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3vh;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.home-logo {
+  height: 16vh;
+  width: auto;
+  max-width: 36vw;
+  object-fit: contain;
+  /* Subtle drop shadow so it lifts off the collage */
+  filter: drop-shadow(0 2px 16px rgba(255,255,255,0.9));
+}
+
+.home-start-btn {
+  font-family: inherit;
+  font-size: 2.2vh;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(255,255,255,0.92);
+  border: 2px solid rgba(0,0,0,0.12);
+  border-radius: 100px;
+  padding: 1.2vh 5vw;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 2px 20px rgba(0,0,0,0.10);
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.1s ease;
+  min-width: 18vw;
+}
+.home-start-btn:hover {
+  background: #fff;
+  box-shadow: 0 4px 28px rgba(0,0,0,0.15);
+}
+.home-start-btn:active {
+  transform: scale(0.96);
+}
+
+/* ================= 3:4 CAMERA PREVIEW (Setup + Shooting) ================= */
 .frame-34 {
   aspect-ratio: 3 / 4;
   height: 100%;

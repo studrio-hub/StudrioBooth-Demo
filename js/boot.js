@@ -123,7 +123,10 @@ const bootModule = (() => {
     els.spinner().hidden = true;
     await wait(350);
 
-    goToPage("setup");
+    // Go to home (collage) first — guest presses Start to reach setup.
+    // Collage init happens here so videos start loading immediately.
+    homeCollage.init();
+    goToPage("home");
   }
 
   // ── Retry (camera failed) ─────────────────────────────────────────────────

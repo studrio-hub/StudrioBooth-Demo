@@ -71,7 +71,35 @@ async function updateZoom(level) {
   }
 }
 
+/* ---------------- PAGE HOME: COLLAGE LANDING ------------------- */
+/*
+ * The Home page sits between Boot and Setup.
+ * Boot → Home (collage + Start) → Setup (60s timer) → Frame → …
+ * After a session resets, we return to Setup directly (camera already live).
+ */
+document.getElementById("btnStartSession").addEventListener("click", () => {
+  homeCollage.pause(); // stop background video playback to free resources
+  goToPage("setup");
+  kioskTimer.start(60, _proceedFromSetup);
+});
+
+function _proceedFromSetup() {
+  // Timer expired on setup page — go back to home and rebuild the collage
+  kioskTimer.hide();
+  homeCollage.rebuild();
+  goToPage("home");
+}
+
+/* Back button on Setup — returns to Home collage */
+document.getElementById("btnBackFromSetup").addEventListener("click", () => {
+  kioskTimer.hide();
+  homeCollage.resume();
+  goToPage("home");
+});
+
+/* Setup Next button — goes to frame selection */
 setupEls.nextBtn.addEventListener("click", () => {
+  kioskTimer.hide(); // stop the 60s setup timer
   goToPage("frame");
   kioskTimer.start(60, proceedFromFrame);
 });
@@ -149,6 +177,7 @@ function updateFramePricing() {
 frameEls.backBtn.addEventListener("click", () => {
   kioskTimer.hide();
   goToPage("setup");
+  kioskTimer.start(60, _proceedFromSetup); // restart 60s idle timer on setup
 });
 frameEls.nextBtn.addEventListener("click", () => {
   kioskTimer.hide();
@@ -165,11 +194,13 @@ frameEls.nextBtn.addEventListener("click", () => {
   shootingModule.startSession();
 });
 
-/* Time's up on Page 2 without a frame being selected — return to Home.
-   We do NOT auto-advance to shooting; the guest must make an active choice. */
+/* Time's up on Page 2 without a frame being selected — return to Setup.
+   We do NOT auto-advance to shooting; the guest must make an active choice.
+   Restart the 60s setup timer so the kiosk returns to Home if nobody acts. */
 function proceedFromFrame() {
   kioskTimer.hide();
   goToPage("setup");
+  kioskTimer.start(60, _proceedFromSetup);
 }
 
 /* ---------------- PAGE 6 wiring + session reset ---------------- */
