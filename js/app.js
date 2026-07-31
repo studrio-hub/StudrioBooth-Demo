@@ -9,7 +9,10 @@ const sessionState = {
   quantity: 1,
   shots: [],          // filled by shooting.js
   selectedShots: [],   // filled on Page 4 (next batch)
-  design: null         // filled on Page 5 (next batch)
+  design: null,        // filled on Page 5 (next batch)
+  galleryUrl: null,
+  galleryUrlPromise: null,
+  uploadPromise: null  // set by qr.js; resolves when Supabase upload finishes (or times out)
 };
 
 /* ---------------- Navigation ---------------- */
@@ -134,10 +137,6 @@ function updateFramePricing() {
 
   const name = FRAME_NAMES[sessionState.frameType];
 
-  // "2 Long Frame" / "1 Wide Frame"  — matches the reference exactly
-  // For 2x6: 1 sheet = 2 identical strips, so label says "2 Long Frame" for qty 1.
-  // The print quantity (sheets) is sessionState.quantity; the strip count for 2x6
-  // is qty × 2, but the label simply mirrors the reference's wording.
   if (sessionState.frameType === "2x6") {
     frameEls.labelPill.textContent = `${qty * 2} ${name}`;
   } else {
@@ -210,10 +209,31 @@ document.getElementById("btnConfirmProceed").addEventListener("click", () => {
   resetSessionAndRestart();
 });
 
-function resetSessionAndRestart() {
+/*
+ * resetSessionAndRestart — waits for any in-progress Supabase upload to
+ * finish before tearing down the session. This prevents blob URLs from
+ * being revoked mid-upload, which was causing sessions to upload nothing
+ * when the guest hit Done before the upload completed.
+ *
+ * The wait is capped at 10 seconds. If the upload hasn't confirmed by
+ * then it has either already finished, already timed out inside qr.js
+ * (which resolves uploadPromise), or is genuinely stuck — in all cases
+ * it is safe to proceed with the reset.
+ */
+async function resetSessionAndRestart() {
   kioskTimer.hide();
 
-  // Revoke old blob URLs to avoid memory leaks
+  // Wait for the upload to finish before revoking anything.
+  // uploadPromise is always resolved by qr.js (via its own finally block),
+  // so this await will never hang indefinitely. The extra 10s race here is
+  // a belt-and-suspenders guard in case uploadPromise was never set at all
+  // (e.g. the guest navigated directly to this page without a full session).
+  if (sessionState.uploadPromise) {
+    const uploadGracePeriod = new Promise((resolve) => setTimeout(resolve, 10000));
+    await Promise.race([sessionState.uploadPromise, uploadGracePeriod]);
+  }
+
+  // Safe to revoke now — upload has confirmed or definitively ended.
   sessionState.shots.forEach((s) => {
     if (s.imageUrl) URL.revokeObjectURL(s.imageUrl);
     if (s.videoUrl) URL.revokeObjectURL(s.videoUrl);
@@ -227,6 +247,7 @@ function resetSessionAndRestart() {
   sessionState.design = null;
   sessionState.galleryUrl = null;
   sessionState.galleryUrlPromise = null;
+  sessionState.uploadPromise = null;
 
   // Reset Page 6 Done button
   document.getElementById("btnPrintingDone").disabled = true;
