@@ -52,8 +52,11 @@ const cloudStorage = {
 
   async uploadBlob(blob, path) {
     const client = getSupabaseClient();
+    // upsert is intentionally false — every session has a unique ID so paths
+    // are never reused. upsert:true internally requires UPDATE permission on
+    // storage.objects, which the anon role does not have, causing a 403.
     const { error } = await client.storage.from(CLOUD_CONFIG.bucketName).upload(path, blob, {
-      upsert: true,
+      upsert: false,
       contentType: blob.type || "application/octet-stream"
     });
     if (error) throw error;
