@@ -262,10 +262,9 @@ async function resetSessionAndRestart() {
 
   cameraController.attachPreview(setupEls.video, setupEls.img);
 
-  // Return to lock screen — staff must re-authenticate for the next guest.
-  // authLock.lock() re-shows the lock page and resumes NFC polling.
-  // Once unlocked, we go straight to setup (camera is already running).
-  authLock.lock(() => goToPage("setup"));
+  // Go directly back to setup — authentication is only required once
+  // at kiosk startup, not between individual guest sessions.
+  goToPage("setup");
 }
 
 document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";

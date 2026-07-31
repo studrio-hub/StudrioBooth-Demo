@@ -125,20 +125,22 @@
     setStatus("loading", "Unlocking kiosk…");
 
     try {
-      const { error } = await client.from("nfc_tokens").insert({
-        token: token,
-        // expires_at defaults to NOW() + 5 min in the DB
-      });
+      // Upsert instead of insert — the token is a fixed primary key so every
+      // subsequent tap would 409-conflict on a plain insert. Upsert resets
+      // used_at to NULL and refreshes expires_at so the kiosk poll always
+      // finds a fresh, unconsumed token regardless of how many times the tag
+      // has been tapped before.
+      const now = new Date();
+      const expires = new Date(now.getTime() + 5 * 60 * 1000); // +5 minutes
 
-      if (error) {
-        // Duplicate key = token already issued (e.g. page reloaded)
-        if (error.code === "23505") {
-          setStatus("success", "✓ Already unlocked — check the kiosk.");
-        } else {
-          throw error;
-        }
-        return;
-      }
+      const { error } = await client.from("nfc_tokens").upsert({
+        token:      token,
+        created_at: now.toISOString(),
+        expires_at: expires.toISOString(),
+        used_at:    null   // explicitly clear so the kiosk poll finds it
+      }, { onConflict: "token" });
+
+      if (error) throw error;
 
       setStatus("success", "✓ Kiosk unlocked! You can close this page.");
     } catch (e) {
