@@ -1,103 +1,157 @@
 /*
- * BOOT.JS — Page 0 startup sequence.
- * Runs every time the app loads. Performs a REAL camera connection
- * check via cameraController.connect() (real DSLR bridge, or mock
- * webcam fallback) — not a fake animation. Only transitions to the
- * home screen ("setup" page) once the camera reports connected.
+ * BOOT.JS — Page 0 startup sequence + authentication gate.
+ *
+ * Flow:
+ *   1. Lock screen shown immediately (auth-lock.js).
+ *   2. Camera connection attempt runs IN PARALLEL in the background.
+ *   3. Staff authenticates (NFC tap or PIN).
+ *   4. Boot page shown — replays camera status visually.
+ *      If camera already connected: steps animate quickly and we advance.
+ *      If camera still connecting: we wait for it.
+ *   5. goToPage("setup") — staff hands off to guest.
+ *
+ * The camera init starts immediately so guests aren't waiting for it
+ * after the operator unlocks. On a fast webcam this is typically done
+ * before the PIN is even finished.
  */
 
-const bootModule = {
-  steps: [
+const bootModule = (() => {
+  const steps = [
     "Starting photobooth system",
     "Connecting to DSLR camera",
     "Checking camera connection",
     "Preparing live preview",
     "Loading camera settings",
     "Camera ready"
-  ],
+  ];
 
-  els: {
-    list: document.getElementById("bootStatusList"),
-    spinner: document.getElementById("bootSpinner"),
-    error: document.getElementById("bootError"),
-    errorText: document.getElementById("bootErrorText"),
-    retryBtn: document.getElementById("btnBootRetry"),
-    restartBtn: document.getElementById("btnBootRestart")
-  },
+  // Camera connection result — resolved in background before auth completes
+  let _cameraStatusPromise = null;
+  let _cameraStatus        = null; // set once resolved
 
-  renderSteps() {
-    this.els.list.innerHTML = this.steps
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const els = {
+    list:       () => document.getElementById("bootStatusList"),
+    spinner:    () => document.getElementById("bootSpinner"),
+    error:      () => document.getElementById("bootError"),
+    errorText:  () => document.getElementById("bootErrorText"),
+    retryBtn:   () => document.getElementById("btnBootRetry"),
+    restartBtn: () => document.getElementById("btnBootRestart")
+  };
+
+  // ── Step rendering ────────────────────────────────────────────────────────
+  function renderSteps() {
+    els.list().innerHTML = steps
       .map((label, i) => `
         <div class="boot-status-item" id="boot-step-${i}">
           <span class="boot-status-icon"></span>
           <span>${label}</span>
         </div>
       `).join("");
-  },
+  }
 
-  setStepState(index, state) {
+  function setStepState(index, state) {
     const el = document.getElementById(`boot-step-${index}`);
     if (!el) return;
     el.classList.remove("active", "done");
     if (state) el.classList.add(state);
-  },
+  }
 
-  async run() {
-    this.renderSteps();
-    this.els.error.hidden = true;
-    this.els.spinner.hidden = false;
+  function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 
-    // Steps 0-2: cosmetic-but-honest pacing while we actually connect
-    this.setStepState(0, "active");
-    await this.wait(400);
-    this.setStepState(0, "done");
-    this.setStepState(1, "active");
+  // ── Camera init (runs immediately, before auth) ───────────────────────────
+  function _startCameraInBackground() {
+    _cameraStatusPromise = (async () => {
+      try {
+        const status = await cameraController.connect();
+        _cameraStatus = status;
+        return status;
+      } catch (e) {
+        _cameraStatus = { connected: false };
+        return _cameraStatus;
+      }
+    })();
+  }
 
-    let status;
-    try {
-      status = await cameraController.connect(); // REAL check — DSLR bridge or mock webcam
-    } catch (e) {
-      status = { connected: false };
-    }
+  // ── Boot sequence (shown after auth, camera already connecting/done) ──────
+  async function _runBootSequence() {
+    renderSteps();
+    els.error().hidden  = true;
+    els.spinner().hidden = false;
 
-    this.setStepState(1, "done");
-    this.setStepState(2, "active");
-    await this.wait(300);
+    // Show the boot page
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.querySelector('.page[data-page="boot"]').classList.add("active");
+
+    // Steps 0–1: cosmetic pacing
+    setStepState(0, "active");
+    await wait(300);
+    setStepState(0, "done");
+    setStepState(1, "active");
+
+    // Wait for camera (may already be done)
+    const status = await _cameraStatusPromise;
+
+    setStepState(1, "done");
+    setStepState(2, "active");
+    await wait(250);
 
     if (!status || !status.connected) {
-      this.setStepState(2, null);
-      this.els.spinner.hidden = true;
-      this.els.error.hidden = false;
-      this.els.errorText.textContent = "Camera not detected";
-      return;
+      setStepState(2, null);
+      els.spinner().hidden = true;
+      els.error().hidden   = false;
+      els.errorText().textContent = "Camera not detected";
+      return; // stays on boot error — Retry button re-runs sequence
     }
 
-    this.setStepState(2, "done");
-    this.setStepState(3, "active");
+    setStepState(2, "done");
+    setStepState(3, "active");
     cameraController.attachPreview(setupEls.video, setupEls.img);
-    await this.wait(300);
-    this.setStepState(3, "done");
+    await wait(250);
+    setStepState(3, "done");
 
-    this.setStepState(4, "active");
-    renderCameraStatus(status); // reuse existing function from app.js
-    setupEls.placeholder.hidden = true;
-    setupEls.nextBtn.disabled = false;
-    await this.wait(300);
-    this.setStepState(4, "done");
+    setStepState(4, "active");
+    renderCameraStatus(status); // no-op shim in app.js
+    setupEls.placeholder.hidden = false; // will hide once preview renders
+    setupEls.nextBtn.disabled   = false;
+    await wait(250);
+    setStepState(4, "done");
 
-    this.setStepState(5, "done");
-    this.els.spinner.hidden = true;
-    await this.wait(400);
+    setStepState(5, "done");
+    els.spinner().hidden = true;
+    await wait(350);
 
-    goToPage("setup"); // hand off to the home screen
-  },
-
-  wait(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    goToPage("setup");
   }
-};
 
-document.getElementById("btnBootRetry").addEventListener("click", () => bootModule.run());
-document.getElementById("btnBootRestart").addEventListener("click", () => bootModule.run());
+  // ── Retry (camera failed) ─────────────────────────────────────────────────
+  async function _retry() {
+    // Re-attempt camera connection
+    _cameraStatus        = null;
+    _cameraStatusPromise = null;
+    _startCameraInBackground();
+    await _runBootSequence();
+  }
 
-bootModule.run();
+  // ── Public init ───────────────────────────────────────────────────────────
+  function init() {
+    // Wire retry buttons
+    document.getElementById("btnBootRetry").addEventListener("click", _retry);
+    document.getElementById("btnBootRestart").addEventListener("click", _retry);
+
+    // 1. Start camera connecting immediately (background)
+    _startCameraInBackground();
+
+    // 2. Show lock screen — boot sequence runs after staff authenticates
+    authLock.lock(async () => {
+      await _runBootSequence();
+    });
+  }
+
+  return { init };
+})();
+
+// Kick everything off
+bootModule.init();

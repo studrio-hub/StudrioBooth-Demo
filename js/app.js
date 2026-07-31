@@ -261,7 +261,11 @@ async function resetSessionAndRestart() {
   document.getElementById("qtyPricePill").textContent = "—";
 
   cameraController.attachPreview(setupEls.video, setupEls.img);
-  goToPage("setup");
+
+  // Return to lock screen — staff must re-authenticate for the next guest.
+  // authLock.lock() re-shows the lock page and resumes NFC polling.
+  // Once unlocked, we go straight to setup (camera is already running).
+  authLock.lock(() => goToPage("setup"));
 }
 
 document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";
