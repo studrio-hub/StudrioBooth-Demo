@@ -28,7 +28,11 @@ const CAMERA_CONFIG = {
   // zoom endpoint here anymore.
   startVideoEndpoint: "/camera/video/start",
   stopVideoEndpoint: "/camera/video/stop",
-  statusEndpoint: "/camera/status"
+  statusEndpoint: "/camera/status",
+  // Single-shot JPEG endpoint (not multipart) polled via fetch() during
+  // video recording only — see startVideoRecording() below for why this
+  // exists separately from the MJPEG live-preview stream.
+  frameEndpoint: "/camera/frame"
 };
 
 /* Prefer MP4/H.264 when the browser can record it directly — plays back
@@ -182,15 +186,23 @@ async function remuxToMp4(inputBlob) {
  * so this bridge knows which <img> to read frames from.
  * ───────────────────────────────────────────────────────────────────────────*/
 const realCameraBridge = {
-  // Set by cameraController.attachPreview() when mode === "real"
+  // Set by cameraController.attachPreview() when mode === "real".
+  // Used only for the always-visible guest-facing MJPEG preview display —
+  // video recording polls GET /camera/frame instead (see
+  // startVideoRecording() for why), so this is no longer read during
+  // recording.
   _imgEl: null,
 
-  // Video recording state — mirrors mock bridge fields 1:1
+  // Video recording state — mirrors mock bridge fields 1:1, except
+  // _recordPollId (a setTimeout id for frame polling) replaces the RAF id
+  // the mock bridge uses, since recording now pulls frames via fetch()
+  // rather than reading from a live <video>/<img> element each animation
+  // frame.
   _recorder:        null,
   _recordedChunks:  [],
   _recordCanvas:    null,
   _recordCtx:       null,
-  _recordRafId:     null,
+  _recordPollId:    null,
   _freezeImage:     null,
   _recording:       false,
   _recordZoom:      1.0,
@@ -251,19 +263,29 @@ const realCameraBridge = {
   /*
    * startVideoRecording(zoom, mirror)
    *
-   * Sets up an off-screen canvas and RAF loop that draws frames from the
-   * live-preview <img> element (the MJPEG stream), then starts a
-   * MediaRecorder on the canvas's capture stream.
+   * Sets up an off-screen canvas fed by individually polled JPEG frames
+   * (NOT the MJPEG live-preview <img>), then starts a MediaRecorder on the
+   * canvas's capture stream.
    *
-   * Key difference from mock: the source is an <img> element, not a <video>.
-   * An <img> fed an MJPEG stream updates its bitmap every time the browser
-   * paints a new frame — drawImage() reads whatever is currently displayed.
-   * readyState doesn't apply; instead we check naturalWidth > 0.
+   * WHY POLLING INSTEAD OF READING FROM THE <img>: Chrome does not reliably
+   * apply crossOrigin/CORS tainting rules to multipart/x-mixed-replace
+   * (MJPEG) <img> streams — drawImage() from an MJPEG <img> stays
+   * permanently tainted ("Canvas is not origin-clean" on captureStream())
+   * no matter what crossOrigin attribute or Access-Control-Allow-Origin
+   * headers are set. This is a limitation of MJPEG-in-<img>, not a config
+   * mistake. fetch() of a single, ordinary JPEG response is a normal,
+   * well-defined CORS request with none of that ambiguity, so we poll
+   * GET /camera/frame (a single-shot endpoint, separate from
+   * /camera/live-preview) at roughly the server's own broadcast rate and
+   * draw each decoded frame onto the canvas instead.
    *
-   * Black-screen/lag fix: MediaRecorder.start() is deferred until the RAF
-   * loop has successfully drawn at least one non-empty frame. This eliminates
-   * the race on Windows where start() fires before the first frame is ready,
-   * producing a black frame at the very beginning of every clip.
+   * The guest-facing live preview <img> is completely unaffected — it
+   * keeps using the MJPEG stream exactly as before. Only this recording
+   * path changed.
+   *
+   * Black-screen/lag fix (unchanged from before): MediaRecorder.start() is
+   * deferred until the first real frame has been drawn, eliminating the
+   * race on Windows where start() fires before any frame is ready.
    */
   async startVideoRecording(zoom = 1.0, mirror = false) {
     // Notify the agent (no-op on its side, but keeps the API symmetric)
@@ -271,15 +293,10 @@ const realCameraBridge = {
       method: "POST"
     }).catch(() => {}); // don't let a network hiccup abort recording setup
 
-    const imgEl = this._imgEl;
-    if (!imgEl) {
-      console.warn("[real-bridge] startVideoRecording: no _imgEl set — skipping");
-      return;
-    }
-
-    // Use the img's natural dimensions if already loaded; fall back to 1280×720.
-    const srcW = imgEl.naturalWidth  || 1280;
-    const srcH = imgEl.naturalHeight || 720;
+    // Default canvas size until the first polled frame reports real
+    // dimensions; the canvas is resized once we know them.
+    let srcW = 1280;
+    let srcH = 720;
 
     const canvas = document.createElement("canvas");
     canvas.width  = srcW;
@@ -292,49 +309,66 @@ const realCameraBridge = {
     this._recordMirror   = !!mirror;
     this._recordedChunks = [];
     this._recorder       = null; // will be set after first frame
+    this._recordPollId   = null;
 
     const mimeType = pickSupportedVideoMimeType();
     this._chosenMimeType = mimeType;
 
     let recorderStarted = false;
+    let sizedForFirstFrame = false;
+    const frameUrl = `${CAMERA_CONFIG.bridgeUrl}${CAMERA_CONFIG.frameEndpoint}`;
+    const POLL_MS = 66; // ~15fps — matches the agent's own MAX_BROADCAST_FPS
 
-    const drawFrame = () => {
+    const pollFrame = async () => {
       if (!this._recording) return;
 
-      const ctx    = this._recordCtx;
-      const source = this._freezeImage || imgEl;
+      try {
+        const res = await fetch(`${frameUrl}?t=${Date.now()}`, {
+          method: "GET",
+          mode: "cors",
+          cache: "no-store"
+        });
+        if (res.ok) {
+          const blob   = await res.blob();
+          const bitmap = await createImageBitmap(blob);
 
-      // Only draw if the img has valid pixel data (naturalWidth > 0 means
-      // at least one MJPEG frame has been decoded and painted).
-      const hasPixels = source._isPreRendered
-        ? true
-        : (source.naturalWidth > 0 || source.videoWidth > 0);
+          if (!sizedForFirstFrame) {
+            sizedForFirstFrame = true;
+            srcW = bitmap.width  || srcW;
+            srcH = bitmap.height || srcH;
+            canvas.width  = srcW;
+            canvas.height = srcH;
+          }
 
-      if (hasPixels) {
-        this._drawZoomedMirrored(ctx, source, srcW, srcH, this._recordZoom, this._recordMirror);
+          const ctx    = this._recordCtx;
+          const source = this._freezeImage || bitmap;
+          this._drawZoomedMirrored(ctx, source, srcW, srcH, this._recordZoom, this._recordMirror);
+          bitmap.close();
 
-        // ── Black-screen/lag fix ──────────────────────────────────────────
-        // Start MediaRecorder only after the first real frame is painted.
-        // Avoids the race where the recorder captures a blank canvas on
-        // slower machines (Windows PC) before the MJPEG stream delivers its
-        // first frame.
-        if (!recorderStarted) {
-          recorderStarted = true;
-          this._recorder = new MediaRecorder(
-            canvas.captureStream(30),
-            mimeType ? { mimeType } : undefined
-          );
-          this._recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) this._recordedChunks.push(e.data);
-          };
-          this._recorder.start();
+          // ── Black-screen/lag fix ──────────────────────────────────────
+          // Start MediaRecorder only after the first real frame is painted.
+          if (!recorderStarted) {
+            recorderStarted = true;
+            this._recorder = new MediaRecorder(
+              canvas.captureStream(30),
+              mimeType ? { mimeType } : undefined
+            );
+            this._recorder.ondataavailable = (e) => {
+              if (e.data.size > 0) this._recordedChunks.push(e.data);
+            };
+            this._recorder.start();
+          }
         }
+      } catch (e) {
+        console.warn("[real-bridge] Frame poll failed:", e);
       }
 
-      this._recordRafId = requestAnimationFrame(drawFrame);
+      if (this._recording) {
+        this._recordPollId = setTimeout(pollFrame, POLL_MS);
+      }
     };
 
-    drawFrame();
+    pollFrame();
   },
 
   /*
@@ -353,8 +387,9 @@ const realCameraBridge = {
     }
 
     // For <img>: naturalWidth/naturalHeight. For <video>: videoWidth/videoHeight.
-    const srcW = source.naturalWidth  || source.videoWidth  || outW;
-    const srcH = source.naturalHeight || source.videoHeight || outH;
+    // For ImageBitmap (polled JPEG frames): width/height.
+    const srcW = source.naturalWidth || source.videoWidth || source.width  || outW;
+    const srcH = source.naturalHeight || source.videoHeight || source.height || outH;
 
     // Centered crop region — same math as cameraController._cropToZoom()
     const cropW = srcW / zoom;
@@ -421,7 +456,7 @@ const realCameraBridge = {
     const rawBlob = await new Promise((resolve) => {
       this._recorder.onstop = () => {
         this._recording = false;
-        if (this._recordRafId) cancelAnimationFrame(this._recordRafId);
+        if (this._recordPollId) clearTimeout(this._recordPollId);
         // Android fix: use the MIME type we chose at start time, not
         // recorder.mimeType which Android may have stripped to "".
         const type = chosenMimeType || this._recorder.mimeType || "video/webm";
@@ -435,7 +470,7 @@ const realCameraBridge = {
 
   async disconnect() {
     this._recording = false;
-    if (this._recordRafId) cancelAnimationFrame(this._recordRafId);
+    if (this._recordPollId) clearTimeout(this._recordPollId);
     // Nothing else to release — the MJPEG stream is managed by the <img> src
   }
 };
