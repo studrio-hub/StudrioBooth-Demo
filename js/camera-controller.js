@@ -95,7 +95,7 @@ const cameraController = {
    * DIGITAL ZOOM ONLY — this never touches the DSLR's optical zoom.
    * It simply scales the on-screen preview (a visual crop/enlarge),
    * and capturePhoto() below crops the captured frame to match so
-   * the exported photo lines up with what the guest saw on screen.
+   * the exported photo lines up with what the guest saw on screens.
    */
   async setZoom(level) {
     if (!this.mode) throw new Error("Camera not connected");
