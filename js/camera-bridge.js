@@ -219,7 +219,22 @@ const realCameraBridge = {
 
   getLivePreviewUrl() {
     // MJPEG stream — the <img> tag reads this natively.
-    return `${CAMERA_CONFIG.bridgeUrl}${CAMERA_CONFIG.livePreviewEndpoint}`;
+    //
+    // CACHE-BUSTING FIX (canvas origin-clean bug): Chrome's image cache is
+    // keyed on the exact URL string. If this URL was EVER fetched by this
+    // browser profile without a clean CORS pass (e.g. during earlier
+    // debugging, before crossOrigin/CORS headers were both in place),
+    // Chrome can memoize that fetch — including its tainted status — and
+    // silently reuse it on later loads, even once crossOrigin="anonymous"
+    // and the server's Access-Control-Allow-Origin header are both correct.
+    // Setting crossOrigin correctly going forward does NOT retroactively
+    // clear an already-poisoned cache entry for that literal URL string.
+    //
+    // Appending a unique query param forces Chrome to treat every attach
+    // as a brand-new resource, guaranteeing a fresh CORS-checked fetch.
+    // server.js already strips the query string before routing
+    // (`req.url.split("?")[0]`), so this has no server-side effect.
+    return `${CAMERA_CONFIG.bridgeUrl}${CAMERA_CONFIG.livePreviewEndpoint}?t=${Date.now()}`;
   },
 
   async capturePhoto() {
