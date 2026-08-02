@@ -19,7 +19,7 @@
  */
 
 const CAMERA_CONFIG = {
-  bridgeUrl: "http://localhost:3000",
+  bridgeUrl: "https://localhost:3000",
   connectionType: "http", // "http" | "websocket"
   livePreviewEndpoint: "/camera/live-preview",
   captureEndpoint: "/camera/capture",
