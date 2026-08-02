@@ -77,6 +77,13 @@ const cameraController = {
       // read MJPEG frames from it during video recording.
       realCameraBridge._imgEl = imgEl;
       videoEl.hidden = true;
+      // CRITICAL: crossOrigin must be set BEFORE src is assigned. Without
+      // this, Chrome taints the canvas the moment drawImage() reads from
+      // this <img> during video recording — throwing "Canvas is not
+      // origin-clean" on captureStream() — even though the camera agent's
+      // response already includes Access-Control-Allow-Origin: *. The
+      // header alone isn't enough; the element must opt in to CORS mode.
+      imgEl.crossOrigin = "anonymous";
       imgEl.src = realCameraBridge.getLivePreviewUrl();
       imgEl.hidden = false;
     }
