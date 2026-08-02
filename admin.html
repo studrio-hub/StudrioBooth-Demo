@@ -6,6 +6,9 @@
 <title>Studrio Booth — Admin</title>
 <!-- Asset paths are relative: this file lives at /admin/index.html,
      so CSS and JS are one level up (../css/, ../js/). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../css/admin.css">
 </head>
 <body>
@@ -35,8 +38,11 @@
 
   <header class="admin-header">
     <div class="admin-header-title">
-      <p class="admin-eyebrow">STUDRIO BOOTH</p>
-      <h1>Control Room</h1>
+      <img class="admin-header-logo" src="../assets/designs/studrio_logo.png" alt="" onerror="this.style.display='none'">
+      <div>
+        <p class="admin-eyebrow">STUDRIO BOOTH</p>
+        <h1>Control Room</h1>
+      </div>
     </div>
     <div class="admin-header-actions">
       <button class="btn-admin btn-admin-outline" id="btnRefresh">↻ Refresh</button>
@@ -63,7 +69,9 @@
 
   <section class="printer-prefs-section">
     <div class="gallery-section-head">
-      <h2>Printer Preferences</h2>
+      <div class="gallery-section-head-left">
+        <h2>Printer Preferences</h2>
+      </div>
     </div>
 
     <div class="printer-prefs-card">
@@ -160,8 +168,23 @@
 
   <section class="gallery-section">
     <div class="gallery-section-head">
-      <h2>Sessions</h2>
-      <p class="gallery-count" id="sessionCount"></p>
+      <div class="gallery-section-head-left">
+        <h2>Sessions</h2>
+        <p class="gallery-count" id="sessionCount"></p>
+      </div>
+      <button class="btn-admin btn-admin-outline" id="btnSelectMode">Select</button>
+    </div>
+
+    <!-- Date filter tabs — built from the dates present in loaded sessions -->
+    <div class="date-filter-row" id="dateFilterRow"></div>
+
+    <!-- Bulk delete bar — shown once select mode is on and ≥1 card is checked -->
+    <div class="select-bulk-bar" id="selectBulkBar" hidden>
+      <span id="selectBulkCount">0 selected</span>
+      <div class="select-bulk-actions">
+        <button class="btn-admin btn-admin-outline" id="btnSelectCancel">Cancel</button>
+        <button class="btn-admin btn-admin-danger" id="btnBulkDelete">Delete Selected</button>
+      </div>
     </div>
 
     <p class="admin-status" id="galleryStatus">Loading sessions…</p>
@@ -175,10 +198,11 @@
 </div>
 
 <!-- Delete confirmation modal — consistent with the kiosk's own
-     custom modal (index.html), never a native confirm() -->
+     custom modal (index.html), never a native confirm(). Reused for
+     both single-session delete and batch delete (message is set by JS). -->
 <div class="admin-modal-overlay" id="deleteModal" hidden>
   <div class="admin-modal-box">
-    <p class="admin-modal-message">Delete this session and all its photos/videos? This can't be undone.</p>
+    <p class="admin-modal-message" id="deleteModalMessage">Delete this session and all its photos/videos? This can't be undone.</p>
     <div class="admin-modal-actions">
       <button class="btn-admin btn-admin-outline" id="btnCancelDelete">Cancel</button>
       <button class="btn-admin btn-admin-danger" id="btnConfirmDelete">Delete</button>
@@ -189,6 +213,7 @@
 <p class="admin-toast" id="adminToast" hidden></p>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="../js/cloud-storage.js"></script>
 <script src="../js/print-alignment.js"></script>
 <script src="../js/admin.js"></script>

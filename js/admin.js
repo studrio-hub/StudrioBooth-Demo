@@ -27,13 +27,23 @@
     galleryEmpty: document.getElementById("galleryEmpty"),
     sessionCount: document.getElementById("sessionCount"),
     grid: document.getElementById("filmstripGrid"),
+    dateFilterRow: document.getElementById("dateFilterRow"),
+
+    selectModeBtn: document.getElementById("btnSelectMode"),
+    selectBulkBar: document.getElementById("selectBulkBar"),
+    selectBulkCount: document.getElementById("selectBulkCount"),
+    selectCancelBtn: document.getElementById("btnSelectCancel"),
+    bulkDeleteBtn: document.getElementById("btnBulkDelete"),
 
     deleteModal: document.getElementById("deleteModal"),
+    deleteModalMessage: document.getElementById("deleteModalMessage"),
     cancelDeleteBtn: document.getElementById("btnCancelDelete"),
     confirmDeleteBtn: document.getElementById("btnConfirmDelete"),
 
     toast: document.getElementById("adminToast")
   };
+
+  const DEFAULT_DELETE_MSG = "Delete this session and all its photos/videos? This can't be undone.";
 
   /* ---- Printer Setup: talks to the local print-agent (print-agent/) to
      list real CUPS printers, show whether the agent is reachable, and save
@@ -108,7 +118,7 @@
 
   /* ---- Printer Alignment (scale/offsetX/offsetY). Storage, defaults, and
      clamping all live in print-alignment.js so the kiosk print job and
-     this page's Test Print stay perfectly in sync. ---- */
+     this page's Test Print (and now per-session Print Photo) stay in sync. ---- */
   const alignEls = {
     scale: document.getElementById("alignScale"),
     scaleValue: document.getElementById("alignScaleValue"),
@@ -186,7 +196,14 @@
   applyPrefsToUI(printAlignment.loadPrefs());
   refreshPrinterSetup();
 
-  let pendingDeleteId = null;
+  /* =========================================================
+   * SESSIONS: data, date filter, select mode, batch delete
+   * ========================================================= */
+  let allSessions = [];
+  let activeDateKey = "all";
+  let selectMode = false;
+  let selectedIds = new Set();
+  let pendingDeleteIds = [];
 
   function showToast(message) {
     els.toast.textContent = message;
@@ -215,6 +232,85 @@
       return iso;
     }
   }
+
+  function dateKeyFor(iso) {
+    try { return new Date(iso).toDateString(); } catch (e) { return "unknown"; }
+  }
+
+  function dateLabelFor(key) {
+    if (key === "unknown") return "Unknown";
+    const d = new Date(key);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  /* ---- Date filter tabs — built from the dates actually present in the
+     loaded sessions, newest first, plus an "All" pill. Purely client-side:
+     listAllSessions() already returns everything, so filtering is just
+     narrowing the in-memory array, no extra query. ---- */
+  function buildDateFilterTabs() {
+    const keys = new Set();
+    allSessions.forEach((s) => keys.add(dateKeyFor(s.created_at)));
+    const sortedKeys = Array.from(keys).sort((a, b) => new Date(b) - new Date(a));
+
+    if (!sortedKeys.length) {
+      els.dateFilterRow.innerHTML = "";
+      return;
+    }
+    if (!sortedKeys.includes(activeDateKey) && activeDateKey !== "all") {
+      activeDateKey = "all";
+    }
+
+    const pills = [`<button class="date-filter-pill${activeDateKey === "all" ? " active" : ""}" data-date="all">All</button>`]
+      .concat(sortedKeys.map((k) =>
+        `<button class="date-filter-pill${activeDateKey === k ? " active" : ""}" data-date="${k}">${dateLabelFor(k)}</button>`
+      ));
+    els.dateFilterRow.innerHTML = pills.join("");
+
+    els.dateFilterRow.querySelectorAll(".date-filter-pill").forEach((pill) => {
+      pill.addEventListener("click", () => {
+        activeDateKey = pill.dataset.date;
+        buildDateFilterTabs();
+        applyFilterAndRender();
+      });
+    });
+  }
+
+  function applyFilterAndRender() {
+    const filtered = activeDateKey === "all"
+      ? allSessions
+      : allSessions.filter((s) => dateKeyFor(s.created_at) === activeDateKey);
+    renderSessions(filtered);
+  }
+
+  /* ---- Select mode / batch delete ---- */
+  function setSelectMode(on) {
+    selectMode = on;
+    els.grid.classList.toggle("select-mode", on);
+    els.selectModeBtn.textContent = on ? "Cancel" : "Select";
+    if (!on) {
+      selectedIds.clear();
+      els.grid.querySelectorAll(".filmstrip-card.is-selected").forEach((c) => c.classList.remove("is-selected"));
+      els.grid.querySelectorAll("input[data-select-id]").forEach((cb) => { cb.checked = false; });
+    }
+    updateBulkBar();
+  }
+
+  function updateBulkBar() {
+    const n = selectedIds.size;
+    els.selectBulkBar.hidden = !(selectMode && n > 0);
+    els.selectBulkCount.textContent = `${n} selected`;
+  }
+
+  els.selectModeBtn.addEventListener("click", () => setSelectMode(!selectMode));
+  els.selectCancelBtn.addEventListener("click", () => setSelectMode(false));
+
+  els.bulkDeleteBtn.addEventListener("click", () => {
+    if (!selectedIds.size) return;
+    pendingDeleteIds = Array.from(selectedIds);
+    els.deleteModalMessage.textContent =
+      `Delete ${pendingDeleteIds.length} selected session${pendingDeleteIds.length === 1 ? "" : "s"} and all their photos/videos? This can't be undone.`;
+    els.deleteModal.hidden = false;
+  });
 
   /* ---- Download (fetch-then-blob, same approach as gallery.js —
      forces an actual save instead of Chromium sometimes just
@@ -247,6 +343,144 @@
       });
   }
 
+  function videoFilename(session) {
+    try {
+      const u = new URL(session.final_strip_video_url);
+      const ext = (u.pathname.split(".").pop() || "mp4").split("?")[0];
+      return `${session.id}-strip-video.${ext}`;
+    } catch (e) {
+      return `${session.id}-strip-video.mp4`;
+    }
+  }
+
+  /* ---- Print Photo: actually sends the print-ready PNG to the local
+     print agent (same path as the kiosk's own auto-print and Test Print)
+     using the currently SAVED alignment prefs — never a browser download,
+     never a print dialog, matching the kiosk's no-browser-UI rule. ---- */
+  async function printPhoto(session, btn) {
+    if (!session.print_ready_url) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Printing…";
+    try {
+      await printAlignment.sendPrintJob(session.print_ready_url, 1, printAlignment.loadPrefs());
+      showToast(`Sent #${session.id} to the printer.`);
+    } catch (e) {
+      console.error("[admin] Print failed:", e);
+      showToast(`Print failed: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  function loadImageEl(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Image failed to load"));
+      img.src = src;
+    });
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  /* qrcodejs (davidshimjs) renders into a throwaway container — pull out
+     whichever element it produced (canvas or img, browser-dependent) as
+     a data URL so it can be drawn onto the strip canvas below. */
+  function generateQrDataUrl(text, size) {
+    return new Promise((resolve, reject) => {
+      const holder = document.createElement("div");
+      holder.style.cssText = "position:fixed;left:-9999px;top:-9999px;";
+      document.body.appendChild(holder);
+      try {
+        // eslint-disable-next-line no-new
+        new QRCode(holder, { text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
+        requestAnimationFrame(() => {
+          const canvas = holder.querySelector("canvas");
+          const img = holder.querySelector("img");
+          const dataUrl = canvas ? canvas.toDataURL("image/png") : (img && img.src);
+          document.body.removeChild(holder);
+          if (dataUrl) resolve(dataUrl); else reject(new Error("QR render failed"));
+        });
+      } catch (e) {
+        document.body.removeChild(holder);
+        reject(e);
+      }
+    });
+  }
+
+  /* ---- Download Photo (with QR): composites the final strip PNG with a
+     scannable QR badge (linking to the digital gallery) baked into the
+     bottom-right corner, so the downloaded file is a self-contained
+     keepsake. Fetches the strip as a blob first (same-origin blob URL)
+     rather than drawing the cross-origin <img> directly, so the canvas
+     never gets tainted by CORS. ---- */
+  async function downloadPhotoWithQR(session, btn) {
+    if (!session.final_strip_url) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "…";
+
+    let stripObjUrl, outObjUrl;
+    try {
+      const res = await fetch(session.final_strip_url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      stripObjUrl = URL.createObjectURL(blob);
+      const stripImg = await loadImageEl(stripObjUrl);
+
+      const galleryBase = (window.cloudStorage && cloudStorage.CLOUD_CONFIG && cloudStorage.CLOUD_CONFIG.galleryBaseUrl)
+        || "https://studrio.cc/g/#";
+      const galleryUrl = `${galleryBase}${session.id}`;
+      const qrDataUrl = await generateQrDataUrl(galleryUrl, 240);
+      const qrImg = await loadImageEl(qrDataUrl);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = stripImg.naturalWidth;
+      canvas.height = stripImg.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(stripImg, 0, 0);
+
+      const qrSize = Math.round(canvas.width * 0.16);
+      const pad = Math.round(canvas.width * 0.02);
+      const boxSize = qrSize + pad * 2;
+      const boxX = canvas.width - boxSize - pad * 2;
+      const boxY = canvas.height - boxSize - pad * 2;
+
+      ctx.fillStyle = "#ffffff";
+      roundRectPath(ctx, boxX, boxY, boxSize, boxSize, boxSize * 0.08);
+      ctx.fill();
+      ctx.drawImage(qrImg, boxX + pad, boxY + pad, qrSize, qrSize);
+
+      const outBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      outObjUrl = URL.createObjectURL(outBlob);
+      const a = document.createElement("a");
+      a.href = outObjUrl;
+      a.download = `${session.id}-strip-qr.png`;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      console.error("[admin] Download-with-QR failed:", e);
+      showToast("Couldn't build the QR download — try again.");
+    } finally {
+      if (stripObjUrl) URL.revokeObjectURL(stripObjUrl);
+      if (outObjUrl) setTimeout(() => URL.revokeObjectURL(outObjUrl), 10000);
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
   function renderStats(stats) {
     els.statStrips.textContent = formatDigits(stats.photostripCount);
     els.statPrints.textContent = formatDigits(stats.totalCopiesPrinted);
@@ -269,12 +503,16 @@
     sessions.forEach((session) => {
       const card = document.createElement("div");
       card.className = "filmstrip-card";
+      if (selectedIds.has(session.id)) card.classList.add("is-selected");
 
       const mediaHtml = session.final_strip_url
         ? `<img src="${session.final_strip_url}" alt="Strip ${session.id}">`
         : `<div class="filmstrip-media-empty">Still processing…</div>`;
 
       card.innerHTML = `
+        <div class="filmstrip-select-box">
+          <input type="checkbox" data-select-id="${session.id}" ${selectedIds.has(session.id) ? "checked" : ""}>
+        </div>
         <div class="filmstrip-sprockets"></div>
         <div class="filmstrip-media">${mediaHtml}</div>
         <div class="filmstrip-sprockets"></div>
@@ -284,26 +522,41 @@
           <p class="filmstrip-meta">${formatDate(session.created_at)}</p>
         </div>
         <div class="filmstrip-actions">
-          <button class="btn-admin btn-admin-primary" data-action="reprint" ${session.print_ready_url ? "" : "disabled"}>🖨 Reprint Copy</button>
+          <button class="btn-admin btn-admin-primary" data-action="print" ${session.print_ready_url ? "" : "disabled"}>🖨 Print Photo</button>
           <div class="filmstrip-actions-row">
-            <button class="btn-admin btn-admin-outline" data-action="download">⬇ Save</button>
-            <button class="btn-admin btn-admin-ghost" data-action="delete">Delete</button>
+            <button class="btn-admin btn-admin-outline" data-action="download-photo" ${session.final_strip_url ? "" : "disabled"}>⬇ Photo (QR)</button>
+            <button class="btn-admin btn-admin-outline" data-action="download-video" ${session.final_strip_video_url ? "" : "disabled"}>⬇ Video</button>
           </div>
+          <button class="btn-admin btn-admin-ghost" data-action="delete">Delete</button>
         </div>
       `;
 
-      card.querySelector('[data-action="download"]').addEventListener("click", (e) => {
-        downloadFile(session.final_strip_url, `${session.id}-strip.png`, e.currentTarget);
-      });
-      const reprintBtn = card.querySelector('[data-action="reprint"]');
+      const printBtn = card.querySelector('[data-action="print"]');
       if (session.print_ready_url) {
-        reprintBtn.addEventListener("click", () => {
-          downloadFile(session.print_ready_url, `${session.id}-strip-print-ready.png`, reprintBtn);
-        });
+        printBtn.addEventListener("click", (e) => printPhoto(session, e.currentTarget));
       }
+
+      const photoBtn = card.querySelector('[data-action="download-photo"]');
+      if (session.final_strip_url) {
+        photoBtn.addEventListener("click", (e) => downloadPhotoWithQR(session, e.currentTarget));
+      }
+
+      const videoBtn = card.querySelector('[data-action="download-video"]');
+      if (session.final_strip_video_url) {
+        videoBtn.addEventListener("click", (e) => downloadFile(session.final_strip_video_url, videoFilename(session), e.currentTarget));
+      }
+
       card.querySelector('[data-action="delete"]').addEventListener("click", () => {
-        pendingDeleteId = session.id;
+        pendingDeleteIds = [session.id];
+        els.deleteModalMessage.textContent = DEFAULT_DELETE_MSG;
         els.deleteModal.hidden = false;
+      });
+
+      const checkbox = card.querySelector("input[data-select-id]");
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) selectedIds.add(session.id); else selectedIds.delete(session.id);
+        card.classList.toggle("is-selected", checkbox.checked);
+        updateBulkBar();
       });
 
       els.grid.appendChild(card);
@@ -322,7 +575,9 @@
         adminStorage.listAllSessions()
       ]);
       renderStats(stats);
-      renderSessions(sessions);
+      allSessions = sessions;
+      buildDateFilterTabs();
+      applyFilterAndRender();
       els.galleryStatus.hidden = true;
     } catch (e) {
       console.error("[admin] Failed to load dashboard:", e);
@@ -341,7 +596,11 @@
     els.loginScreen.hidden = false;
   }
 
-  /* ---- Auth wiring ---- */
+  /* ---- Auth wiring — signing in already redirects straight to the
+     dashboard below (showDashboard()), and init() at the bottom of this
+     file re-checks for an existing signed-in session on every page load,
+     so a staff member is never left staring at the login screen after
+     a successful sign-in. ---- */
   els.loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     els.loginError.hidden = true;
@@ -367,31 +626,42 @@
 
   els.refreshBtn.addEventListener("click", () => loadDashboard());
 
-  /* ---- Delete modal wiring ---- */
+  /* ---- Delete modal wiring — shared by single-card delete and the
+     batch delete bar; pendingDeleteIds holds one id or many. ---- */
   els.cancelDeleteBtn.addEventListener("click", () => {
-    pendingDeleteId = null;
+    pendingDeleteIds = [];
     els.deleteModal.hidden = true;
   });
 
   els.confirmDeleteBtn.addEventListener("click", async () => {
-    if (!pendingDeleteId) return;
-    const id = pendingDeleteId;
+    if (!pendingDeleteIds.length) return;
+    const ids = pendingDeleteIds;
     els.confirmDeleteBtn.disabled = true;
     els.confirmDeleteBtn.textContent = "Deleting…";
 
-    try {
-      await adminStorage.deleteSession(id);
-      showToast(`Session #${id} deleted.`);
-      els.deleteModal.hidden = true;
-      await loadDashboard();
-    } catch (e) {
-      console.error("[admin] Delete failed:", e);
-      showToast("Couldn't delete that session — try again.");
-    } finally {
-      pendingDeleteId = null;
-      els.confirmDeleteBtn.disabled = false;
-      els.confirmDeleteBtn.textContent = "Delete";
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await adminStorage.deleteSession(id);
+      } catch (e) {
+        console.error("[admin] Delete failed:", id, e);
+        failed++;
+      }
     }
+
+    els.deleteModal.hidden = true;
+    pendingDeleteIds = [];
+    els.confirmDeleteBtn.disabled = false;
+    els.confirmDeleteBtn.textContent = "Delete";
+
+    if (failed) {
+      showToast(`Deleted ${ids.length - failed} of ${ids.length} — ${failed} failed.`);
+    } else {
+      showToast(ids.length === 1 ? `Session #${ids[0]} deleted.` : `${ids.length} sessions deleted.`);
+    }
+
+    setSelectMode(false);
+    await loadDashboard();
   });
 
   /* ---- Boot: check for an existing signed-in session ---- */

@@ -1,28 +1,30 @@
 /*
  * ADMIN.CSS — Studrio Booth Control Room
  *
- * Deliberately distinct from the guest-facing kiosk (style.css, light/
- * friendly) and gallery (gallery.css, light/soft). This is a staff-only
- * operator tool, so it takes a dark "backstage control room" register:
- * mechanical odometer-style digits for the stats (echoing real coin-op
- * photobooth counters), and film-strip cards with sprocket-hole edges
- * for each session, rather than a generic admin dashboard template.
+ * Reskinned to match the kiosk's own visual language (css/style.css):
+ * light background, white panels, yellow accent, Inter font, 14px
+ * radius. The "backstage" character survives in a few deliberate
+ * details — mechanical odometer-style stat digits, film-strip cards
+ * with sprocket-hole edges — but the palette now matches the guest
+ * side of the app instead of contrasting with it.
  */
 
 :root {
-  --bg: #131319;
-  --panel: #1b1c23;
-  --panel-light: #23242d;
-  --accent: #ff5c8a;
-  --accent-dark: #d6416c;
-  --ok: #35d488;
-  --danger: #ff5c5c;
-  --text: #eef0f3;
-  --text-dim: #888c98;
-  --border: #2c2d37;
-  --radius: 10px;
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --panel-light: #eef0f3;
+  --accent: #f0c231;
+  --accent-dark: #c9a028;
+  --ok: #1fae63;
+  --danger: #e0403f;
+  --text: #1c1e21;
+  --text-dim: #666b73;
+  --border: #d9dce1;
+  --radius: 14px;
   --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", "Consolas", monospace;
-  --sans: -apple-system, "Segoe UI", system-ui, sans-serif;
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  /* Odometer digits keep a dark "counter window" for contrast/character */
+  --digit-bg: #1c1e21;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,7 +42,7 @@ button, input { font-family: inherit; }
   font-size: 0.9rem;
   font-weight: 600;
   padding: 10px 18px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid transparent;
   cursor: pointer;
   transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
@@ -49,17 +51,17 @@ button, input { font-family: inherit; }
 
 .btn-admin-primary {
   background: var(--accent);
-  color: #14151a;
+  color: #fff;
 }
-.btn-admin-primary:hover { background: #ff77a1; }
-.btn-admin-primary:disabled { opacity: 0.6; cursor: wait; }
+.btn-admin-primary:hover { background: var(--accent-dark); }
+.btn-admin-primary:disabled { opacity: 0.5; cursor: wait; }
 
 .btn-admin-outline {
   background: transparent;
   color: var(--text);
   border-color: var(--border);
 }
-.btn-admin-outline:hover { border-color: var(--accent); }
+.btn-admin-outline:hover { border-color: var(--accent-dark); }
 
 .btn-admin-ghost {
   background: transparent;
@@ -69,9 +71,10 @@ button, input { font-family: inherit; }
 
 .btn-admin-danger {
   background: var(--danger);
-  color: #1a0d0d;
+  color: #fff;
 }
-.btn-admin-danger:hover { background: #ff7676; }
+.btn-admin-danger:hover { background: #c73534; }
+.btn-admin-danger:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---------------------------------------------------------
  * LOGIN SCREEN
@@ -83,7 +86,7 @@ button, input { font-family: inherit; }
   justify-content: center;
   padding: 24px;
   background:
-    radial-gradient(circle at 20% 15%, rgba(255, 92, 138, 0.08), transparent 45%),
+    radial-gradient(circle at 20% 15%, rgba(240, 194, 49, 0.12), transparent 45%),
     var(--bg);
 }
 
@@ -97,6 +100,7 @@ button, input { font-family: inherit; }
   display: flex;
   flex-direction: column;
   gap: 14px;
+  box-shadow: 0 4px 24px rgba(28, 30, 33, 0.06);
 }
 
 .login-eyebrow {
@@ -121,7 +125,7 @@ button, input { font-family: inherit; }
 }
 
 .login-field input {
-  background: var(--bg);
+  background: var(--panel-light);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
@@ -156,6 +160,18 @@ button, input { font-family: inherit; }
   gap: 16px;
   margin-bottom: 28px;
   flex-wrap: wrap;
+}
+
+.admin-header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-header-logo {
+  height: 34px;
+  width: auto;
+  object-fit: contain;
 }
 
 .admin-eyebrow {
@@ -199,6 +215,7 @@ button, input { font-family: inherit; }
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 10px;
+  font-weight: 600;
 }
 
 .counter-digits {
@@ -206,27 +223,66 @@ button, input { font-family: inherit; }
   font-size: clamp(1.6rem, 4vw, 2.2rem);
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--ok);
-  background: #0c0d11;
+  color: var(--accent);
+  background: var(--digit-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;
   text-align: center;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
   font-variant-numeric: tabular-nums;
 }
 
 /* ---------------------------------------------------------
- * SESSIONS GRID
+ * SESSIONS: HEADER, DATE FILTER, SELECT MODE
  * --------------------------------------------------------- */
 .gallery-section-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.gallery-section-head-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 .gallery-section-head h2 { font-size: 1.1rem; font-weight: 700; }
 .gallery-count { font-size: 0.85rem; color: var(--text-dim); }
+
+/* Date filter — horizontal scrollable pill row, built from session dates */
+.date-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+  scrollbar-width: thin;
+}
+.date-filter-row:empty { display: none; }
+
+.date-filter-pill {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.date-filter-pill:hover { border-color: var(--accent-dark); color: var(--text); }
+.date-filter-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 
 .admin-status {
   color: var(--text-dim);
@@ -235,6 +291,24 @@ button, input { font-family: inherit; }
 }
 .admin-status-empty { max-width: 420px; line-height: 1.5; }
 
+/* Bulk-select toolbar — appears when "Select" mode is on and at least
+   one card is checked. Sits above the grid. */
+.select-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.select-bulk-bar[hidden] { display: none; }
+.select-bulk-actions { display: flex; gap: 8px; }
+
 .filmstrip-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -242,26 +316,27 @@ button, input { font-family: inherit; }
 }
 
 /* Each session card reads as a strip of film: sprocket-hole rows top
-   and bottom (dot pattern), dark plastic-black frame, image inset. */
+   and bottom (dot pattern), inset image, light chrome around it. */
 .filmstrip-card {
-  background: #0c0d11;
-  border-radius: 6px;
+  position: relative;
+  background: var(--panel);
+  border-radius: var(--radius);
   padding: 10px 0;
   border: 1px solid var(--border);
 }
 
 .filmstrip-sprockets {
   height: 10px;
-  background-image: radial-gradient(circle, #2c2e37 2.5px, transparent 2.6px);
+  background-image: radial-gradient(circle, var(--border) 2.5px, transparent 2.6px);
   background-size: 16px 10px;
   background-position: 6px center;
 }
 
 .filmstrip-media {
   margin: 6px 10px;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: hidden;
-  background: #050506;
+  background: var(--panel-light);
   min-height: 120px;
   display: flex;
   align-items: center;
@@ -297,16 +372,18 @@ button, input { font-family: inherit; }
   flex-direction: column;
   gap: 8px;
   padding: 8px 10px 4px;
+  transition: opacity 0.15s ease;
 }
 .filmstrip-actions .btn-admin {
   padding: 8px 8px;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   text-align: center;
 }
 .filmstrip-actions .btn-admin-primary {
   width: 100%;
 }
-.filmstrip-actions .btn-admin-primary:disabled {
+.filmstrip-actions .btn-admin-primary:disabled,
+.filmstrip-actions .btn-admin-outline:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
@@ -318,13 +395,42 @@ button, input { font-family: inherit; }
   flex: 1;
 }
 
+/* Checkbox overlay — only interactive/visible while select mode is on */
+.filmstrip-select-box {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+  width: 26px;
+  height: 26px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  box-shadow: 0 2px 8px rgba(28, 30, 33, 0.12);
+}
+.filmstrip-grid.select-mode .filmstrip-select-box { display: flex; }
+.filmstrip-grid.select-mode .filmstrip-actions { opacity: 0.4; pointer-events: none; }
+.filmstrip-select-box input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-dark);
+  cursor: pointer;
+}
+.filmstrip-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.35);
+}
+
 /* ---------------------------------------------------------
  * DELETE CONFIRM MODAL (mirrors index.html's #confirmModal)
  * --------------------------------------------------------- */
 .admin-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(28, 30, 33, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -339,6 +445,7 @@ button, input { font-family: inherit; }
   padding: 24px;
   max-width: 320px;
   text-align: center;
+  box-shadow: 0 10px 40px rgba(28, 30, 33, 0.18);
 }
 .admin-modal-message { font-size: 0.95rem; margin-bottom: 18px; line-height: 1.4; }
 .admin-modal-actions { display: flex; gap: 10px; justify-content: center; }
@@ -348,13 +455,14 @@ button, input { font-family: inherit; }
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: var(--text);
+  border: 1px solid var(--text);
+  color: #fff;
   font-size: 0.85rem;
   padding: 10px 18px;
   border-radius: 999px;
   z-index: 60;
+  box-shadow: 0 4px 16px rgba(28, 30, 33, 0.25);
 }
 
 @media (max-width: 640px) {
@@ -407,7 +515,7 @@ button, input { font-family: inherit; }
   background: var(--panel-light);
   padding: 1px 5px;
   border-radius: 4px;
-  color: var(--ok);
+  color: var(--accent-dark);
 }
 
 .pref-divider {
@@ -462,108 +570,6 @@ button, input { font-family: inherit; }
   border-color: var(--accent);
 }
 
-/* iOS-style toggle */
-.pref-toggle {
-  flex-shrink: 0;
-  cursor: pointer;
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-}
-.pref-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
-.pref-toggle-track {
-  position: absolute;
-  inset: 0;
-  background: var(--panel-light);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-.pref-toggle-track::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--text-dim);
-  transition: transform 0.2s ease, background 0.2s ease;
-}
-.pref-toggle input:checked + .pref-toggle-track {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.pref-toggle input:checked + .pref-toggle-track::after {
-  transform: translateX(20px);
-  background: #fff;
-}
-
-/* Radio option rows */
-.pref-options {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.pref-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
-.pref-option:hover { border-color: var(--accent); }
-.pref-option input[type="radio"] {
-  flex-shrink: 0;
-  margin-top: 3px;
-  accent-color: var(--accent);
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-.pref-option input[type="radio"]:checked ~ .pref-option-body .pref-option-title {
-  color: var(--accent);
-}
-
-.pref-option-body {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.pref-option-title {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.pref-option-desc {
-  font-size: 0.76rem;
-  color: var(--text-dim);
-  line-height: 1.45;
-}
-
-.pref-badge {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: rgba(240, 194, 49, 0.15);
-  color: var(--accent);
-  border: 1px solid rgba(240, 194, 49, 0.35);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
 .pref-save-row {
   display: flex;
   align-items: center;
@@ -589,7 +595,7 @@ button, input { font-family: inherit; }
 }
 
 .pref-align-control {
-  background: var(--bg);
+  background: var(--panel-light);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px;
@@ -612,14 +618,14 @@ button, input { font-family: inherit; }
   font-family: var(--mono);
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-dark);
   min-width: 2.5em;
   text-align: right;
 }
 
 .pref-align-control input[type="range"] {
   width: 100%;
-  accent-color: var(--accent);
+  accent-color: var(--accent-dark);
   cursor: pointer;
 }
 
