@@ -1,20 +1,13 @@
 /*
- * ADMIN.JS — Control room dashboard logic.
- * Gates everything behind Supabase Auth (see supabase-admin-setup.sql
- * for the RLS policies that make listing/deleting only work once
- * signed in). Refresh-on-demand, not live-subscribed — matches what
- * was actually asked for, keeps this simple.
+ * ADMIN-DASHBOARD.JS — Control room dashboard logic.
+ * Lives on its own page (admin/dashboard.html) now. The very first
+ * thing this file does is check for a signed-in session and bounce to
+ * index.html (the login page) if there isn't one — see guardAndInit()
+ * at the bottom. Everything else below only runs once that's passed.
  */
 
 (function () {
   const els = {
-    loginScreen: document.getElementById("adminLogin"),
-    loginForm: document.getElementById("loginForm"),
-    loginEmail: document.getElementById("loginEmail"),
-    loginPassword: document.getElementById("loginPassword"),
-    loginSubmitBtn: document.getElementById("loginSubmitBtn"),
-    loginError: document.getElementById("loginError"),
-
     dashboard: document.getElementById("adminDashboard"),
     refreshBtn: document.getElementById("btnRefresh"),
     logoutBtn: document.getElementById("btnLogout"),
@@ -374,113 +367,6 @@
     }
   }
 
-  function loadImageEl(src) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Image failed to load"));
-      img.src = src;
-    });
-  }
-
-  function roundRectPath(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
-
-  /* qrcodejs (davidshimjs) renders into a throwaway container — pull out
-     whichever element it produced (canvas or img, browser-dependent) as
-     a data URL so it can be drawn onto the strip canvas below. */
-  function generateQrDataUrl(text, size) {
-    return new Promise((resolve, reject) => {
-      const holder = document.createElement("div");
-      holder.style.cssText = "position:fixed;left:-9999px;top:-9999px;";
-      document.body.appendChild(holder);
-      try {
-        // eslint-disable-next-line no-new
-        new QRCode(holder, { text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
-        requestAnimationFrame(() => {
-          const canvas = holder.querySelector("canvas");
-          const img = holder.querySelector("img");
-          const dataUrl = canvas ? canvas.toDataURL("image/png") : (img && img.src);
-          document.body.removeChild(holder);
-          if (dataUrl) resolve(dataUrl); else reject(new Error("QR render failed"));
-        });
-      } catch (e) {
-        document.body.removeChild(holder);
-        reject(e);
-      }
-    });
-  }
-
-  /* ---- Download Photo (with QR): composites the final strip PNG with a
-     scannable QR badge (linking to the digital gallery) baked into the
-     bottom-right corner, so the downloaded file is a self-contained
-     keepsake. Fetches the strip as a blob first (same-origin blob URL)
-     rather than drawing the cross-origin <img> directly, so the canvas
-     never gets tainted by CORS. ---- */
-  async function downloadPhotoWithQR(session, btn) {
-    if (!session.final_strip_url) return;
-    const original = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "…";
-
-    let stripObjUrl, outObjUrl;
-    try {
-      const res = await fetch(session.final_strip_url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      stripObjUrl = URL.createObjectURL(blob);
-      const stripImg = await loadImageEl(stripObjUrl);
-
-      const galleryBase = (window.cloudStorage && cloudStorage.CLOUD_CONFIG && cloudStorage.CLOUD_CONFIG.galleryBaseUrl)
-        || "https://studrio.cc/g/#";
-      const galleryUrl = `${galleryBase}${session.id}`;
-      const qrDataUrl = await generateQrDataUrl(galleryUrl, 240);
-      const qrImg = await loadImageEl(qrDataUrl);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = stripImg.naturalWidth;
-      canvas.height = stripImg.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(stripImg, 0, 0);
-
-      const qrSize = Math.round(canvas.width * 0.16);
-      const pad = Math.round(canvas.width * 0.02);
-      const boxSize = qrSize + pad * 2;
-      const boxX = canvas.width - boxSize - pad * 2;
-      const boxY = canvas.height - boxSize - pad * 2;
-
-      ctx.fillStyle = "#ffffff";
-      roundRectPath(ctx, boxX, boxY, boxSize, boxSize, boxSize * 0.08);
-      ctx.fill();
-      ctx.drawImage(qrImg, boxX + pad, boxY + pad, qrSize, qrSize);
-
-      const outBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-      outObjUrl = URL.createObjectURL(outBlob);
-      const a = document.createElement("a");
-      a.href = outObjUrl;
-      a.download = `${session.id}-strip-qr.png`;
-      a.rel = "noopener";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch (e) {
-      console.error("[admin] Download-with-QR failed:", e);
-      showToast("Couldn't build the QR download — try again.");
-    } finally {
-      if (stripObjUrl) URL.revokeObjectURL(stripObjUrl);
-      if (outObjUrl) setTimeout(() => URL.revokeObjectURL(outObjUrl), 10000);
-      btn.disabled = false;
-      btn.textContent = original;
-    }
-  }
-
   function renderStats(stats) {
     els.statStrips.textContent = formatDigits(stats.photostripCount);
     els.statPrints.textContent = formatDigits(stats.totalCopiesPrinted);
@@ -524,7 +410,7 @@
         <div class="filmstrip-actions">
           <button class="btn-admin btn-admin-primary" data-action="print" ${session.print_ready_url ? "" : "disabled"}>🖨 Print Photo</button>
           <div class="filmstrip-actions-row">
-            <button class="btn-admin btn-admin-outline" data-action="download-photo" ${session.final_strip_url ? "" : "disabled"}>⬇ Photo (QR)</button>
+            <button class="btn-admin btn-admin-outline" data-action="download-photo" ${session.print_ready_url ? "" : "disabled"}>⬇ Photo (QR)</button>
             <button class="btn-admin btn-admin-outline" data-action="download-video" ${session.final_strip_video_url ? "" : "disabled"}>⬇ Video</button>
           </div>
           <button class="btn-admin btn-admin-ghost" data-action="delete">Delete</button>
@@ -536,9 +422,13 @@
         printBtn.addEventListener("click", (e) => printPhoto(session, e.currentTarget));
       }
 
+      // Downloads the print-ready PNG as-is — the kiosk's own export
+      // pipeline already bakes a scannable QR into its top-right corner
+      // (same file the print agent receives), so no compositing needed
+      // here; this is just a plain download of that existing asset.
       const photoBtn = card.querySelector('[data-action="download-photo"]');
-      if (session.final_strip_url) {
-        photoBtn.addEventListener("click", (e) => downloadPhotoWithQR(session, e.currentTarget));
+      if (session.print_ready_url) {
+        photoBtn.addEventListener("click", (e) => downloadFile(session.print_ready_url, `${session.id}-strip-print-ready.png`, e.currentTarget));
       }
 
       const videoBtn = card.querySelector('[data-action="download-video"]');
@@ -585,46 +475,12 @@
     }
   }
 
-  async function showDashboard() {
-    els.loginScreen.hidden = true;
-    els.dashboard.hidden = false;
-    await loadDashboard();
-  }
-
-  function showLogin() {
-    els.dashboard.hidden = true;
-    els.loginScreen.hidden = false;
-  }
-
-  /* ---- Auth wiring — signing in already redirects straight to the
-     dashboard below (showDashboard()), and init() at the bottom of this
-     file re-checks for an existing signed-in session on every page load,
-     so a staff member is never left staring at the login screen after
-     a successful sign-in. ---- */
-  els.loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    els.loginError.hidden = true;
-    els.loginSubmitBtn.disabled = true;
-    els.loginSubmitBtn.textContent = "Signing in…";
-
-    try {
-      await adminStorage.signIn(els.loginEmail.value.trim(), els.loginPassword.value);
-      await showDashboard();
-    } catch (err) {
-      els.loginError.textContent = "Sign-in failed — check your email and password.";
-      els.loginError.hidden = false;
-    } finally {
-      els.loginSubmitBtn.disabled = false;
-      els.loginSubmitBtn.textContent = "Sign in";
-    }
-  });
+  els.refreshBtn.addEventListener("click", () => loadDashboard());
 
   els.logoutBtn.addEventListener("click", async () => {
     await adminStorage.signOut();
-    showLogin();
+    window.location.href = "index.html";
   });
-
-  els.refreshBtn.addEventListener("click", () => loadDashboard());
 
   /* ---- Delete modal wiring — shared by single-card delete and the
      batch delete bar; pendingDeleteIds holds one id or many. ---- */
@@ -664,17 +520,19 @@
     await loadDashboard();
   });
 
-  /* ---- Boot: check for an existing signed-in session ---- */
-  (async function init() {
+  /* ---- Route guard: this page assumes a signed-in session. If there
+     isn't one (direct nav, expired session, logged out in another tab),
+     bounce to the login page instead of rendering an empty dashboard. ---- */
+  (async function guardAndInit() {
     try {
       const user = await adminStorage.getCurrentUser();
-      if (user) {
-        await showDashboard();
-      } else {
-        showLogin();
+      if (!user) {
+        window.location.href = "index.html";
+        return;
       }
+      await loadDashboard();
     } catch (e) {
-      showLogin();
+      window.location.href = "index.html";
     }
   })();
 })();

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Studrio Booth — Admin</title>
-<!-- Asset paths are relative: this file lives at /admin/index.html,
+<!-- Asset paths are relative: this file lives at /admin/dashboard.html,
      so CSS and JS are one level up (../css/, ../js/). -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,28 +13,11 @@
 </head>
 <body>
 
-<!-- ===================== LOGIN SCREEN ===================== -->
-<div id="adminLogin" class="admin-login-screen">
-  <form id="loginForm" class="login-card">
-    <p class="login-eyebrow">STUDRIO BOOTH — STAFF ONLY</p>
-    <h1 class="login-title">Control Room</h1>
-
-    <label class="login-field">
-      <span>Email</span>
-      <input type="email" id="loginEmail" required autocomplete="username">
-    </label>
-    <label class="login-field">
-      <span>Password</span>
-      <input type="password" id="loginPassword" required autocomplete="current-password">
-    </label>
-
-    <button type="submit" class="btn-admin btn-admin-primary" id="loginSubmitBtn">Sign in</button>
-    <p class="login-error" id="loginError" hidden></p>
-  </form>
-</div>
-
 <!-- ===================== DASHBOARD ===================== -->
-<div id="adminDashboard" class="admin-dashboard" hidden>
+<!-- No hidden login section on this page anymore — admin-dashboard.js
+     checks for a signed-in session before this ever renders, and
+     bounces to index.html (the login page) if there isn't one. -->
+<div id="adminDashboard" class="admin-dashboard">
 
   <header class="admin-header">
     <div class="admin-header-title">
@@ -213,9 +196,8 @@
 <p class="admin-toast" id="adminToast" hidden></p>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="../js/cloud-storage.js"></script>
 <script src="../js/print-alignment.js"></script>
-<script src="../js/admin.js"></script>
+<script src="../js/admin-dashboard.js"></script>
 </body>
 </html>
