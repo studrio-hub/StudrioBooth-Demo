@@ -297,5 +297,5 @@ async function resetSessionAndRestart() {
   goToPage("home");
 }
 
-document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";
-document.getElementById("frameThumb4x6").src = "assets/designs/4x6_Strip_Thumbnail.png";
+document.getElementById("frameThumb2x6").src = "assets/designs/thumbnail/2x6_Strip_Thumbnail.png";
+document.getElementById("frameThumb4x6").src = "assets/designs/thumbnail/4x6_Strip_Thumbnail.png";

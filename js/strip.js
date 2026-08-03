@@ -6,7 +6,7 @@
 
 const STRIP_DESIGNS = [
   {
-    id: "original-frame",
+    id: "original-l",
     label: "Original White",
     cssClass: "Original-Frame",
     overlays: {
@@ -14,11 +14,83 @@ const STRIP_DESIGNS = [
     }
   },
   {
-    id: "coastal-cool",
+    id: "coastal-cool-l",
     label: "Coastal Cool",
     cssClass: "Coastal-Cool",
     overlays: {
       "2x6": "assets/designs/2x6/CoastalCool.png"
+    }
+  },
+  {
+    id: "few-of-us-l",
+    label: "Few Of Us",
+    cssClass: "Few-Of-Us",
+    overlays: {
+      "2x6": "assets/designs/2x6/FewOfUs.png"
+    }
+  },
+  {
+    id: "miffy-l",
+    label: "Miffy",
+    cssClass: "Miffy",
+    overlays: {
+      "2x6": "assets/designs/2x6/Miffy.png"
+    }
+  },
+  {
+    id: "nostalgia-l",
+    label: "Nostalgia",
+    cssClass: "Nostalgia",
+    overlays: {
+      "2x6": "assets/designs/2x6/Nostalgia.png"
+    }
+  },
+  {
+    id: "princess-peaches",
+    label: "Princess Peaches",
+    cssClass: "Princess-Peaches",
+    overlays: {
+      "2x6": "assets/designs/2x6/PrincessPeaches.png"
+    }
+  },
+  {
+    id: "the-good-folks",
+    label: "The Good Folks",
+    cssClass: "The-Good-Folks",
+    overlays: {
+      "2x6": "assets/designs/2x6/TheGoodFolks.png"
+    }
+  },
+  {
+    id: "whatever-it-takes",
+    label: "Whatever It Takes",
+    cssClass: "Whatever-It-Takes",
+    overlays: {
+      "2x6": "assets/designs/2x6/WhateverItTakes.png"
+    }
+  },
+  {
+    id: "where-is-my-mind",
+    label: "Where Is My Mind",
+    cssClass: "Where-Is-My-Mind",
+    overlays: {
+      "2x6": "assets/designs/2x6/WhereIsMyMind.png"
+    }
+  },
+  {
+    id: "xoxo-l",
+    label: "XOXO",
+    cssClass: "XOXO",
+    overlays: {
+      "2x6": "assets/designs/2x6/XOXO.png"
+    }
+  },
+  {
+    id: "super-mario",
+    label: "Super Mario",
+    cssClass: "Super-Mario",
+    overlays: {
+      "2x6": "assets/designs/2x6/SuperMario.png"
     }
   }
 ];
