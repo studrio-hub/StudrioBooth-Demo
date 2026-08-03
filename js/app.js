@@ -71,29 +71,27 @@ async function updateZoom(level) {
   }
 }
 
-/* ---------------- PAGE HOME: COLLAGE LANDING ------------------- */
+/* ---------------- PAGE HOME: LANDING ------------------- */
 /*
- * The Home page sits between Boot and Setup.
- * Boot → Home (collage + Start) → Setup (60s timer) → Frame → …
- * After a session resets, we return to Setup directly (camera already live).
+ * The Home page is shown immediately after staff authenticates (no boot
+ * screen). Boot → Home (Start button) → Setup (60s timer) → Frame → …
+ * After a session ends, we also return to Home (camera stays live in the
+ * background throughout).
  */
 document.getElementById("btnStartSession").addEventListener("click", () => {
-  homeCollage.pause(); // stop background video playback to free resources
   goToPage("setup");
   kioskTimer.start(60, _proceedFromSetup);
 });
 
 function _proceedFromSetup() {
-  // Timer expired on setup page — go back to home and rebuild the collage
+  // Timer expired on setup page — go back to home
   kioskTimer.hide();
-  homeCollage.rebuild();
   goToPage("home");
 }
 
-/* Back button on Setup — returns to Home collage */
+/* Back button on Setup — returns to Home */
 document.getElementById("btnBackFromSetup").addEventListener("click", () => {
   kioskTimer.hide();
-  homeCollage.resume();
   goToPage("home");
 });
 
@@ -293,9 +291,10 @@ async function resetSessionAndRestart() {
 
   cameraController.attachPreview(setupEls.video, setupEls.img);
 
-  // Go directly back to setup — authentication is only required once
+  // Return to Home (not Setup) between guests — matches the flow everywhere
+  // else (Boot → Home → Setup). Authentication is still only required once
   // at kiosk startup, not between individual guest sessions.
-  goToPage("setup");
+  goToPage("home");
 }
 
 document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";

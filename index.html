@@ -63,29 +63,10 @@
     </div>
   </section>
 
-  <!-- ===================== PAGE 0: BOOT / STARTUP ===================== -->
-  <section class="page" id="page-boot" data-page="boot">
-    <div class="boot-screen">
-      <div class="boot-logo">PHOTOBOOTH</div>
-      <div class="boot-status-list" id="bootStatusList"></div>
-      <div class="boot-spinner" id="bootSpinner"></div>
-      <div class="boot-error" id="bootError" hidden>
-        <p id="bootErrorText">Camera not detected</p>
-        <div class="boot-error-actions">
-          <button class="btn btn-primary" id="btnBootRetry">RETRY CONNECTION</button>
-          <button class="btn btn-outline" id="btnBootRestart">RESTART SETUP</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===================== PAGE HOME: COLLAGE LANDING ===================== -->
+  <!-- ===================== PAGE HOME: LANDING ===================== -->
   <section class="page" id="page-home" data-page="home">
 
-    <!-- Scattered video cards — populated by home-collage.js -->
-    <div class="home-collage-container" id="homeCollageContainer"></div>
-
-    <!-- Centered logo + CTA — always on top of collage -->
+    <!-- Centered logo + CTA -->
     <div class="home-center">
       <img class="home-logo" src="assets/designs/studrio_logo.png" alt="Studrio Booth">
       <button class="home-start-btn" id="btnStartSession">Start</button>
@@ -373,8 +354,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/cloud-storage.js"></script>
 <script src="js/qr.js"></script>
-<script src="js/home-videos.config.js"></script>
-<script src="js/home-collage.js"></script>
 <script src="js/app.js"></script>
 <script src="js/auth-lock.js"></script>
 <script src="js/boot.js"></script>
