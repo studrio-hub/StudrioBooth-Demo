@@ -6,39 +6,19 @@
 
 const STRIP_DESIGNS = [
   {
-    id: "original-white",
+    id: "original-frame",
     label: "Original White",
-    cssClass: "theme-minimal-white",
+    cssClass: "Original-Frame",
     overlays: {
-      "2x6": "assets/designs/2x6_Original_Frame.png",
-      "4x6": "assets/designs/4x6_Original_Frame.png"
+      "2x6": "assets/designs/2x6/Orignal.png"
     }
   },
   {
-    id: "princess-peaches",
-    label: "Princess Peaches",
-    cssClass: "theme-black-white",
+    id: "coastal-cool",
+    label: "Coastal Cool",
+    cssClass: "Coastal-Cool",
     overlays: {
-      "2x6": "assets/designs/2x6_Princess_Peach.png",
-      "4x6": "assets/designs/4x6_Princess_Peach.png"
-    }
-  },
-  {
-    id: "wit",
-    label: "Whatever it Takes",
-    cssClass: "theme-retro",
-    overlays: {
-      "2x6": "assets/designs/2x6_WIT.png",
-      "4x6": "assets/designs/4x6_WIT.png"
-    }
-  },
-  {
-    id: "xoxo",
-    label: "XOXO",
-    cssClass: "theme-pastel",
-    overlays: {
-      "2x6": "assets/designs/2x6_XOXO.png",
-      "4x6": "assets/designs/4x6_XOXO.png"
+      "2x6": "assets/designs/2x6/CoastalCool.png"
     }
   }
 ];

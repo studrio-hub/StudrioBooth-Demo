@@ -879,10 +879,9 @@ button {
 }
 
 /* ---- Design themes applied to .strip-single ---- */
-.theme-minimal-white { background: #ffffff; color: #222; }
-.theme-black-white { background: #111111; color: #fff; filter: grayscale(1); }
-.theme-retro { background: #f4e3c1; color: #6b4423; border: 3px solid #c9a24a; }
-.theme-pastel { background: linear-gradient(160deg, #ffd6e8, #d6e8ff); color: #444; }
+.Original-Frame { background: #ffffff; color: #222; }
+.Coastal-Cool { background: #ffffff; color: #222; }
+
 
 
 /* ================= PAGE 5: STRIP DESIGN ================= */
