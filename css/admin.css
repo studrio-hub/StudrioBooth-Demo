@@ -1,91 +1,80 @@
 /*
- * ADMIN.CSS — Studrio Booth Control Room
+ * ADMIN.CSS — Studrio Booth Staff Control Room
  *
- * Reskinned to match the kiosk's own visual language (css/style.css):
- * light background, white panels, yellow accent, Inter font, 14px
- * radius. The "backstage" character survives in a few deliberate
- * details — mechanical odometer-style stat digits, film-strip cards
- * with sprocket-hole edges — but the palette now matches the guest
- * side of the app instead of contrasting with it.
+ * Visual language: matches the kiosk's own palette (css/style.css).
+ * Light background, white panels, yellow accent, Inter font, 14px radius.
+ * The "backstage" character survives in deliberate details — mechanical
+ * odometer stat digits, film-strip session cards with sprocket edges.
  */
 
+/* ─── Design tokens ───────────────────────────────────────────────────────── */
 :root {
-  --bg: #f4f5f7;
-  --panel: #ffffff;
-  --panel-light: #eef0f3;
-  --accent: #f0c231;
-  --accent-dark: #c9a028;
-  --ok: #1fae63;
-  --danger: #e0403f;
-  --text: #1c1e21;
-  --text-dim: #666b73;
-  --border: #d9dce1;
-  --radius: 14px;
-  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", "Consolas", monospace;
-  --sans: 'Inter', system-ui, -apple-system, sans-serif;
-  /* Odometer digits keep a dark "counter window" for contrast/character */
-  --digit-bg: #1c1e21;
+  --bg:           #f4f5f7;
+  --panel:        #ffffff;
+  --panel-light:  #eef0f3;
+  --panel-mid:    #e4e7ec;
+  --accent:       #f0c231;
+  --accent-dark:  #c9a028;
+  --accent-faint: rgba(240, 194, 49, 0.10);
+  --ok:           #1fae63;
+  --danger:       #e0403f;
+  --text:         #1c1e21;
+  --text-dim:     #666b73;
+  --border:       #d9dce1;
+  --radius:       14px;
+  --radius-sm:    8px;
+  --mono:         ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", "Consolas", monospace;
+  --sans:         'Inter', system-ui, -apple-system, sans-serif;
+  --digit-bg:     #1c1e21;   /* dark counter window for odometer */
+  --shadow-sm:    0 1px 4px rgba(28, 30, 33, 0.06);
+  --shadow-md:    0 4px 20px rgba(28, 30, 33, 0.09);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+button, input, select, textarea { font-family: inherit; }
+img { max-width: 100%; }
 
-html, body {
-  min-height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--sans);
-}
 
-button, input { font-family: inherit; }
+/* ─── Shared button system ────────────────────────────────────────────────── */
 
 .btn-admin {
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   font-weight: 600;
   padding: 10px 18px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 0.13s ease, border-color 0.13s ease, color 0.13s ease, transform 0.08s ease, box-shadow 0.13s ease;
 }
 .btn-admin:active { transform: scale(0.97); }
+.btn-admin:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 
-.btn-admin-primary {
-  background: var(--accent);
-  color: #fff;
-}
-.btn-admin-primary:hover { background: var(--accent-dark); }
-.btn-admin-primary:disabled { opacity: 0.5; cursor: wait; }
+.btn-admin-primary  { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-admin-primary:hover  { background: var(--accent-dark); border-color: var(--accent-dark); }
 
-.btn-admin-outline {
-  background: transparent;
-  color: var(--text);
-  border-color: var(--border);
-}
-.btn-admin-outline:hover { border-color: var(--accent-dark); }
+.btn-admin-outline  { background: transparent; color: var(--text); border-color: var(--border); }
+.btn-admin-outline:hover  { border-color: var(--accent-dark); background: var(--panel-light); }
 
-.btn-admin-ghost {
-  background: transparent;
-  color: var(--text-dim);
-}
-.btn-admin-ghost:hover { color: var(--text); }
+.btn-admin-ghost    { background: transparent; color: var(--text-dim); border-color: transparent; }
+.btn-admin-ghost:hover    { color: var(--text); background: var(--panel-light); }
 
-.btn-admin-danger {
-  background: var(--danger);
-  color: #fff;
-}
-.btn-admin-danger:hover { background: #c73534; }
-.btn-admin-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-admin-danger   { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-admin-danger:hover   { background: #c73534; border-color: #c73534; }
 
-/* Small button modifier — used on session and template card action rows */
-.btn-sm {
-  padding: 7px 12px;
-  font-size: 0.78rem;
-  border-radius: 8px;
-}
+.btn-sm  { padding: 7px 13px; font-size: 0.78rem; border-radius: 7px; }
+.btn-xs  { padding: 5px 10px; font-size: 0.74rem; border-radius: 6px; }
+.btn-wide { width: 100%; }
 
-/* ---------------------------------------------------------
- * LOGIN SCREEN
- * --------------------------------------------------------- */
+
+/* ─── Login screen ────────────────────────────────────────────────────────── */
+
 .admin-login-screen {
   min-height: 100vh;
   display: flex;
@@ -93,7 +82,7 @@ button, input { font-family: inherit; }
   justify-content: center;
   padding: 24px;
   background:
-    radial-gradient(circle at 20% 15%, rgba(240, 194, 49, 0.12), transparent 45%),
+    radial-gradient(ellipse at 18% 12%, rgba(240, 194, 49, 0.14) 0%, transparent 50%),
     var(--bg);
 }
 
@@ -103,24 +92,25 @@ button, input { font-family: inherit; }
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 32px 28px;
+  padding: 32px 28px 28px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  box-shadow: 0 4px 24px rgba(28, 30, 33, 0.06);
+  box-shadow: var(--shadow-md);
 }
 
 .login-eyebrow {
   font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   letter-spacing: 0.12em;
   color: var(--text-dim);
 }
 
 .login-title {
-  font-size: 1.6rem;
+  font-size: 1.65rem;
   font-weight: 800;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
 }
 
 .login-field {
@@ -128,16 +118,17 @@ button, input { font-family: inherit; }
   flex-direction: column;
   gap: 6px;
   font-size: 0.8rem;
+  font-weight: 600;
   color: var(--text-dim);
 }
 
 .login-field input {
   background: var(--panel-light);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   color: var(--text);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 .login-field input:focus {
   outline: 2px solid var(--accent);
@@ -147,81 +138,77 @@ button, input { font-family: inherit; }
 
 .login-error {
   color: var(--danger);
-  font-size: 0.85rem;
-  margin-top: 4px;
+  font-size: 0.82rem;
+  margin-top: 2px;
 }
 
-/* ---------------------------------------------------------
- * DASHBOARD SHELL
- * --------------------------------------------------------- */
-.admin-dashboard {
-  max-width: 1100px;
+
+/* ─── Top bar ─────────────────────────────────────────────────────────────── */
+
+.admin-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-topbar-inner {
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 28px 20px 64px;
-}
-
-.admin-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-}
-
-.admin-header-title {
+  padding: 0 24px;
+  height: 56px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.admin-header-logo {
-  height: 34px;
-  width: auto;
-  object-fit: contain;
-}
-
-.admin-eyebrow {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  color: var(--text-dim);
-  margin-bottom: 2px;
-}
-
-.admin-header-title h1 {
-  font-size: 1.7rem;
+.admin-logo {
+  font-size: 0.92rem;
   font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.admin-header-actions {
-  display: flex;
-  gap: 10px;
+.admin-logo-tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-left: 8px;
 }
 
-/* ---------------------------------------------------------
- * TAB NAVIGATION
- * --------------------------------------------------------- */
+
+/* ─── Tab navigation ──────────────────────────────────────────────────────── */
+
 .admin-tabs {
   display: flex;
-  gap: 4px;
-  margin-bottom: 28px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.admin-tabs::-webkit-scrollbar { display: none; }
 
 .admin-tab {
-  font-size: 0.88rem;
+  font-size: 0.84rem;
   font-weight: 600;
   color: var(--text-dim);
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: 10px 18px;
+  padding: 19px 14px 17px;
   cursor: pointer;
-  margin-bottom: -1px; /* sits on the border-bottom of .admin-tabs */
+  white-space: nowrap;
   transition: color 0.12s ease, border-color 0.12s ease;
   border-radius: 0;
+  position: relative;
+  top: 1px; /* aligns border-bottom flush with topbar bottom */
 }
 .admin-tab:hover { color: var(--text); }
 .admin-tab.active {
@@ -229,53 +216,132 @@ button, input { font-family: inherit; }
   border-bottom-color: var(--accent);
 }
 
+
+/* ─── Main content area ───────────────────────────────────────────────────── */
+
+.admin-main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 24px 72px;
+}
+
 .admin-panel { display: none; }
 .admin-panel.active { display: block; }
 
-/* ---------------------------------------------------------
- * ODOMETER-STYLE STAT COUNTERS
- * --------------------------------------------------------- */
-.counter-row {
+
+/* ─── Section heading pattern ─────────────────────────────────────────────── */
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.section-head-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.section-head h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.section-count {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+
+/* ─── Overview: odometer stat counters ───────────────────────────────────── */
+
+.stat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  margin-bottom: 36px;
+  margin-bottom: 0;
 }
 
-.counter-unit {
+.stat-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px 16px;
+  padding: 20px 18px;
+  box-shadow: var(--shadow-sm);
 }
 
-.counter-label {
-  font-size: 0.78rem;
+.stat-label {
+  font-size: 0.74rem;
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 10px;
+  letter-spacing: 0.07em;
   font-weight: 600;
+  margin-bottom: 12px;
 }
 
-.counter-digits {
+.stat-odometer {
   font-family: var(--mono);
-  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-size: clamp(1.5rem, 3.5vw, 2rem);
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   color: var(--accent);
   background: var(--digit-bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 7px;
+  padding: 10px 14px;
   text-align: center;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.45);
   font-variant-numeric: tabular-nums;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* ---------------------------------------------------------
- * SESSIONS: HEADER, DATE FILTER, SELECT MODE
- * --------------------------------------------------------- */
+
+/* ─── Date filter pills ───────────────────────────────────────────────────── */
+
+.date-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+  scrollbar-width: none;
+}
+.date-filter-row::-webkit-scrollbar { display: none; }
+.date-filter-row:empty { display: none; }
+
+.date-pill {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 15px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.date-pill:hover { border-color: var(--accent-dark); color: var(--text); }
+.date-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* legacy alias */
+.date-filter-pill { }
+.date-filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+
+/* ─── Sessions: toolbar ───────────────────────────────────────────────────── */
+
 .gallery-section-head {
   display: flex;
   align-items: center;
@@ -289,94 +355,40 @@ button, input { font-family: inherit; }
   align-items: baseline;
   gap: 10px;
 }
-.gallery-section-head h2 { font-size: 1.1rem; font-weight: 700; }
-.gallery-count { font-size: 0.85rem; color: var(--text-dim); }
-
-/* Date filter — horizontal scrollable pill row, built from session dates */
-.date-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  margin-bottom: 16px;
-  scrollbar-width: thin;
-}
-.date-filter-row:empty { display: none; }
-
-/* Legacy class kept for compatibility */
-.date-filter-pill {
-  flex-shrink: 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 7px 16px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.date-filter-pill:hover { border-color: var(--accent-dark); color: var(--text); }
-.date-filter-pill.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-/* Current class used by admin-dashboard.js */
-.date-pill {
-  flex-shrink: 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 7px 16px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.date-pill:hover { border-color: var(--accent-dark); color: var(--text); }
-.date-pill.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
+.gallery-section-head h2 { font-size: 1.05rem; font-weight: 700; }
+.gallery-count { font-size: 0.82rem; color: var(--text-dim); }
 
 .admin-status {
   color: var(--text-dim);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   padding: 20px 0;
 }
-.admin-status-empty { max-width: 420px; line-height: 1.5; }
 
-/* Bulk-select toolbar */
-.select-bulk-bar {
+/* Bulk select bar */
+.bulk-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   background: var(--panel);
   border: 1px solid var(--accent);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 10px 16px;
   margin-bottom: 14px;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   font-weight: 600;
 }
-.select-bulk-bar[hidden] { display: none; }
-.select-bulk-actions { display: flex; gap: 8px; }
+.bulk-bar[hidden] { display: none; }
+.bulk-bar-actions { display: flex; gap: 8px; }
+.bulk-count { color: var(--text-dim); }
 
-/* ---------------------------------------------------------
- * SESSION CARDS (film-strip aesthetic, class names match admin-dashboard.js)
- * --------------------------------------------------------- */
+
+/* ─── Session cards (film-strip aesthetic) ────────────────────────────────── */
+
 .session-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
 }
 
 .session-card {
@@ -386,14 +398,19 @@ button, input { font-family: inherit; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.session-card:hover {
+  border-color: #c3c6cc;
+  box-shadow: var(--shadow-md);
 }
 .session-card--selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.3);
+  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.28);
 }
 
-/* Sprocket strips — left and right film edge */
+/* Sprocket strips (left / right film edges) */
 .session-card-sprockets {
   display: flex;
   flex-direction: column;
@@ -402,11 +419,10 @@ button, input { font-family: inherit; }
   width: 14px;
   flex-shrink: 0;
   background: var(--panel-light);
-  padding: 8px 0;
-  gap: 6px;
+  padding: 10px 0;
 }
-.session-card-sprockets.left { border-right: 1px solid var(--border); }
-.session-card-sprockets.right { border-left: 1px solid var(--border); }
+.session-card-sprockets.left  { border-right: 1px solid var(--border); }
+.session-card-sprockets.right { border-left:  1px solid var(--border); }
 
 .sprocket-hole {
   width: 6px;
@@ -416,7 +432,7 @@ button, input { font-family: inherit; }
   flex-shrink: 0;
 }
 
-/* Card body — contains thumb, meta, actions */
+/* Card body */
 .session-card-body {
   flex: 1;
   min-width: 0;
@@ -428,10 +444,10 @@ button, input { font-family: inherit; }
 }
 
 .session-card-thumb {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--panel-light);
-  min-height: 100px;
+  min-height: 90px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -439,13 +455,13 @@ button, input { font-family: inherit; }
 .session-thumb {
   width: 100%;
   display: block;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 .session-thumb--empty {
   width: 100%;
-  min-height: 100px;
+  min-height: 90px;
   background: var(--panel-light);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .session-card-meta {
@@ -453,31 +469,17 @@ button, input { font-family: inherit; }
   flex-direction: column;
   gap: 2px;
 }
-.session-card-id {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  color: var(--text-dim);
-}
-.session-card-date {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text);
-}
-.session-card-type {
-  font-size: 0.75rem;
-  color: var(--text-dim);
-}
+.session-card-id   { font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); }
+.session-card-date { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+.session-card-type { font-size: 0.74rem; color: var(--text-dim); }
 
 .session-card-actions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   margin-top: auto;
 }
-.session-card-actions .btn-admin {
-  width: 100%;
-  text-align: center;
-}
+.session-card-actions .btn-admin { width: 100%; text-align: center; }
 
 /* Checkbox overlay (select mode) */
 .session-checkbox-wrap {
@@ -493,7 +495,8 @@ button, input { font-family: inherit; }
   border-radius: 7px;
   width: 26px;
   height: 26px;
-  box-shadow: 0 2px 8px rgba(28, 30, 33, 0.1);
+  box-shadow: 0 2px 8px rgba(28,30,33,0.1);
+  cursor: pointer;
 }
 .session-checkbox {
   width: 16px;
@@ -502,98 +505,9 @@ button, input { font-family: inherit; }
   cursor: pointer;
 }
 
-/* ---------------------------------------------------------
- * LEGACY FILMSTRIP CLASSES
- * (kept for any dashboard.html markup still using these names)
- * --------------------------------------------------------- */
-.filmstrip-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 20px;
-}
 
-.filmstrip-card {
-  position: relative;
-  background: var(--panel);
-  border-radius: var(--radius);
-  padding: 10px 0;
-  border: 1px solid var(--border);
-}
+/* ─── Modals ──────────────────────────────────────────────────────────────── */
 
-.filmstrip-sprockets {
-  height: 10px;
-  background-image: radial-gradient(circle, var(--border) 2.5px, transparent 2.6px);
-  background-size: 16px 10px;
-  background-position: 6px center;
-}
-
-.filmstrip-media {
-  margin: 6px 10px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--panel-light);
-  min-height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.filmstrip-media img,
-.filmstrip-media video { width: 100%; display: block; }
-.filmstrip-media .filmstrip-media-empty {
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  padding: 30px 10px;
-}
-
-.filmstrip-info { padding: 4px 12px 8px; }
-.filmstrip-id   { font-family: var(--mono); font-size: 0.75rem; color: var(--text-dim); }
-.filmstrip-meta { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
-
-.filmstrip-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px 10px 4px;
-  transition: opacity 0.15s ease;
-}
-.filmstrip-actions .btn-admin { padding: 8px; font-size: 0.76rem; text-align: center; }
-.filmstrip-actions .btn-admin-primary { width: 100%; }
-.filmstrip-actions .btn-admin-primary:disabled,
-.filmstrip-actions .btn-admin-outline:disabled { opacity: 0.35; cursor: not-allowed; }
-.filmstrip-actions-row { display: flex; gap: 8px; }
-.filmstrip-actions-row .btn-admin { flex: 1; }
-
-.filmstrip-select-box {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 5;
-  width: 26px;
-  height: 26px;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  box-shadow: 0 2px 8px rgba(28, 30, 33, 0.12);
-}
-.filmstrip-grid.select-mode .filmstrip-select-box { display: flex; }
-.filmstrip-grid.select-mode .filmstrip-actions { opacity: 0.4; pointer-events: none; }
-.filmstrip-select-box input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-dark);
-  cursor: pointer;
-}
-.filmstrip-card.is-selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.35);
-}
-
-/* ---------------------------------------------------------
- * DELETE CONFIRM MODAL (mirrors index.html's #confirmModal)
- * --------------------------------------------------------- */
 .admin-modal-overlay {
   position: fixed;
   inset: 0;
@@ -602,6 +516,7 @@ button, input { font-family: inherit; }
   align-items: center;
   justify-content: center;
   z-index: 50;
+  backdrop-filter: blur(2px);
 }
 .admin-modal-overlay[hidden] { display: none; }
 
@@ -609,26 +524,29 @@ button, input { font-family: inherit; }
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 24px;
-  max-width: 320px;
+  padding: 28px 24px;
+  max-width: 340px;
   width: 90%;
   text-align: center;
-  box-shadow: 0 10px 40px rgba(28, 30, 33, 0.18);
+  box-shadow: 0 16px 48px rgba(28,30,33,0.2);
 }
-
-/* Wide variant — used by the template upload modal */
 .admin-modal-box--wide {
-  max-width: 520px;
+  max-width: 540px;
   text-align: left;
 }
 
 .admin-modal-title {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   margin-bottom: 16px;
+  letter-spacing: -0.01em;
 }
-
-.admin-modal-message { font-size: 0.95rem; margin-bottom: 18px; line-height: 1.4; }
+.admin-modal-message {
+  font-size: 0.92rem;
+  margin-bottom: 20px;
+  line-height: 1.5;
+  color: var(--text);
+}
 .admin-modal-actions {
   display: flex;
   gap: 10px;
@@ -637,163 +555,256 @@ button, input { font-family: inherit; }
 }
 .admin-modal-box--wide .admin-modal-actions { justify-content: flex-end; }
 
+/* Toast */
 .admin-toast {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  bottom: 28px;
   transform: translateX(-50%);
   background: var(--text);
-  border: 1px solid var(--text);
   color: #fff;
-  font-size: 0.85rem;
-  padding: 10px 18px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  padding: 11px 20px;
   border-radius: 999px;
   z-index: 60;
-  box-shadow: 0 4px 16px rgba(28, 30, 33, 0.25);
+  box-shadow: 0 6px 24px rgba(28,30,33,0.28);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.admin-toast[hidden] { display: none; }
+
+
+/* ─── Form fields (shared by printer + template modal) ───────────────────── */
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-@media (max-width: 640px) {
-  .counter-row { grid-template-columns: 1fr; }
-  .admin-header { flex-direction: column; align-items: flex-start; }
-  .admin-tabs { overflow-x: auto; flex-wrap: nowrap; }
+.form-group label,
+.form-field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
 }
 
-/* ---------------------------------------------------------
- * PRINTER PREFERENCES
- * --------------------------------------------------------- */
-.printer-prefs-section { margin-bottom: 36px; }
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="file"],
+.form-group select,
+.form-field input[type="text"],
+.form-field input[type="file"],
+.form-field select {
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-family: inherit;
+  width: 100%;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.form-group input[type="text"]:focus,
+.form-group select:focus,
+.form-field input[type="text"]:focus,
+.form-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.2);
+}
+.form-field { display: flex; flex-direction: column; gap: 5px; }
+.form-hint {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
 
-.printer-prefs-card {
+/* File input styling */
+.form-group input[type="file"],
+.form-field input[type="file"] {
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.form-group input[type="file"]::-webkit-file-upload-button,
+.form-field input[type="file"]::-webkit-file-upload-button {
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  margin-right: 10px;
+  transition: background 0.12s ease;
+}
+.form-group input[type="file"]::-webkit-file-upload-button:hover,
+.form-field input[type="file"]::-webkit-file-upload-button:hover {
+  background: var(--panel-mid);
+}
+
+/* Range sliders */
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-dark);
+  cursor: pointer;
+  height: 4px;
+  margin: 4px 0;
+}
+
+
+/* ─── Printer tab ─────────────────────────────────────────────────────────── */
+
+.printer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 640px;
+}
+
+.printer-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px 20px 16px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow-sm);
 }
 
-.pref-row {
+.printer-card-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 14px;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.pref-label-group { flex: 1; min-width: 0; }
-.pref-label { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-.pref-desc  { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; }
-.pref-desc code {
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  background: var(--panel-light);
-  padding: 1px 5px;
-  border-radius: 4px;
-  color: var(--accent-dark);
-}
-
-.pref-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
-
-.pref-row-stack { flex-direction: column; align-items: stretch; gap: 8px; margin-top: 16px; }
-
-.agent-status {
-  flex-shrink: 0;
-  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  white-space: nowrap;
+  justify-content: space-between;
+  gap: 10px;
 }
-.agent-status-dot {
-  width: 8px;
-  height: 8px;
+
+/* Agent status row */
+.printer-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 0.84rem;
+}
+
+.printer-agent-dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: var(--text-dim);
+  flex-shrink: 0;
   transition: background 0.2s ease;
 }
-.agent-status.is-online .agent-status-dot { background: var(--ok); }
-.agent-status.is-offline .agent-status-dot { background: var(--danger); }
-.agent-status.is-online  { color: var(--ok); }
-.agent-status.is-offline { color: var(--danger); }
-
-/* Printer status dot variants used by admin-dashboard.js */
-.dot-online  { background: var(--ok) !important; }
+.dot-online  { background: var(--ok)     !important; }
 .dot-offline { background: var(--danger) !important; }
 
-.printer-select {
-  width: 100%;
-  background: var(--panel-light);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 0.9rem;
-  font-family: inherit;
-  padding: 10px 12px;
-  border-radius: 8px;
-  appearance: none;
+.printer-agent-label {
+  color: var(--text-dim);
+  font-size: 0.84rem;
 }
-.printer-select:disabled { opacity: 0.5; cursor: not-allowed; }
-.printer-select:not(:disabled):focus { outline: none; border-color: var(--accent); }
+.printer-agent-label.is-online  { color: var(--ok); }
+.printer-agent-label.is-offline { color: var(--danger); }
 
-.pref-save-row {
+/* Printer selector inside card */
+.printer-select-row {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
+  gap: 10px;
+  align-items: flex-end;
 }
-
-.pref-saved-msg { font-size: 0.85rem; color: var(--ok); font-weight: 600; }
-
-.pref-align-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  margin-top: 14px;
-}
-
-.pref-align-control {
+.printer-select-row select {
+  flex: 1;
   background: var(--panel-light);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-family: inherit;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666b73' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.printer-select-row select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240,194,49,0.2);
+}
+.printer-select-row select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Alignment sliders */
+.alignment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.alignment-control {
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 12px 14px;
 }
-
-.pref-align-control-head {
+.alignment-control-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
 }
-.pref-align-control-head label   { font-size: 0.82rem; font-weight: 600; color: var(--text); }
-.pref-align-control-head output  {
-  font-family: var(--mono);
+.alignment-control-head label {
   font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.alignment-control-head output {
+  font-family: var(--mono);
+  font-size: 0.78rem;
   font-weight: 700;
   color: var(--accent-dark);
-  min-width: 2.5em;
+  min-width: 3em;
   text-align: right;
 }
-.pref-align-control input[type="range"] { width: 100%; accent-color: var(--accent-dark); cursor: pointer; }
-.pref-align-hint { margin-top: 6px; font-size: 0.72rem; color: var(--text-dim); }
 
-/* ---------------------------------------------------------
- * TEMPLATE MANAGER
- * ─────────────────────────────────────────────────────────
- * Styles for the Templates tab managed by admin-template-manager.js.
- * Cards are clean flat tiles (not film-strip) — the template list is
- * a design asset catalog, not a session archive, so the film aesthetic
- * would mislead staff about what they're looking at.
- * --------------------------------------------------------- */
+.printer-actions-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
 
-/* Card grid — same responsive fill pattern as the session grid */
+/* Offline placeholder */
+.printer-offline-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(224, 64, 63, 0.06);
+  border: 1px solid rgba(224, 64, 63, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  color: var(--danger);
+  font-weight: 500;
+}
+
+
+/* ─── Template manager ─────────────────────────────────────────────────────── */
+
 .template-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 16px;
   margin-top: 4px;
 }
 
-/* Individual template card */
 .template-card {
   position: relative;
   background: var(--panel);
@@ -802,91 +813,75 @@ button, input { font-family: inherit; }
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  cursor: default;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
   user-select: none;
 }
 .template-card:hover {
   border-color: #c3c6cc;
-  box-shadow: 0 2px 12px rgba(28, 30, 33, 0.07);
+  box-shadow: var(--shadow-md);
 }
-
-/* Disabled state — desaturated + reduced opacity so staff can see
-   at a glance which templates the kiosk won't show guests */
 .template-card--disabled {
-  opacity: 0.55;
+  opacity: 0.52;
 }
-.template-card--disabled .template-thumb {
-  filter: grayscale(0.7);
-}
+.template-card--disabled .template-thumb { filter: grayscale(0.65); }
 
 /* Drag states */
 .template-card.dragging {
-  opacity: 0.4;
+  opacity: 0.35;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.35);
+  box-shadow: 0 0 0 2px rgba(240,194,49,0.4);
 }
 .template-card.drag-over {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.45);
-  background: rgba(240, 194, 49, 0.04);
+  box-shadow: 0 0 0 2px rgba(240,194,49,0.45);
+  background: rgba(240,194,49,0.03);
 }
 
-/* Drag handle — sits in the top-left corner of the card */
 .template-card-drag-handle {
   position: absolute;
   top: 8px;
   left: 8px;
   z-index: 4;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   line-height: 1;
   color: var(--text-dim);
   cursor: grab;
   padding: 4px 5px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255,255,255,0.88);
   border: 1px solid var(--border);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(3px);
   transition: color 0.12s ease, background 0.12s ease;
 }
-.template-card-drag-handle:hover {
-  color: var(--text);
-  background: #fff;
-}
+.template-card-drag-handle:hover { color: var(--text); background: #fff; }
 .template-card-drag-handle:active { cursor: grabbing; }
 
-/* Thumbnail — the frame overlay PNG preview */
 .template-card-thumb {
   width: 100%;
   background: var(--panel-light);
-  min-height: 140px;
+  min-height: 130px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   border-bottom: 1px solid var(--border);
 }
-
 .template-thumb {
   width: 100%;
-  height: 100%;
+  max-height: 190px;
   object-fit: contain;
   display: block;
-  /* Keep aspect ratio honest — frame PNGs are 2:3 (2x6) or 2:3 (4x6),
-     both tall portrait — let object-fit handle it */
-  max-height: 200px;
 }
-
 .template-thumb--empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 140px;
+  min-height: 130px;
   color: var(--text-dim);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 
-/* Card body — name, meta line, asset type badge */
 .template-card-body {
   padding: 10px 12px 6px;
   display: flex;
@@ -894,33 +889,29 @@ button, input { font-family: inherit; }
   gap: 3px;
   flex: 1;
 }
-
 .template-card-name {
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .template-card-meta {
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--text-dim);
 }
-
 .template-card-type {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--accent-dark);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-/* Inline rename input — replaces .template-card-name in place */
 .template-name-input {
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--text);
   font-family: inherit;
@@ -931,12 +922,11 @@ button, input { font-family: inherit; }
   background: var(--panel-light);
   outline: none;
 }
-.template-name-input:focus { box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.25); }
+.template-name-input:focus { box-shadow: 0 0 0 2px rgba(240,194,49,0.22); }
 
-/* Action button row — Rename / Enable-Disable / Delete */
 .template-card-actions {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   padding: 6px 10px 8px;
   flex-wrap: wrap;
 }
@@ -946,7 +936,6 @@ button, input { font-family: inherit; }
   text-align: center;
 }
 
-/* Up / Down reorder buttons — compact pair in the card's bottom-right corner */
 .template-card-order {
   position: absolute;
   bottom: 8px;
@@ -963,7 +952,7 @@ button, input { font-family: inherit; }
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text-dim);
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -976,14 +965,11 @@ button, input { font-family: inherit; }
   color: var(--text);
   border-color: var(--accent-dark);
 }
-.btn-order:disabled {
-  opacity: 0.25;
-  cursor: not-allowed;
-}
+.btn-order:disabled { opacity: 0.22; cursor: not-allowed; }
 
-/* ---------------------------------------------------------
- * TEMPLATE UPLOAD FORM (inside the wide modal)
- * --------------------------------------------------------- */
+
+/* ─── Template upload form (inside wide modal) ───────────────────────────── */
+
 .template-upload-form {
   display: flex;
   flex-direction: column;
@@ -993,68 +979,27 @@ button, input { font-family: inherit; }
   padding-right: 4px;
 }
 
-/* Generic form field wrapper — label + input + optional hint */
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.form-field label {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.form-field input[type="text"],
-.form-field input[type="file"],
-.form-field select {
-  background: var(--panel-light);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 9px 12px;
-  color: var(--text);
-  font-size: 0.9rem;
-  font-family: inherit;
-  width: 100%;
-}
-.form-field input[type="text"]:focus,
-.form-field select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.2);
-}
-.form-field input[type="file"] {
-  padding: 7px 10px;
-  cursor: pointer;
-}
-.form-field input[type="file"]::-webkit-file-upload-button {
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 5px 10px;
-  cursor: pointer;
-  margin-right: 10px;
-  transition: background 0.12s ease;
-}
-.form-field input[type="file"]::-webkit-file-upload-button:hover {
-  background: var(--panel-light);
-}
-
-.form-hint {
-  font-size: 0.75rem;
-  color: var(--text-dim);
-  line-height: 1.5;
-}
-
-/* Upload progress / error line below the form */
 .template-upload-progress {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: var(--text-dim);
   padding: 6px 0 2px;
-  min-height: 1.5em;
+  min-height: 1.4em;
 }
 .template-upload-progress[hidden] { display: none; }
+
+
+/* ─── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 800px) {
+  .stat-grid { grid-template-columns: 1fr; gap: 12px; }
+  .admin-main { padding: 20px 16px 60px; }
+  .admin-topbar-inner { padding: 0 16px; }
+  .session-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+}
+
+@media (max-width: 540px) {
+  .admin-topbar-inner { height: 50px; }
+  .admin-tab { padding: 14px 10px 13px; font-size: 0.8rem; }
+  .alignment-grid { grid-template-columns: 1fr; }
+  .template-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}

@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Studrio Booth — Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../css/admin.css">
 </head>
-<body class="admin-body">
+<body>
 
-  <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+  <!-- ── Top bar ──────────────────────────────────────────────────────────── -->
   <header class="admin-topbar">
     <div class="admin-topbar-inner">
       <span class="admin-logo">Studrio Booth <span class="admin-logo-tag">Staff Control Room</span></span>
@@ -27,7 +28,7 @@
   <!-- ── Main content ─────────────────────────────────────────────────────── -->
   <main class="admin-main">
 
-    <!-- ── Overview tab ───────────────────────────────────────────────────── -->
+    <!-- ── Overview tab ─────────────────────────────────────────────────── -->
     <section class="admin-panel active" data-panel="stats">
       <div class="stat-grid">
         <div class="stat-card">
@@ -45,12 +46,13 @@
       </div>
     </section>
 
-    <!-- ── Sessions tab ───────────────────────────────────────────────────── -->
+    <!-- ── Sessions tab ─────────────────────────────────────────────────── -->
     <section class="admin-panel" data-panel="sessions">
 
       <!-- Date filter pills -->
       <div class="date-filter-row" id="dateFilterRow"></div>
 
+      <!-- Sessions header + select toggle -->
       <div class="gallery-section-head">
         <div class="gallery-section-head-left">
           <h2>Sessions</h2>
@@ -62,19 +64,19 @@
       <!-- Bulk action bar (shown in select mode) -->
       <div class="bulk-bar" id="bulkBar" hidden>
         <span class="bulk-count" id="bulkCount">0 selected</span>
-        <button class="btn-admin btn-admin-danger btn-sm" id="btnDeleteSelected">Delete Selected</button>
-        <button class="btn-admin btn-admin-ghost btn-sm" id="btnCancelSelect">Cancel</button>
+        <div class="bulk-bar-actions">
+          <button class="btn-admin btn-admin-danger btn-sm" id="btnDeleteSelected" disabled>Delete Selected</button>
+          <button class="btn-admin btn-admin-ghost  btn-sm" id="btnCancelSelect">Cancel</button>
+        </div>
       </div>
 
       <p class="admin-status" id="sessionStatus">Loading sessions…</p>
       <div class="session-grid" id="sessionGrid"></div>
 
-      <!-- Single/batch delete confirmation modal -->
+      <!-- Delete confirmation modal -->
       <div class="admin-modal-overlay" id="deleteModal" hidden>
         <div class="admin-modal-box">
-          <p class="admin-modal-message" id="deleteModalMessage">
-            Delete this session? This cannot be undone.
-          </p>
+          <p class="admin-modal-message" id="deleteModalMessage">Delete this session? This cannot be undone.</p>
           <div class="admin-modal-actions">
             <button class="btn-admin btn-admin-outline" id="btnDeleteCancel">Cancel</button>
             <button class="btn-admin btn-admin-danger" id="btnDeleteConfirm">Delete</button>
@@ -84,81 +86,110 @@
 
     </section>
 
-    <!-- ── Templates tab ──────────────────────────────────────────────────── -->
+    <!-- ── Templates tab ────────────────────────────────────────────────── -->
     <section class="admin-panel" data-panel="templates">
-
       <!--
         The Template Manager injects all its own HTML into #templateSection.
-        admin-template-manager.js calls templateManager.init() which calls
-        injectHTML() filling this container, then wires up events and loads.
+        admin-template-manager.js → templateManager.init() fills this container.
       -->
       <div id="templateSection"></div>
-
     </section>
 
-    <!-- ── Printer tab ────────────────────────────────────────────────────── -->
+    <!-- ── Printer tab ───────────────────────────────────────────────────── -->
     <section class="admin-panel" data-panel="printer">
 
-      <h2>Printer Setup</h2>
+      <div class="printer-section">
 
-      <!-- Agent status -->
-      <div class="printer-status-row">
-        <span class="printer-agent-dot" id="printerAgentDot"></span>
-        <span class="printer-agent-label" id="printerAgentLabel">Checking agent…</span>
-      </div>
+        <!-- ── Printer selector card ─────────────────────────────────────── -->
+        <div class="printer-card">
+          <div class="printer-card-title">
+            Printer Setup
+            <div class="printer-status-row" style="margin-bottom:0">
+              <span class="printer-agent-dot" id="printerAgentDot"></span>
+              <span class="printer-agent-label" id="printerAgentLabel">Checking agent…</span>
+            </div>
+          </div>
 
-      <!-- Printer selector -->
-      <div class="form-field" id="printerSelectorWrap" hidden>
-        <label for="printerSelect">Target printer</label>
-        <select id="printerSelect">
-          <option value="">— Select a printer —</option>
-        </select>
-        <button class="btn-admin btn-admin-primary" id="btnSavePrinter">Save</button>
-      </div>
+          <!-- Offline notice (hidden when online) -->
+          <div class="printer-offline-notice" id="printerOfflineNotice" hidden>
+            <span>⚠</span>
+            Start the local server first, then reload this page.
+          </div>
 
-      <!-- Alignment sliders -->
-      <div class="alignment-section" id="alignmentSection" hidden>
-        <h3>Print Alignment</h3>
-
-        <div class="form-field">
-          <label for="alignScale">Scale — <span id="alignScaleVal">100</span>%</label>
-          <input type="range" id="alignScale" min="80" max="100" step="1" value="100">
+          <!-- Selector + save (shown when online) -->
+          <div id="printerSelectorWrap" hidden>
+            <div class="form-group" style="margin-bottom:12px">
+              <label for="printerSelect">Target printer</label>
+              <div class="printer-select-row">
+                <select id="printerSelect">
+                  <option value="">— Select a printer —</option>
+                </select>
+                <button class="btn-admin btn-admin-primary btn-sm" id="btnSavePrinter">Save</button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="form-field">
-          <label for="alignX">Horizontal offset — <span id="alignXVal">0</span> px</label>
-          <input type="range" id="alignX" min="-200" max="200" step="1" value="0">
+        <!-- ── Alignment card ────────────────────────────────────────────── -->
+        <div class="printer-card" id="alignmentSection" hidden>
+          <p class="printer-card-title">Print Alignment</p>
+
+          <div class="alignment-grid">
+            <div class="alignment-control">
+              <div class="alignment-control-head">
+                <label for="alignScale">Scale</label>
+                <output id="alignScaleVal">100</output>
+              </div>
+              <input type="range" id="alignScale" min="80" max="100" step="1" value="100">
+              <p class="form-hint">%</p>
+            </div>
+
+            <div class="alignment-control">
+              <div class="alignment-control-head">
+                <label for="alignX">Horizontal offset</label>
+                <output id="alignXVal">0</output>
+              </div>
+              <input type="range" id="alignX" min="-200" max="200" step="1" value="0">
+              <p class="form-hint">px</p>
+            </div>
+
+            <div class="alignment-control">
+              <div class="alignment-control-head">
+                <label for="alignY">Vertical offset</label>
+                <output id="alignYVal">0</output>
+              </div>
+              <input type="range" id="alignY" min="-200" max="200" step="1" value="0">
+              <p class="form-hint">px</p>
+            </div>
+          </div>
+
+          <div class="printer-actions-row">
+            <button class="btn-admin btn-admin-outline" id="btnSaveAlignment">Save alignment</button>
+            <button class="btn-admin btn-admin-primary" id="btnTestPrint">Test Print</button>
+          </div>
         </div>
 
-        <div class="form-field">
-          <label for="alignY">Vertical offset — <span id="alignYVal">0</span> px</label>
-          <input type="range" id="alignY" min="-200" max="200" step="1" value="0">
-        </div>
-
-        <div class="printer-actions">
-          <button class="btn-admin btn-admin-outline" id="btnSaveAlignment">Save alignment</button>
-          <button class="btn-admin btn-admin-primary" id="btnTestPrint">Test Print</button>
-        </div>
-      </div>
+      </div><!-- /.printer-section -->
 
     </section>
 
   </main>
 
-  <!-- ── Toast ────────────────────────────────────────────────────────────── -->
+  <!-- ── Toast ─────────────────────────────────────────────────────────────── -->
   <div class="admin-toast" id="adminToast" hidden></div>
 
-  <!-- ── Scripts ──────────────────────────────────────────────────────────── -->
+  <!-- ── Scripts ───────────────────────────────────────────────────────────── -->
   <!--
-    Load order matters:
-      1. Supabase SDK  — required by cloud-storage.js
-      2. cloud-storage.js — provides adminStorage + adminTemplates
+    Load order:
+      1. Supabase SDK        — required by cloud-storage.js
+      2. cloud-storage.js    — provides adminStorage + adminTemplates
       3. admin-template-manager.js — depends on adminTemplates
-      4. admin-dashboard.js — ties everything together; calls templateManager.init()
+      4. admin-dashboard.js  — ties everything together
   -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="../js/cloud-storage.js"></script>
   <script src="../js/admin-template-manager.js"></script>
   <script src="../js/admin-dashboard.js"></script>
+
 </body>
 </html>

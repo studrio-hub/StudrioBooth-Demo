@@ -498,6 +498,9 @@ async function initPrinterTab() {
     configuredPrinter = configured;
     dotEl.classList.add("dot-online");
     labelEl.textContent = `Agent online · ${printers.length} printer${printers.length !== 1 ? "s" : ""} available`;
+    labelEl.classList.add("is-online");
+    const offlineNotice = document.getElementById("printerOfflineNotice");
+    if (offlineNotice) offlineNotice.hidden = true;
 
     // Populate printer selector
     selectEl.innerHTML = `<option value="">— Select a printer —</option>`;
@@ -513,7 +516,10 @@ async function initPrinterTab() {
 
   } catch (e) {
     dotEl.classList.add("dot-offline");
-    labelEl.textContent = "Agent offline — start the server first.";
+    labelEl.textContent = "Agent offline";
+    labelEl.classList.add("is-offline");
+    const offlineNotice = document.getElementById("printerOfflineNotice");
+    if (offlineNotice) offlineNotice.hidden = false;
     console.warn("[admin] Print agent not reachable:", e.message);
   }
 
