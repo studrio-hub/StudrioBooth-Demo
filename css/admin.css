@@ -76,6 +76,13 @@ button, input { font-family: inherit; }
 .btn-admin-danger:hover { background: #c73534; }
 .btn-admin-danger:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Small button modifier — used on session and template card action rows */
+.btn-sm {
+  padding: 7px 12px;
+  font-size: 0.78rem;
+  border-radius: 8px;
+}
+
 /* ---------------------------------------------------------
  * LOGIN SCREEN
  * --------------------------------------------------------- */
@@ -193,6 +200,39 @@ button, input { font-family: inherit; }
 }
 
 /* ---------------------------------------------------------
+ * TAB NAVIGATION
+ * --------------------------------------------------------- */
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.admin-tab {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 18px;
+  cursor: pointer;
+  margin-bottom: -1px; /* sits on the border-bottom of .admin-tabs */
+  transition: color 0.12s ease, border-color 0.12s ease;
+  border-radius: 0;
+}
+.admin-tab:hover { color: var(--text); }
+.admin-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.admin-panel { display: none; }
+.admin-panel.active { display: block; }
+
+/* ---------------------------------------------------------
  * ODOMETER-STYLE STAT COUNTERS
  * --------------------------------------------------------- */
 .counter-row {
@@ -264,6 +304,7 @@ button, input { font-family: inherit; }
 }
 .date-filter-row:empty { display: none; }
 
+/* Legacy class kept for compatibility */
 .date-filter-pill {
   flex-shrink: 0;
   font-size: 0.82rem;
@@ -284,6 +325,27 @@ button, input { font-family: inherit; }
   color: #fff;
 }
 
+/* Current class used by admin-dashboard.js */
+.date-pill {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.date-pill:hover { border-color: var(--accent-dark); color: var(--text); }
+.date-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .admin-status {
   color: var(--text-dim);
   font-size: 0.9rem;
@@ -291,8 +353,7 @@ button, input { font-family: inherit; }
 }
 .admin-status-empty { max-width: 420px; line-height: 1.5; }
 
-/* Bulk-select toolbar — appears when "Select" mode is on and at least
-   one card is checked. Sits above the grid. */
+/* Bulk-select toolbar */
 .select-bulk-bar {
   display: flex;
   align-items: center;
@@ -309,14 +370,148 @@ button, input { font-family: inherit; }
 .select-bulk-bar[hidden] { display: none; }
 .select-bulk-actions { display: flex; gap: 8px; }
 
+/* ---------------------------------------------------------
+ * SESSION CARDS (film-strip aesthetic, class names match admin-dashboard.js)
+ * --------------------------------------------------------- */
+.session-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.session-card {
+  display: flex;
+  align-items: stretch;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.session-card--selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.3);
+}
+
+/* Sprocket strips — left and right film edge */
+.session-card-sprockets {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: center;
+  width: 14px;
+  flex-shrink: 0;
+  background: var(--panel-light);
+  padding: 8px 0;
+  gap: 6px;
+}
+.session-card-sprockets.left { border-right: 1px solid var(--border); }
+.session-card-sprockets.right { border-left: 1px solid var(--border); }
+
+.sprocket-hole {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* Card body — contains thumb, meta, actions */
+.session-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 8px;
+  position: relative;
+}
+
+.session-card-thumb {
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-light);
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.session-thumb {
+  width: 100%;
+  display: block;
+  border-radius: 8px;
+}
+.session-thumb--empty {
+  width: 100%;
+  min-height: 100px;
+  background: var(--panel-light);
+  border-radius: 8px;
+}
+
+.session-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.session-card-id {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+.session-card-date {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.session-card-type {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.session-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+.session-card-actions .btn-admin {
+  width: 100%;
+  text-align: center;
+}
+
+/* Checkbox overlay (select mode) */
+.session-checkbox-wrap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  width: 26px;
+  height: 26px;
+  box-shadow: 0 2px 8px rgba(28, 30, 33, 0.1);
+}
+.session-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-dark);
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------
+ * LEGACY FILMSTRIP CLASSES
+ * (kept for any dashboard.html markup still using these names)
+ * --------------------------------------------------------- */
 .filmstrip-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 20px;
 }
 
-/* Each session card reads as a strip of film: sprocket-hole rows top
-   and bottom (dot pattern), inset image, light chrome around it. */
 .filmstrip-card {
   position: relative;
   background: var(--panel);
@@ -343,29 +538,16 @@ button, input { font-family: inherit; }
   justify-content: center;
 }
 .filmstrip-media img,
-.filmstrip-media video {
-  width: 100%;
-  display: block;
-}
+.filmstrip-media video { width: 100%; display: block; }
 .filmstrip-media .filmstrip-media-empty {
   color: var(--text-dim);
   font-size: 0.8rem;
   padding: 30px 10px;
 }
 
-.filmstrip-info {
-  padding: 4px 12px 8px;
-}
-.filmstrip-id {
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--text-dim);
-}
-.filmstrip-meta {
-  font-size: 0.8rem;
-  color: var(--text-dim);
-  margin-top: 2px;
-}
+.filmstrip-info { padding: 4px 12px 8px; }
+.filmstrip-id   { font-family: var(--mono); font-size: 0.75rem; color: var(--text-dim); }
+.filmstrip-meta { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
 
 .filmstrip-actions {
   display: flex;
@@ -374,28 +556,13 @@ button, input { font-family: inherit; }
   padding: 8px 10px 4px;
   transition: opacity 0.15s ease;
 }
-.filmstrip-actions .btn-admin {
-  padding: 8px 8px;
-  font-size: 0.76rem;
-  text-align: center;
-}
-.filmstrip-actions .btn-admin-primary {
-  width: 100%;
-}
+.filmstrip-actions .btn-admin { padding: 8px; font-size: 0.76rem; text-align: center; }
+.filmstrip-actions .btn-admin-primary { width: 100%; }
 .filmstrip-actions .btn-admin-primary:disabled,
-.filmstrip-actions .btn-admin-outline:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-.filmstrip-actions-row {
-  display: flex;
-  gap: 8px;
-}
-.filmstrip-actions-row .btn-admin {
-  flex: 1;
-}
+.filmstrip-actions .btn-admin-outline:disabled { opacity: 0.35; cursor: not-allowed; }
+.filmstrip-actions-row { display: flex; gap: 8px; }
+.filmstrip-actions-row .btn-admin { flex: 1; }
 
-/* Checkbox overlay — only interactive/visible while select mode is on */
 .filmstrip-select-box {
   position: absolute;
   top: 10px;
@@ -444,11 +611,31 @@ button, input { font-family: inherit; }
   border-radius: var(--radius);
   padding: 24px;
   max-width: 320px;
+  width: 90%;
   text-align: center;
   box-shadow: 0 10px 40px rgba(28, 30, 33, 0.18);
 }
+
+/* Wide variant — used by the template upload modal */
+.admin-modal-box--wide {
+  max-width: 520px;
+  text-align: left;
+}
+
+.admin-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
 .admin-modal-message { font-size: 0.95rem; margin-bottom: 18px; line-height: 1.4; }
-.admin-modal-actions { display: flex; gap: 10px; justify-content: center; }
+.admin-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+.admin-modal-box--wide .admin-modal-actions { justify-content: flex-end; }
 
 .admin-toast {
   position: fixed;
@@ -468,14 +655,13 @@ button, input { font-family: inherit; }
 @media (max-width: 640px) {
   .counter-row { grid-template-columns: 1fr; }
   .admin-header { flex-direction: column; align-items: flex-start; }
+  .admin-tabs { overflow-x: auto; flex-wrap: nowrap; }
 }
 
 /* ---------------------------------------------------------
  * PRINTER PREFERENCES
  * --------------------------------------------------------- */
-.printer-prefs-section {
-  margin-bottom: 36px;
-}
+.printer-prefs-section { margin-bottom: 36px; }
 
 .printer-prefs-card {
   background: var(--panel);
@@ -491,24 +677,9 @@ button, input { font-family: inherit; }
   gap: 24px;
 }
 
-.pref-label-group {
-  flex: 1;
-  min-width: 0;
-}
-
-.pref-label {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-
-.pref-desc {
-  font-size: 0.78rem;
-  color: var(--text-dim);
-  line-height: 1.5;
-}
-
+.pref-label-group { flex: 1; min-width: 0; }
+.pref-label { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.pref-desc  { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; }
 .pref-desc code {
   font-family: var(--mono);
   font-size: 0.75rem;
@@ -518,20 +689,10 @@ button, input { font-family: inherit; }
   color: var(--accent-dark);
 }
 
-.pref-divider {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 16px 0;
-}
+.pref-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
-.pref-row-stack {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  margin-top: 16px;
-}
+.pref-row-stack { flex-direction: column; align-items: stretch; gap: 8px; margin-top: 16px; }
 
-/* Printer Setup: agent online/offline indicator */
 .agent-status {
   flex-shrink: 0;
   display: inline-flex;
@@ -550,8 +711,12 @@ button, input { font-family: inherit; }
 }
 .agent-status.is-online .agent-status-dot { background: var(--ok); }
 .agent-status.is-offline .agent-status-dot { background: var(--danger); }
-.agent-status.is-online { color: var(--ok); }
+.agent-status.is-online  { color: var(--ok); }
 .agent-status.is-offline { color: var(--danger); }
+
+/* Printer status dot variants used by admin-dashboard.js */
+.dot-online  { background: var(--ok) !important; }
+.dot-offline { background: var(--danger) !important; }
 
 .printer-select {
   width: 100%;
@@ -565,10 +730,7 @@ button, input { font-family: inherit; }
   appearance: none;
 }
 .printer-select:disabled { opacity: 0.5; cursor: not-allowed; }
-.printer-select:not(:disabled):focus {
-  outline: none;
-  border-color: var(--accent);
-}
+.printer-select:not(:disabled):focus { outline: none; border-color: var(--accent); }
 
 .pref-save-row {
   display: flex;
@@ -580,13 +742,8 @@ button, input { font-family: inherit; }
   border-top: 1px solid var(--border);
 }
 
-.pref-saved-msg {
-  font-size: 0.85rem;
-  color: var(--ok);
-  font-weight: 600;
-}
+.pref-saved-msg { font-size: 0.85rem; color: var(--ok); font-weight: 600; }
 
-/* Printer Alignment sliders */
 .pref-align-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -607,14 +764,8 @@ button, input { font-family: inherit; }
   justify-content: space-between;
   margin-bottom: 8px;
 }
-
-.pref-align-control-head label {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.pref-align-control-head output {
+.pref-align-control-head label   { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+.pref-align-control-head output  {
   font-family: var(--mono);
   font-size: 0.8rem;
   font-weight: 700;
@@ -622,15 +773,288 @@ button, input { font-family: inherit; }
   min-width: 2.5em;
   text-align: right;
 }
+.pref-align-control input[type="range"] { width: 100%; accent-color: var(--accent-dark); cursor: pointer; }
+.pref-align-hint { margin-top: 6px; font-size: 0.72rem; color: var(--text-dim); }
 
-.pref-align-control input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent-dark);
-  cursor: pointer;
+/* ---------------------------------------------------------
+ * TEMPLATE MANAGER
+ * ─────────────────────────────────────────────────────────
+ * Styles for the Templates tab managed by admin-template-manager.js.
+ * Cards are clean flat tiles (not film-strip) — the template list is
+ * a design asset catalog, not a session archive, so the film aesthetic
+ * would mislead staff about what they're looking at.
+ * --------------------------------------------------------- */
+
+/* Card grid — same responsive fill pattern as the session grid */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 4px;
 }
 
-.pref-align-hint {
-  margin-top: 6px;
+/* Individual template card */
+.template-card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  cursor: default;
+  user-select: none;
+}
+.template-card:hover {
+  border-color: #c3c6cc;
+  box-shadow: 0 2px 12px rgba(28, 30, 33, 0.07);
+}
+
+/* Disabled state — desaturated + reduced opacity so staff can see
+   at a glance which templates the kiosk won't show guests */
+.template-card--disabled {
+  opacity: 0.55;
+}
+.template-card--disabled .template-thumb {
+  filter: grayscale(0.7);
+}
+
+/* Drag states */
+.template-card.dragging {
+  opacity: 0.4;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.35);
+}
+.template-card.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.45);
+  background: rgba(240, 194, 49, 0.04);
+}
+
+/* Drag handle — sits in the top-left corner of the card */
+.template-card-drag-handle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--text-dim);
+  cursor: grab;
+  padding: 4px 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(4px);
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.template-card-drag-handle:hover {
+  color: var(--text);
+  background: #fff;
+}
+.template-card-drag-handle:active { cursor: grabbing; }
+
+/* Thumbnail — the frame overlay PNG preview */
+.template-card-thumb {
+  width: 100%;
+  background: var(--panel-light);
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+
+.template-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  /* Keep aspect ratio honest — frame PNGs are 2:3 (2x6) or 2:3 (4x6),
+     both tall portrait — let object-fit handle it */
+  max-height: 200px;
+}
+
+.template-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+/* Card body — name, meta line, asset type badge */
+.template-card-body {
+  padding: 10px 12px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.template-card-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.template-card-meta {
+  font-family: var(--mono);
   font-size: 0.72rem;
   color: var(--text-dim);
 }
+
+.template-card-type {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Inline rename input — replaces .template-card-name in place */
+.template-name-input {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  font-family: inherit;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 3px 6px;
+  width: 100%;
+  background: var(--panel-light);
+  outline: none;
+}
+.template-name-input:focus { box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.25); }
+
+/* Action button row — Rename / Enable-Disable / Delete */
+.template-card-actions {
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px 8px;
+  flex-wrap: wrap;
+}
+.template-card-actions .btn-admin {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+/* Up / Down reorder buttons — compact pair in the card's bottom-right corner */
+.template-card-order {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.btn-order {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+.btn-order:hover:not(:disabled) {
+  background: var(--panel-light);
+  color: var(--text);
+  border-color: var(--accent-dark);
+}
+.btn-order:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------
+ * TEMPLATE UPLOAD FORM (inside the wide modal)
+ * --------------------------------------------------------- */
+.template-upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Generic form field wrapper — label + input + optional hint */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.form-field input[type="text"],
+.form-field input[type="file"],
+.form-field select {
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  width: 100%;
+}
+.form-field input[type="text"]:focus,
+.form-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(240, 194, 49, 0.2);
+}
+.form-field input[type="file"] {
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.form-field input[type="file"]::-webkit-file-upload-button {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  margin-right: 10px;
+  transition: background 0.12s ease;
+}
+.form-field input[type="file"]::-webkit-file-upload-button:hover {
+  background: var(--panel-light);
+}
+
+.form-hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+/* Upload progress / error line below the form */
+.template-upload-progress {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  padding: 6px 0 2px;
+  min-height: 1.5em;
+}
+.template-upload-progress[hidden] { display: none; }
