@@ -15,6 +15,13 @@
  * This module is self-contained — it owns its DOM section and wires
  * everything up internally. admin-dashboard.js calls templateManager.init()
  * once after auth is confirmed.
+ *
+ * IMPORTANT — Storage RLS requirement:
+ *   Uploading needs INSERT (and UPDATE, since uploads use upsert:true)
+ *   policies on storage.objects scoped to the `templates/` path for the
+ *   authenticated role. If your bucket only has a session-scoped INSERT
+ *   policy, uploads will fail with an RLS violation — see
+ *   supabase-storage-templates-policy-patch.sql.
  */
 
 const templateManager = (() => {
@@ -25,7 +32,6 @@ const templateManager = (() => {
 
   let _containerEl   = null; // #templateGrid — card grid
   let _statusEl      = null; // #templateStatus — loading/empty message
-  let _uploadModal   = null; // #templateUploadModal
   let _toast         = null; // shared with admin-dashboard.js
 
   let _templates     = [];
@@ -35,7 +41,13 @@ const templateManager = (() => {
 
   function showToast(message) {
     if (!_toast) _toast = document.getElementById("adminToast");
-    if (!_toast) { console.warn("[templateManager] No toast element found"); return; }
+    if (!_toast) {
+      // No toast element found — fall back to an alert so the message is
+      // never silently lost (this should not normally happen).
+      console.warn("[templateManager] No toast element found — falling back to alert()");
+      alert(message);
+      return;
+    }
     _toast.textContent = message;
     _toast.hidden = false;
     clearTimeout(showToast._t);
@@ -229,7 +241,13 @@ const templateManager = (() => {
     const modal      = sel("templateDeleteModal");
     const cancelBtn  = sel("btnTemplateDeleteCancel");
     const confirmBtn = sel("btnTemplateDeleteConfirm");
-    if (!modal) return;
+
+    if (!modal || !cancelBtn || !confirmBtn) {
+      console.error("[templateManager] wireDeleteModal: missing element(s)", {
+        modal: !!modal, cancelBtn: !!cancelBtn, confirmBtn: !!confirmBtn
+      });
+      return;
+    }
 
     cancelBtn.addEventListener("click", () => {
       _pendingDeleteId = null;
@@ -261,13 +279,30 @@ const templateManager = (() => {
     const modal      = sel("templateUploadModal");
     const cancelBtn  = sel("btnTemplateUploadCancel");
     const submitBtn  = sel("btnTemplateUploadSubmit");
-    const form       = sel("templateUploadForm");
     const progressEl = sel("templateUploadProgress");
 
-    if (!openBtn || !modal) return;
+    // Defensive check — if dashboard.html and this file ever drift out of
+    // sync (e.g. a stale cached copy of one but not the other), fail LOUDLY
+    // in the console instead of the button just doing nothing.
+    if (!openBtn || !modal || !cancelBtn || !submitBtn) {
+      console.error("[templateManager] wireUploadModal: missing required element(s) — the upload button will not work.", {
+        openBtn: !!openBtn, modal: !!modal, cancelBtn: !!cancelBtn, submitBtn: !!submitBtn
+      });
+      return;
+    }
 
     openBtn.addEventListener("click", () => {
-      if (form) form.reset();
+      console.log("[templateManager] Upload Template button clicked — opening modal.");
+      const nameEl = sel("templateName");
+      const typeEl = sel("templateAssetType");
+      const f2El   = sel("templateFile2x6");
+      const f4El   = sel("templateFile4x6");
+      const thEl   = sel("templateThumb");
+      if (nameEl) nameEl.value = "";
+      if (typeEl) typeEl.value = "frame_template";
+      if (f2El)   f2El.value = "";
+      if (f4El)   f4El.value = "";
+      if (thEl)   thEl.value = "";
       if (progressEl) { progressEl.textContent = ""; progressEl.hidden = true; }
       modal.hidden = false;
     });
@@ -275,11 +310,31 @@ const templateManager = (() => {
     cancelBtn.addEventListener("click", () => { modal.hidden = true; });
 
     submitBtn.addEventListener("click", async () => {
-      const name        = sel("templateName").value.trim();
-      const assetType   = sel("templateAssetType").value;
-      const file2x6     = sel("templateFile2x6").files[0] || null;
-      const file4x6     = sel("templateFile4x6").files[0] || null;
-      const thumbFile   = sel("templateThumb").files[0]   || null;
+      console.log("[templateManager] Upload submit clicked.");
+
+      let name, assetType, file2x6, file4x6, thumbFile;
+      try {
+        const nameEl = sel("templateName");
+        const typeEl = sel("templateAssetType");
+        const f2El   = sel("templateFile2x6");
+        const f4El   = sel("templateFile4x6");
+        const thEl   = sel("templateThumb");
+
+        if (!nameEl || !typeEl || !f2El || !f4El) {
+          throw new Error("Upload form fields not found in the page — try a hard refresh (Ctrl+Shift+R).");
+        }
+
+        name      = nameEl.value.trim();
+        assetType = typeEl.value;
+        file2x6   = f2El.files[0] || null;
+        file4x6   = f4El.files[0] || null;
+        thumbFile = thEl ? (thEl.files[0] || null) : null;
+      } catch (e) {
+        // Reading form values failed — surface it instead of dying silently.
+        console.error("[templateManager] Could not read upload form:", e);
+        showToast(`Could not read upload form: ${e.message}`);
+        return;
+      }
 
       if (!name) { showToast("Please enter a template name."); return; }
       if (!file2x6 && !file4x6) { showToast("Upload at least one frame file (2×6 or 4×6)."); return; }
@@ -294,6 +349,11 @@ const templateManager = (() => {
         showToast(`Template "${name}" uploaded.`);
         await loadTemplates();
       } catch (e) {
+        console.error("[templateManager] Upload failed:", e);
+        // Row Level Security violations land here — if you see
+        // "new row violates row-level security policy" or similar, run
+        // supabase-storage-templates-policy-patch.sql in the Supabase SQL
+        // editor to add the missing templates/ path INSERT/UPDATE policies.
         showToast(`Upload failed: ${e.message}`);
         if (progressEl) progressEl.textContent = `Error: ${e.message}`;
       } finally {
@@ -313,6 +373,7 @@ const templateManager = (() => {
       _templates = await adminTemplates.listTemplates();
       renderTemplateList(_templates);
     } catch (e) {
+      console.error("[templateManager] loadTemplates failed:", e);
       _statusEl.hidden = false;
       _statusEl.textContent = `Could not load templates: ${e.message}`;
     }
@@ -322,7 +383,10 @@ const templateManager = (() => {
 
   function injectHTML() {
     const target = document.getElementById("templateSection");
-    if (!target) return;
+    if (!target) {
+      console.error("[templateManager] #templateSection not found in the page — dashboard.html may be out of date.");
+      return;
+    }
 
     target.innerHTML = `
       <!-- ── Template Manager ─────────────────────────────────────────── -->
@@ -331,7 +395,7 @@ const templateManager = (() => {
           <h2>Template Manager</h2>
           <p class="gallery-count" id="templateCount"></p>
         </div>
-        <button class="btn-admin btn-admin-primary" id="btnUploadTemplate">+ Upload Template</button>
+        <button class="btn-admin btn-admin-primary" id="btnUploadTemplate" type="button">+ Upload Template</button>
       </div>
 
       <p class="admin-status" id="templateStatus">Loading templates…</p>
@@ -344,8 +408,8 @@ const templateManager = (() => {
             Delete this template? This cannot be undone.
           </p>
           <div class="admin-modal-actions">
-            <button class="btn-admin btn-admin-outline" id="btnTemplateDeleteCancel">Cancel</button>
-            <button class="btn-admin btn-admin-danger" id="btnTemplateDeleteConfirm">Delete</button>
+            <button class="btn-admin btn-admin-outline" id="btnTemplateDeleteCancel" type="button">Cancel</button>
+            <button class="btn-admin btn-admin-danger" id="btnTemplateDeleteConfirm" type="button">Delete</button>
           </div>
         </div>
       </div>
@@ -395,8 +459,8 @@ const templateManager = (() => {
           </div>
 
           <div class="admin-modal-actions">
-            <button class="btn-admin btn-admin-outline" id="btnTemplateUploadCancel">Cancel</button>
-            <button class="btn-admin btn-admin-primary" id="btnTemplateUploadSubmit">Upload</button>
+            <button class="btn-admin btn-admin-outline" id="btnTemplateUploadCancel" type="button">Cancel</button>
+            <button class="btn-admin btn-admin-primary" id="btnTemplateUploadSubmit" type="button">Upload</button>
           </div>
         </div>
       </div>
@@ -421,6 +485,10 @@ const templateManager = (() => {
       injectHTML();
       _containerEl = document.getElementById("templateGrid");
       _statusEl    = document.getElementById("templateStatus");
+      if (!_containerEl || !_statusEl) {
+        console.error("[templateManager] init: #templateGrid or #templateStatus missing after injectHTML — aborting init.");
+        return;
+      }
       wireUploadModal();
       wireDeleteModal();
       await loadTemplates();

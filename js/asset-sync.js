@@ -22,6 +22,19 @@
  * properties pointing to blob: URLs — strip.js reads these instead of the
  * hardcoded assets/designs/ paths that were there before.
  *
+ * WHY PERIODIC RE-SYNC (added — was boot-only before)?
+ *   The Admin panel runs on studrio.cc; the kiosk's local server runs on
+ *   localhost on the booth PC. These are different origins on different
+ *   machines, so there is no way for the Admin panel to "push" a sync
+ *   signal to a running kiosk — there's nothing on the Admin side that
+ *   could reach the booth's localhost. Instead, the kiosk pulls on its own
+ *   schedule: once at boot (as before), and now also every
+ *   SYNC_POLL_INTERVAL_MS while the app stays open, so a booth left running
+ *   for hours/days still picks up new or edited templates automatically,
+ *   without needing a manual "sync" button anywhere or a reboot.
+ *   Each poll is cheap: it only re-downloads assets whose version number
+ *   increased since the last sync (see syncAsset()).
+ *
  * WHY IndexedDB for blob storage?
  *   localStorage can only hold strings. Storing a 500 KB PNG as a base64
  *   string is wasteful and slow. IndexedDB supports binary blobs natively
@@ -51,12 +64,19 @@ const assetSync = (() => {
   const IDB_STORE_BLOBS    = "blobs";    // key = storage path, value = Blob
   const LS_KEY_META        = "studrio_template_meta"; // JSON array of template metadata
 
+  // How often to re-check Supabase for new/updated templates while the
+  // kiosk stays open, in addition to the sync that runs once at boot.
+  const SYNC_POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+
   // In-memory map of storage path → Object URL (built once after sync)
   const _objectUrls = new Map();
 
   // Resolved template list (populated by sync or cache load)
   let _templates = [];
   let _syncStatus = "idle"; // "idle" | "syncing" | "online" | "offline" | "error"
+  let _lastSyncAt = null;   // Date of the last successful sync attempt (online or offline fallback)
+  let _syncing = false;     // guards against overlapping sync() calls
+  let _pollTimer = null;
 
   // ── IndexedDB ───────────────────────────────────────────────────────────────
 
@@ -248,52 +268,80 @@ const assetSync = (() => {
   // ── Main sync ───────────────────────────────────────────────────────────────
 
   async function sync() {
-    _syncStatus = "syncing";
-
-    // Try to reach the local server (which proxies Supabase)
-    let serverTemplates;
-    try {
-      const res = await fetch(TEMPLATES_ENDPOINT);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      serverTemplates = await res.json();
-    } catch (e) {
-      console.warn("[assetSync] Could not reach server:", e.message, "— falling back to cache.");
-      _syncStatus = "offline";
-      _templates = await loadFromCache();
+    if (_syncing) {
+      console.log("[assetSync] Sync already in progress — skipping this trigger.");
       return;
     }
+    _syncing = true;
+    _syncStatus = "syncing";
 
-    const cachedMeta = loadCachedMeta();
-    const resolved   = [];
+    try {
+      // Try to reach the local server (which proxies Supabase)
+      let serverTemplates;
+      try {
+        const res = await fetch(TEMPLATES_ENDPOINT);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        serverTemplates = await res.json();
+      } catch (e) {
+        console.warn("[assetSync] Could not reach server:", e.message, "— falling back to cache.");
+        _syncStatus = "offline";
+        _templates = await loadFromCache();
+        _lastSyncAt = new Date();
+        return;
+      }
 
-    await pruneDeletedAssets(serverTemplates);
+      const cachedMeta = loadCachedMeta();
+      const resolved   = [];
 
-    for (const template of serverTemplates) {
-      if (!template.enabled) continue; // skip disabled templates
+      await pruneDeletedAssets(serverTemplates);
 
-      const [overlayUrl2x6, overlayUrl4x6, thumbnailUrl] = await Promise.all([
-        syncAsset(template.overlay_path_2x6, template.version || 1, cachedMeta),
-        syncAsset(template.overlay_path_4x6, template.version || 1, cachedMeta),
-        syncAsset(template.thumbnail_path,   template.version || 1, cachedMeta)
-      ]);
+      for (const template of serverTemplates) {
+        if (!template.enabled) continue; // skip disabled templates
 
-      resolved.push({
-        ...template,
-        overlayUrl2x6,
-        overlayUrl4x6,
-        thumbnailUrl,
-        // Record the synced version per-asset in the metadata cache
-        _overlay_version_2x6: template.version || 1,
-        _overlay_version_4x6: template.version || 1,
-        _thumbnail_version:   template.version || 1
-      });
+        const [overlayUrl2x6, overlayUrl4x6, thumbnailUrl] = await Promise.all([
+          syncAsset(template.overlay_path_2x6, template.version || 1, cachedMeta),
+          syncAsset(template.overlay_path_4x6, template.version || 1, cachedMeta),
+          syncAsset(template.thumbnail_path,   template.version || 1, cachedMeta)
+        ]);
+
+        resolved.push({
+          ...template,
+          overlayUrl2x6,
+          overlayUrl4x6,
+          thumbnailUrl,
+          // Record the synced version per-asset in the metadata cache
+          _overlay_version_2x6: template.version || 1,
+          _overlay_version_4x6: template.version || 1,
+          _thumbnail_version:   template.version || 1
+        });
+      }
+
+      // Save updated metadata for offline use
+      saveCachedMeta(resolved);
+      _templates  = resolved;
+      _syncStatus = "online";
+      _lastSyncAt = new Date();
+      console.log(`[assetSync] Sync complete — ${resolved.length} templates ready.`);
+    } finally {
+      _syncing = false;
     }
+  }
 
-    // Save updated metadata for offline use
-    saveCachedMeta(resolved);
-    _templates  = resolved;
-    _syncStatus = "online";
-    console.log(`[assetSync] Sync complete — ${resolved.length} templates ready.`);
+  // ── Periodic polling ─────────────────────────────────────────────────────────
+
+  function startPolling() {
+    if (_pollTimer) return; // already running
+    _pollTimer = setInterval(() => {
+      console.log("[assetSync] Periodic re-sync check…");
+      sync().catch((e) => console.error("[assetSync] Periodic sync error:", e));
+    }, SYNC_POLL_INTERVAL_MS);
+  }
+
+  function stopPolling() {
+    if (_pollTimer) {
+      clearInterval(_pollTimer);
+      _pollTimer = null;
+    }
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -301,8 +349,11 @@ const assetSync = (() => {
   return {
     /*
      * init() — call once during boot (before the kiosk reaches the design
-     * page). Returns a Promise that resolves when sync is done (or falls
-     * back). Safe to await in boot.js.
+     * page). Returns a Promise that resolves when the first sync is done
+     * (or falls back to cache). Safe to await in boot.js.
+     * Also starts periodic background re-syncing (see SYNC_POLL_INTERVAL_MS)
+     * so newly uploaded or edited templates in the admin panel show up on
+     * this kiosk automatically — no reboot and no manual sync step needed.
      */
     async init() {
       try {
@@ -312,6 +363,7 @@ const assetSync = (() => {
         _syncStatus = "error";
         _templates  = await loadFromCache().catch(() => []);
       }
+      startPolling();
     },
 
     /*
@@ -327,18 +379,36 @@ const assetSync = (() => {
 
     /*
      * status() — "idle" | "syncing" | "online" | "offline" | "error"
-     * Useful for the boot screen to show "Downloading templates…"
+     * Useful for a boot screen or debug overlay to show "Downloading templates…"
      */
     status() {
       return _syncStatus;
     },
 
     /*
-     * forceRefresh() — re-runs the sync without a page reload.
-     * Useful for the admin panel's "Sync Now" button.
+     * lastSyncAt() — Date of the last completed sync attempt, or null if
+     * no sync has run yet. Useful for a small "last synced Xm ago" label.
+     */
+    lastSyncAt() {
+      return _lastSyncAt;
+    },
+
+    /*
+     * forceRefresh() — re-runs the sync immediately without waiting for the
+     * next poll interval, and without a page reload. Exposed for debugging
+     * from the browser console on the kiosk itself:
+     *   assetSync.forceRefresh().then(() => location.reload())
+     * (a full reload is only needed if strip.js has already read
+     * getTemplates() and needs to re-render with the new list).
      */
     async forceRefresh() {
       await sync();
-    }
+    },
+
+    /*
+     * stopPolling() — stops the periodic background re-sync. Not normally
+     * needed; exposed in case a future settings screen wants to pause it.
+     */
+    stopPolling
   };
 })();
