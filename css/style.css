@@ -879,18 +879,10 @@ button {
 }
 
 /* ---- Design themes applied to .strip-single ---- */
-.Original-Frame { background: #ffffff; color: #222; }
-.Coastal-Cool { background: #ffffff; color: #222; }
-.Few-Of-Us { background: #ffffff; color: #222; }
-.Miffy { background: #ffffff; color: #222; }
-.Nostalgia { background: #ffffff; color: #222; }
-.Princess-Peaches { background: #ffffff; color: #222; }
-.The-Good-Folks { background: #ffffff; color: #222; }
-.Whatever-It-Takes { background: #ffffff; color: #222; }
-.Where-Is-My-Mind { background: #ffffff; color: #222; }
-.XOXO { background: #ffffff; color: #222; }
-.Super-Mario { background: #ffffff; color: #222; }
-
+.theme-minimal-white { background: #ffffff; color: #222; }
+.theme-black-white { background: #111111; color: #fff; filter: grayscale(1); }
+.theme-retro { background: #f4e3c1; color: #6b4423; border: 3px solid #c9a24a; }
+.theme-pastel { background: linear-gradient(160deg, #ffd6e8, #d6e8ff); color: #444; }
 
 
 /* ================= PAGE 5: STRIP DESIGN ================= */

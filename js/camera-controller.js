@@ -95,7 +95,7 @@ const cameraController = {
    * DIGITAL ZOOM ONLY — this never touches the DSLR's optical zoom.
    * It simply scales the on-screen preview (a visual crop/enlarge),
    * and capturePhoto() below crops the captured frame to match so
-   * the exported photo lines up with what the guest saw on screens.
+   * the exported photo lines up with what the guest saw on screen.
    */
   async setZoom(level) {
     if (!this.mode) throw new Error("Camera not connected");
@@ -122,13 +122,29 @@ const cameraController = {
     else if (this.mode === "mock") blob = await mockCameraBridge.capturePhoto(this.mirrorEnabled);
     else throw new Error("Camera not connected");
 
-    if (this.zoomLevel <= 1.001) return blob;
-    return this._cropToZoom(blob, this.zoomLevel);
+    // Apply zoom crop and/or mirror so the exported photo always matches
+    // exactly what the guest saw on the live preview.
+    //
+    // Mock bridge already bakes mirror into its canvas capture (the mirror
+    // flag is passed directly to capturePhoto above), so we only need the
+    // post-processing step for the real bridge, OR when zoom > 1x (which
+    // requires a canvas pass anyway, so we fold mirror in at the same time).
+    const needsZoomCrop   = this.zoomLevel > 1.001;
+    const needsMirrorReal = this.mirrorEnabled && this.mode === "real";
+
+    if (needsZoomCrop || needsMirrorReal) {
+      return this._cropToZoomAndMirror(blob, this.zoomLevel, this.mirrorEnabled && this.mode === "real");
+    }
+
+    return blob;
   },
 
-  /* Crops the captured frame to the same centered region the zoomed
-     preview was showing, then scales it back up to full resolution. */
-  async _cropToZoom(blob, zoom) {
+  /* Crops the captured frame to the same centered region the zoomed preview
+     was showing (zoom > 1x), then optionally mirrors horizontally (real bridge
+     only — mock bridge already handles mirror in its own canvas path), and
+     scales back up to full resolution. Both operations share the same canvas
+     pass so there's no double-decode penalty. */
+  async _cropToZoomAndMirror(blob, zoom, mirror) {
     const url = URL.createObjectURL(blob);
     try {
       const img = await new Promise((resolve, reject) => {
@@ -148,6 +164,12 @@ const cameraController = {
       const sx    = (img.naturalWidth  - cropW) / 2;
       const sy    = (img.naturalHeight - cropH) / 2;
 
+      if (mirror) {
+        // Flip the canvas horizontally, then draw — the output pixels are
+        // already mirrored so no second pass is needed.
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
       ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
       return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
     } finally {

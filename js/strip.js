@@ -6,91 +6,102 @@
 
 const STRIP_DESIGNS = [
   {
-    id: "original-l",
-    label: "Original White",
-    cssClass: "Original-Frame",
+    id: "original",
+    label: "Original",
+    cssClass: "theme-minimal-white",
     overlays: {
-      "2x6": "assets/designs/2x6/Orignal.png"
+      "2x6": "assets/designs/2x6/Original.png",
+      "4x6": "assets/designs/4x6/Original.png"
     }
   },
   {
-    id: "coastal-cool-l",
+    id: "coastal-cool",
     label: "Coastal Cool",
-    cssClass: "Coastal-Cool",
+    cssClass: "theme-coastal",
     overlays: {
-      "2x6": "assets/designs/2x6/CoastalCool.png"
+      "2x6": "assets/designs/2x6/CoastalCool.png",
+      "4x6": null
     }
   },
   {
-    id: "few-of-us-l",
-    label: "Few Of Us",
-    cssClass: "Few-Of-Us",
+    id: "few-of-us",
+    label: "Few of Us",
+    cssClass: "theme-few-of-us",
     overlays: {
-      "2x6": "assets/designs/2x6/FewOfUs.png"
+      "2x6": "assets/designs/2x6/FewOfUs.png",
+      "4x6": null
     }
   },
   {
-    id: "miffy-l",
+    id: "miffy",
     label: "Miffy",
-    cssClass: "Miffy",
+    cssClass: "theme-miffy",
     overlays: {
-      "2x6": "assets/designs/2x6/Miffy.png"
+      "2x6": "assets/designs/2x6/Miffy.png",
+      "4x6": null
     }
   },
   {
-    id: "nostalgia-l",
+    id: "nostalgia",
     label: "Nostalgia",
-    cssClass: "Nostalgia",
+    cssClass: "theme-nostalgia",
     overlays: {
-      "2x6": "assets/designs/2x6/Nostalgia.png"
+      "2x6": "assets/designs/2x6/Nostalgia.png",
+      "4x6": null
     }
   },
   {
     id: "princess-peaches",
     label: "Princess Peaches",
-    cssClass: "Princess-Peaches",
+    cssClass: "theme-princess-peaches",
     overlays: {
-      "2x6": "assets/designs/2x6/PrincessPeaches.png"
-    }
-  },
-  {
-    id: "the-good-folks",
-    label: "The Good Folks",
-    cssClass: "The-Good-Folks",
-    overlays: {
-      "2x6": "assets/designs/2x6/TheGoodFolks.png"
-    }
-  },
-  {
-    id: "whatever-it-takes",
-    label: "Whatever It Takes",
-    cssClass: "Whatever-It-Takes",
-    overlays: {
-      "2x6": "assets/designs/2x6/WhateverItTakes.png"
-    }
-  },
-  {
-    id: "where-is-my-mind",
-    label: "Where Is My Mind",
-    cssClass: "Where-Is-My-Mind",
-    overlays: {
-      "2x6": "assets/designs/2x6/WhereIsMyMind.png"
-    }
-  },
-  {
-    id: "xoxo-l",
-    label: "XOXO",
-    cssClass: "XOXO",
-    overlays: {
-      "2x6": "assets/designs/2x6/XOXO.png"
+      "2x6": "assets/designs/2x6/PrincessPeaches.png",
+      "4x6": null
     }
   },
   {
     id: "super-mario",
     label: "Super Mario",
-    cssClass: "Super-Mario",
+    cssClass: "theme-super-mario",
     overlays: {
-      "2x6": "assets/designs/2x6/SuperMario.png"
+      "2x6": "assets/designs/2x6/SuperMario.png",
+      "4x6": null
+    }
+  },
+  {
+    id: "the-good-folks",
+    label: "The Good Folks",
+    cssClass: "theme-the-good-folks",
+    overlays: {
+      "2x6": "assets/designs/2x6/TheGoodFolks.png",
+      "4x6": null
+    }
+  },
+  {
+    id: "whatever-it-takes",
+    label: "Whatever It Takes",
+    cssClass: "theme-retro",
+    overlays: {
+      "2x6": "assets/designs/2x6/WhateverItTakes.png",
+      "4x6": null
+    }
+  },
+  {
+    id: "where-is-my-mind",
+    label: "Where Is My Mind",
+    cssClass: "theme-where-is-my-mind",
+    overlays: {
+      "2x6": "assets/designs/2x6/WhereIsMyMind.png",
+      "4x6": null
+    }
+  },
+  {
+    id: "xoxo",
+    label: "XOXO",
+    cssClass: "theme-pastel",
+    overlays: {
+      "2x6": "assets/designs/2x6/XOXO.png",
+      "4x6": null
     }
   }
 ];
@@ -587,7 +598,23 @@ async exportPrintPNG({ frameType, selectedShots, designId, qrText }) {
       selectedShots: sessionState.selectedShots
     };
 
-    const entries = STRIP_DESIGNS.map((design) => {
+    // Only show designs that have an overlay for the currently-selected frame type.
+    // Most designs are 2x6-only; showing them on 4x6 would render with no overlay.
+    const availableDesigns = STRIP_DESIGNS.filter(
+      (d) => d.overlays && d.overlays[opts.frameType]
+    );
+
+    // If the currently selected design isn't available for this frame type,
+    // auto-select the first available one so the preview isn't blank.
+    if (currentDesignId && !availableDesigns.find((d) => d.id === currentDesignId)) {
+      const fallback = availableDesigns[0];
+      if (fallback) {
+        sessionState.design = fallback.id;
+        currentDesignId = fallback.id;
+      }
+    }
+
+    const entries = availableDesigns.map((design) => {
       const swatch = document.createElement("button");
       swatch.className = "design-swatch" + (design.id === currentDesignId ? " selected" : "");
       swatch.dataset.designId = design.id;
