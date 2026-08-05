@@ -19,43 +19,8 @@ const sessionState = {
 
 /* ---------------- Navigation ---------------- */
 function goToPage(pageName) {
-  const allPages = document.querySelectorAll(".page");
-  const currentPage = document.querySelector(".page.active");
-  const nextPage = document.querySelector(`.page[data-page="${pageName}"]`);
-
-  if (!nextPage || currentPage === nextPage) return;
-
-  const tl = gsap.timeline();
-
-  if (currentPage) {
-    tl.to(currentPage, {
-      opacity: 0,
-      x: -30,
-      duration: 0.4,
-      ease: "power2.inOut",
-      onComplete: () => {
-        currentPage.classList.remove("active");
-        gsap.set(currentPage, { x: 0 }); // Reset position
-      }
-    });
-  }
-
-  tl.fromTo(nextPage, 
-    { opacity: 0, x: 30 },
-    { 
-      opacity: 1, 
-      x: 0, 
-      duration: 0.5, 
-      ease: "power2.out",
-      onStart: () => {
-        nextPage.classList.add("active");
-        if (typeof uiAnimations !== 'undefined') {
-          uiAnimations.animatePageIn(nextPage);
-        }
-      }
-    },
-    "-=0.2"
-  );
+  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+  document.querySelector(`.page[data-page="${pageName}"]`).classList.add("active");
 }
 
 /* ---------------- PAGE 1: SETUP ---------------- */
@@ -373,7 +338,5 @@ async function resetSessionAndRestart() {
 }
 
 /* Frame thumbnails — paths relative to /kiosk/ */
-const thumb2x6 = document.getElementById("frameThumb2x6");
-const thumb4x6 = document.getElementById("frameThumb4x6");
-if (thumb2x6) thumb2x6.src = "assets/designs/thumbnail/2x6_Strip_Thumbnail.png";
-if (thumb4x6) thumb4x6.src = "assets/designs/thumbnail/4x6_Strip_Thumbnail.png";
+document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";
+document.getElementById("frameThumb4x6").src = "assets/designs/4x6_Strip_Thumbnail.png";

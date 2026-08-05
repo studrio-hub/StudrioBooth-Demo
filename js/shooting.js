@@ -55,17 +55,13 @@ const shootingModule = {
      before the first shot — replaces the old 3-2-1 countdown. */
   async runHeadsUp() {
     this.els.headsUpText.textContent = "Get Ready!";
-    gsap.set(this.els.headsUpOverlay, { opacity: 0, display: "flex" });
-    gsap.set(this.els.headsUpText, { scale: 0.5, opacity: 0 });
+    this.els.headsUpText.classList.remove("pop");
+    void this.els.headsUpText.offsetWidth;
+    this.els.headsUpText.classList.add("pop");
 
-    const tl = gsap.timeline();
-    tl.to(this.els.headsUpOverlay, { opacity: 1, duration: 0.5 })
-      .to(this.els.headsUpText, { scale: 1, opacity: 1, duration: 0.6, ease: "back.out(1.7)" })
-      .to(this.els.headsUpText, { scale: 1.1, duration: 2, ease: "none" }, "-=0.2")
-      .to(this.els.headsUpOverlay, { opacity: 0, duration: 0.5 });
-
-    await tl;
-    gsap.set(this.els.headsUpOverlay, { display: "none" });
+    this.els.headsUpOverlay.classList.add("show");
+    await this.wait(3000);
+    this.els.headsUpOverlay.classList.remove("show");
   },
 
   async runSingleShot(shotNumber) {
@@ -86,27 +82,12 @@ const shootingModule = {
       this.els.recordingBadge.hidden = true;
     }
 
-    gsap.set(this.els.countdownOverlay, { opacity: 0, display: "flex" });
-    gsap.to(this.els.countdownOverlay, { opacity: 1, duration: 0.3 });
-
     for (let s = this.countdownSeconds; s >= 1; s--) {
       this.els.countdownNumber.textContent = s;
-      
-      // Playful countdown animation
-      gsap.fromTo(this.els.countdownNumber, 
-        { scale: 0.5, opacity: 0 },
-        { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(2)" }
-      );
-      
       await this.wait(1000);
-      
-      if (s > 1) {
-        gsap.to(this.els.countdownNumber, { scale: 1.5, opacity: 0, duration: 0.3 });
-      }
     }
 
-    await gsap.to(this.els.countdownOverlay, { opacity: 0, duration: 0.2 });
-    gsap.set(this.els.countdownOverlay, { display: "none" });
+    this.els.countdownOverlay.classList.remove("show");
 
     let imageBlob = null;
     try {
