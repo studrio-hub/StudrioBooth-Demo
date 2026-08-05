@@ -263,9 +263,24 @@ async function resetSessionAndRestart() {
   }
 
   // Safe to revoke now — upload has confirmed or definitively ended.
+  //
+  // IMPORTANT: evict each blob URL from stripModule._imageCache BEFORE
+  // revoking it. loadImage() caches a Promise that resolves to an
+  // HTMLImageElement. Once the blob URL is revoked the cached element
+  // becomes broken (width/height → 0), so the next session's compositeLayout
+  // would draw black rectangles instead of photos for any URL that was
+  // previously cached. Deleting the cache entry here forces a fresh load
+  // on the next reference to the same key (which will be a brand-new blob
+  // URL from the next session anyway, so the key will never collide).
   sessionState.shots.forEach((s) => {
-    if (s.imageUrl) URL.revokeObjectURL(s.imageUrl);
-    if (s.videoUrl) URL.revokeObjectURL(s.videoUrl);
+    if (s.imageUrl) {
+      if (typeof stripModule !== "undefined") stripModule._imageCache.delete(s.imageUrl);
+      URL.revokeObjectURL(s.imageUrl);
+    }
+    if (s.videoUrl) {
+      if (typeof stripModule !== "undefined") stripModule._imageCache.delete(s.videoUrl);
+      URL.revokeObjectURL(s.videoUrl);
+    }
   });
 
   sessionState.id = Date.now().toString(36);
