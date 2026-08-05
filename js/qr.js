@@ -1,37 +1,20 @@
 /*
  * QR.JS — Generates the gallery QR code and drives the upload progress bar.
  *
- * Changes from previous version:
- *   — uploadProgress.start() called by app.js before this runs
- *   — uploadProgress.set(fraction) called at key upload milestones
- *   — uploadProgress.complete() / uploadProgress.error() called on finish
- *   — Done button is now enabled ONLY inside uploadProgress.complete()
- *     (moved out of this file to keep the source of truth in one place)
- *
- * Progress milestones reported:
- *   0%   — generateAndRender() begins (set by app.js calling uploadProgress.start())
- *  20%   — Supabase upload begins (blobs handed off)
- *  60%   — strip PNG upload confirmed
- *  80%   — video upload confirmed (or skipped)
- *  90%   — session row inserted
- * 100%   — QR rendered, uploadProgress.complete() called → Done enabled
+ * Updated to:
+ *   1. Generate the gallery URL first.
+ *   2. Render the QR code immediately for the user.
+ *   3. Generate the required blobs (Photo, Video, Photo with QR).
+ *   4. Use cloudStorage.saveSession() for a clean Supabase upload.
  */
 
 const qrModule = (() => {
   let _resolve = null;
 
-  /*
-   * generateAndRender()
-   * Called synchronously by app.js when the guest taps NEXT on the design page.
-   * Sets sessionState.galleryUrlPromise BEFORE returning so printingModule.init()
-   * can attach to it immediately on the same tick.
-   */
   function generateAndRender() {
-    // Expose a promise that resolves when the upload fully completes.
     sessionState.uploadPromise = new Promise((resolve) => { _resolve = resolve; });
     sessionState.galleryUrlPromise = sessionState.uploadPromise;
 
-    // Run the actual upload work async (does not block the caller)
     _run().finally(() => {
       if (_resolve) { _resolve(); _resolve = null; }
     });
@@ -39,76 +22,61 @@ const qrModule = (() => {
 
   async function _run() {
     const qrUploading = document.getElementById("qrUploading");
-    const qrWrap      = document.getElementById("qrWrap");
+    const galleryUrl = `${CLOUD_CONFIG.galleryBaseUrl}${sessionState.id}`;
+    sessionState.galleryUrl = galleryUrl;
 
-    // Show uploading spinner on the QR side
+    // Show uploading spinner
     if (qrUploading) qrUploading.style.display = "";
-
-    // Progress: 20% — starting upload
-    if (typeof uploadProgress !== "undefined") uploadProgress.set(0.20);
+    
+    // Milestone 10%: Render QR immediately so the user can see it
+    _renderQR(galleryUrl);
+    if (typeof uploadProgress !== "undefined") uploadProgress.set(0.10);
 
     try {
-      if (!cloudStorage.isAvailable() || !sessionState.finalStripPng) {
-        // No upload possible — generate a placeholder URL and bail gracefully
+      if (!cloudStorage.isAvailable()) {
+        console.warn("[qr] Cloud storage not available, skipping upload.");
         _fallback();
         return;
       }
 
-      // ── Upload strip PNG (milestone 60%) ──────────────────────────────
-      const stripUrl = await cloudStorage.uploadBlob(
-        sessionState.finalStripPng,
-        `sessions/${sessionState.id}/strip.png`
-      );
-      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.60);
-
-      // ── Upload video (milestone 80%, skipped gracefully if absent) ────
-      let videoUrl = null;
-      if (sessionState.finalStripVideo) {
-        const ext = sessionState.finalStripVideo.type?.includes("mp4") ? "mp4" : "webm";
-        try {
-          videoUrl = await cloudStorage.uploadBlob(
-            sessionState.finalStripVideo,
-            `sessions/${sessionState.id}/strip-live.${ext}`
-          );
-        } catch (videoErr) {
-          console.warn("[qr] Video upload failed (non-fatal):", videoErr.message || videoErr);
-        }
-      }
-      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.80);
-
-      // ── Upload print-ready PNG (if exists) ───────────────────────────
-      let printReadyUrl = null;
-      if (sessionState.printReadyPng) {
-        try {
-          printReadyUrl = await cloudStorage.uploadBlob(
-            sessionState.printReadyPng,
-            `sessions/${sessionState.id}/strip-print.png`
-          );
-        } catch (prErr) {
-          console.warn("[qr] Print-ready upload failed (non-fatal):", prErr.message || prErr);
-        }
-      }
-
-      // ── Insert session row (milestone 90%) ───────────────────────────
-      try {
-        const client = getSupabaseClient();
-        await client.from("sessions").insert({
-          id: sessionState.id,
-          frame_type: sessionState.frameType,
-          design: sessionState.design,
-          final_strip_url: stripUrl,
-          final_strip_video_url: videoUrl,
-          print_ready_url: printReadyUrl
+      // 1. Generate Photo Strip (milestone 30%)
+      if (!sessionState.finalStripPng) {
+        sessionState.finalStripPng = await stripModule.exportPNG({
+          frameType: sessionState.frameType,
+          selectedShots: sessionState.selectedShots,
+          designId: sessionState.design
         });
-      } catch (dbErr) {
-        console.warn("[qr] Session DB insert failed (non-fatal):", dbErr.message || dbErr);
       }
-      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.90);
+      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.30);
 
-      // ── Render QR ────────────────────────────────────────────────────
-      const galleryUrl = `${CLOUD_CONFIG.galleryBaseUrl}${sessionState.id}`;
-      sessionState.galleryUrl = galleryUrl;
-      _renderQR(galleryUrl);
+      // 2. Generate Video Strip (milestone 50%)
+      if (!sessionState.finalStripVideo) {
+        try {
+          sessionState.finalStripVideo = await stripModule.exportVideoStrip({
+            frameType: sessionState.frameType,
+            selectedShots: sessionState.selectedShots,
+            designId: sessionState.design
+          });
+        } catch (videoErr) {
+          console.warn("[qr] Video generation failed:", videoErr);
+        }
+      }
+      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.50);
+
+      // 3. Generate Photo with QR (Print-ready) (milestone 70%)
+      if (!sessionState.printReadyPng) {
+        sessionState.printReadyPng = await stripModule.exportPrintPNG({
+          frameType: sessionState.frameType,
+          selectedShots: sessionState.selectedShots,
+          designId: sessionState.design,
+          qrText: galleryUrl
+        });
+      }
+      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.70);
+
+      // 4. Upload all via cloudStorage (milestone 90%)
+      await cloudStorage.saveSession(sessionState);
+      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.90);
 
       // Hide uploading spinner
       if (qrUploading) qrUploading.style.display = "none";
@@ -117,9 +85,8 @@ const qrModule = (() => {
       if (typeof uploadProgress !== "undefined") uploadProgress.complete();
 
     } catch (err) {
-      console.error("[qr] Upload error:", err.message || err);
+      console.error("[qr] Flow error:", err.message || err);
       _fallback();
-
       if (qrUploading) qrUploading.style.display = "none";
       if (typeof uploadProgress !== "undefined") {
         uploadProgress.error("Upload failed — check your connection");
@@ -133,7 +100,6 @@ const qrModule = (() => {
     container.innerHTML = "";
 
     try {
-      // QRCode from qrcodejs CDN
       new QRCode(container, {
         text: url,
         width:  160,
@@ -148,7 +114,6 @@ const qrModule = (() => {
   }
 
   function _fallback() {
-    // No cloud available — generate a local session URL for staff to use manually
     const fallbackUrl = `${CLOUD_CONFIG.galleryBaseUrl}${sessionState.id}`;
     sessionState.galleryUrl = fallbackUrl;
     _renderQR(fallbackUrl);

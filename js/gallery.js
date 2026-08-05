@@ -18,7 +18,8 @@
     loading: document.getElementById("galleryLoading"),
     notFound: document.getElementById("galleryNotFound"),
     downloadPhotoBtn: document.getElementById("btnDownloadPhoto"),
-    downloadVideoBtn: document.getElementById("btnDownloadVideo")
+    downloadVideoBtn: document.getElementById("btnDownloadVideo"),
+    downloadQrBtn: document.getElementById("btnDownloadQR")
   };
 
   function extOf(url, fallback) {
@@ -61,6 +62,7 @@
   function render(data) {
     const photoUrl = data.finalStripUrl || null;
     const videoUrl = data.finalStripVideoUrl || null;
+    const qrUrl    = data.printReadyUrl || null;
 
     // ---- Main strip preview ----
     if (videoUrl) {
@@ -91,6 +93,12 @@
       els.downloadVideoBtn.hidden = false;
       els.downloadVideoBtn.addEventListener("click", () => {
         downloadFile(videoUrl, `${data.id}-video-strip.${extOf(videoUrl, "webm")}`, els.downloadVideoBtn);
+      });
+    }
+    if (qrUrl && els.downloadQrBtn) {
+      els.downloadQrBtn.hidden = false;
+      els.downloadQrBtn.addEventListener("click", () => {
+        downloadFile(qrUrl, `${data.id}-photo-with-qr.png`, els.downloadQrBtn);
       });
     }
   }

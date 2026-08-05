@@ -121,9 +121,10 @@ const cloudStorage = {
 
     function isPath(v) { return v && v.startsWith("sessions/"); }
 
-    const [finalStripUrl, finalStripVideoUrl] = await Promise.all([
+    const [finalStripUrl, finalStripVideoUrl, printReadyUrl] = await Promise.all([
       isPath(session.stripPath)      ? sign(session.stripPath)      : (session.finalStripUrl || null),
-      isPath(session.stripVideoPath) ? sign(session.stripVideoPath) : (session.finalStripVideoUrl || null)
+      isPath(session.stripVideoPath) ? sign(session.stripVideoPath) : (session.finalStripVideoUrl || null),
+      isPath(session.printReadyPath) ? sign(session.printReadyPath) : (session.printReadyUrl || null)
     ]);
 
     return {
@@ -132,6 +133,7 @@ const cloudStorage = {
       design: session.design,
       finalStripUrl,
       finalStripVideoUrl,
+      printReadyUrl,
       photos: []
     };
   },
