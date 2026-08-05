@@ -4,44 +4,7 @@
  * Also imported later by printing.js / qr.js for the final render.
  */
 
-const STRIP_DESIGNS = [
-  {
-    id: "original-white",
-    label: "Original White",
-    cssClass: "theme-minimal-white",
-    overlays: {
-      "2x6": "assets/designs/2x6_Original_Frame.png",
-      "4x6": "assets/designs/4x6_Original_Frame.png"
-    }
-  },
-  {
-    id: "princess-peaches",
-    label: "Princess Peaches",
-    cssClass: "theme-black-white",
-    overlays: {
-      "2x6": "assets/designs/2x6_Princess_Peach.png",
-      "4x6": "assets/designs/4x6_Princess_Peach.png"
-    }
-  },
-  {
-    id: "wit",
-    label: "Whatever it Takes",
-    cssClass: "theme-retro",
-    overlays: {
-      "2x6": "assets/designs/2x6_WIT.png",
-      "4x6": "assets/designs/4x6_WIT.png"
-    }
-  },
-  {
-    id: "xoxo",
-    label: "XOXO",
-    cssClass: "theme-pastel",
-    overlays: {
-      "2x6": "assets/designs/2x6_XOXO.png",
-      "4x6": "assets/designs/4x6_XOXO.png"
-    }
-  }
-];
+let STRIP_DESIGNS = [];
 
 /*
  * Renders a QR code into a detached, invisible container using the same
@@ -109,7 +72,28 @@ const stripModule = {
   _imageCache: new Map(),
 
   getDesign(id) {
-    return STRIP_DESIGNS.find((d) => d.id === id) || null;
+    return STRIP_DESIGNS.find((d) => String(d.id) === String(id)) || null;
+  },
+
+  /*
+   * Called by boot.js after assetSync.init() completes.
+   * Maps the Supabase template rows into the format strip.js expects.
+   */
+  initDesigns() {
+    if (typeof assetSync === "undefined") return;
+    const templates = assetSync.getTemplates();
+    STRIP_DESIGNS = templates.map(t => ({
+      id: t.id,
+      label: t.name,
+      cssClass: `theme-${t.id}`,
+      thumbnail: t.thumbnailUrl,
+      overlays: {
+        "2x6": t.overlayUrl2x6,
+        "4x6": t.overlayUrl4x6
+      }
+    }));
+    console.log(`[stripModule] Loaded ${STRIP_DESIGNS.length} designs from assetSync.`);
+    this.preloadDesignOverlays();
   },
 
   loadImage(src) {

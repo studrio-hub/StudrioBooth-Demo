@@ -18,48 +18,22 @@
   <!-- ===================== PAGE LOCK: STAFF AUTHENTICATION ===================== -->
   <section class="page active" id="page-lock" data-page="lock">
     <div class="lock-screen">
-
       <div class="lock-top">
         <img class="lock-logo" src="assets/designs/studrio_logo.png" alt="Studrio Booth" onerror="this.style.display='none'">
         <p class="lock-subtitle">Staff Authentication Required</p>
       </div>
-
-      <!-- NFC hint — hidden if Supabase is not configured -->
-      <div class="lock-nfc-hint" id="lockNfcHint">
-        <span class="lock-nfc-icon">📱</span>
-        <p>Tap your NFC tag to unlock</p>
-        <p class="lock-nfc-or">— or enter PIN below —</p>
-      </div>
-
-      <!-- PIN display -->
-      <div class="lock-pin-display" id="lockPinDisplay">
-        <div class="lock-pin-dot" data-index="0"></div>
-        <div class="lock-pin-dot" data-index="1"></div>
-        <div class="lock-pin-dot" data-index="2"></div>
-        <div class="lock-pin-dot" data-index="3"></div>
-        <div class="lock-pin-dot" data-index="4"></div>
-        <div class="lock-pin-dot" data-index="5"></div>
-      </div>
-
-      <!-- Status message (errors, success) -->
+      <form class="lock-form" id="lockForm">
+        <label class="lock-field">
+          <span class="lock-field-label">Email</span>
+          <input type="email" id="lockEmail" class="lock-input" placeholder="staff@example.com" autocomplete="username" required>
+        </label>
+        <label class="lock-field">
+          <span class="lock-field-label">Password</span>
+          <input type="password" id="lockPassword" class="lock-input" placeholder="••••••••" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="lock-submit-btn" id="lockSubmitBtn">Sign In</button>
+      </form>
       <p class="lock-status-msg" id="lockStatusMsg"></p>
-
-      <!-- Number pad -->
-      <div class="lock-keypad">
-        <button class="lock-key" data-digit="1">1</button>
-        <button class="lock-key" data-digit="2">2</button>
-        <button class="lock-key" data-digit="3">3</button>
-        <button class="lock-key" data-digit="4">4</button>
-        <button class="lock-key" data-digit="5">5</button>
-        <button class="lock-key" data-digit="6">6</button>
-        <button class="lock-key" data-digit="7">7</button>
-        <button class="lock-key" data-digit="8">8</button>
-        <button class="lock-key" data-digit="9">9</button>
-        <div class="lock-key-empty"></div>
-        <button class="lock-key" data-digit="0">0</button>
-        <button class="lock-key lock-key-clear" id="lockKeyClear">⌫</button>
-      </div>
-
     </div>
   </section>
 
@@ -82,8 +56,7 @@
   <!-- ===================== PAGE HOME: COLLAGE LANDING ===================== -->
   <section class="page" id="page-home" data-page="home">
 
-    <!-- Scattered video cards — populated by home-collage.js -->
-    <div class="home-collage-container" id="homeCollageContainer"></div>
+
 
     <!-- Centered logo + CTA — always on top of collage -->
     <div class="home-center">
@@ -287,40 +260,44 @@
   <!-- ===================== PAGE 6: ALL DONE ===================== -->
   <section class="page" id="page-printing" data-page="printing">
     <h1 class="page-title">All Done!</h1>
-
     <div class="printing-layout">
-
-      <!-- Left: print status badge (shown during auto-print) -->
+      <!-- Left: print status + upload progress + Done -->
       <div class="printing-status-col" id="printingStatusCol">
         <div class="print-status-badge" id="printStatusBadge">
           <span class="print-status-icon" id="printStatusIcon">🖨</span>
           <span class="print-status-text" id="printStatusText">Printing…</span>
         </div>
         <p class="print-qty-note" id="printQtyNote">—</p>
+        <!-- —— Upload progress bar (new) —— -->
+        <div class="upload-progress-wrap" id="uploadProgressWrap" hidden>
+          <div class="upload-progress-label">
+            <span id="uploadProgressLabel">Uploading your photos…</span>
+            <span class="upload-progress-pct" id="uploadProgressPct">0%</span>
+          </div>
+          <div class="upload-progress-track">
+            <div class="upload-progress-bar" id="uploadProgressBar" style="width:0%"></div>
+          </div>
+          <p class="upload-progress-hint" id="uploadProgressHint">Your digital copy will be ready soon</p>
+        </div>
         <button class="btn printing-done-btn" id="btnPrintingDone" disabled>Done</button>
       </div>
-
-      <!-- Center: looping video strip (no controls) -->
+      <!-- Center: looping video strip -->
       <div class="printing-video-col">
         <div class="printing-video-frame" id="printingVideoFrame">
           <!-- video or canvas injected by printing.js -->
         </div>
       </div>
-
-      <!-- Right: QR code + timer -->
+      <!-- Right: QR code -->
       <div class="printing-qr-col">
         <p class="preview-panel-label">Your Digital Copy</p>
         <div class="qr-wrap" id="qrWrap">
           <div id="qrCodeCanvas"></div>
         </div>
         <p class="qr-caption">Scan to save your photos &amp; videos</p>
-
-        <!-- Uploading state shown until QR is ready -->
         <div class="qr-uploading" id="qrUploading">
           <span class="qr-uploading-dot"></span> Uploading…
         </div>
       </div>
-
     </div>
   </section>
 
@@ -372,9 +349,8 @@
 <script src="js/printing.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/cloud-storage.js"></script>
+<script src="js/asset-sync.js"></script>
 <script src="js/qr.js"></script>
-<script src="js/home-videos.config.js"></script>
-<script src="js/home-collage.js"></script>
 <script src="js/app.js"></script>
 <script src="js/auth-lock.js"></script>
 <script src="js/boot.js"></script>
