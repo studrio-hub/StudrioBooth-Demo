@@ -1,18 +1,20 @@
 /*
  * APP.JS — global session state + page navigation + wiring for
  * Page 1 (setup) and Page 2 (frame/quantity).
+ *
+ * Kiosk lives at /kiosk/ — all asset paths are relative to that folder.
  */
 
 const sessionState = {
-  id: Date.now().toString(36), // short, still unique, keeps the QR's encoded text as compact as possible
+  id: Date.now().toString(36),
   frameType: null,   // "2x6" | "4x6"
   quantity: 1,
-  shots: [],          // filled by shooting.js
-  selectedShots: [],   // filled on Page 4 (next batch)
-  design: null,        // filled on Page 5 (next batch)
+  shots: [],
+  selectedShots: [],
+  design: null,
   galleryUrl: null,
   galleryUrlPromise: null,
-  uploadPromise: null  // set by qr.js; resolves when Supabase upload finishes (or times out)
+  uploadPromise: null
 };
 
 /* ---------------- Navigation ---------------- */
@@ -33,13 +35,9 @@ const setupEls = {
 
 let currentZoom = 1.0;
 
-// Camera connection now happens automatically on boot (see boot.js) — the
-// home screen no longer has a manual "Connect Camera" button or a mock-mode
-// warning. Kept as a no-op so boot.js's existing renderCameraStatus(status)
-// call stays harmless.
 function renderCameraStatus(status) {}
 
-const btnZoomWide = document.getElementById("btnZoomWide");
+const btnZoomWide   = document.getElementById("btnZoomWide");
 const btnZoomNormal = document.getElementById("btnZoomNormal");
 const btnMirrorToggle = document.getElementById("btnMirrorToggle");
 
@@ -56,7 +54,7 @@ let mirrorEnabled = false;
 btnMirrorToggle.addEventListener("click", () => {
   mirrorEnabled = !mirrorEnabled;
   btnMirrorToggle.classList.toggle("active", mirrorEnabled);
-  cameraController.setMirror(mirrorEnabled); // updates the combined zoom+mirror transform
+  cameraController.setMirror(mirrorEnabled);
 });
 
 async function updateZoom(level) {
@@ -72,45 +70,29 @@ async function updateZoom(level) {
 }
 
 /* ---------------- PAGE HOME: LANDING ------------------- */
-/*
- * The Home page is shown immediately after staff authenticates (no boot
- * screen). Boot → Home (Start button) → Setup (60s timer) → Frame → …
- * After a session ends, we also return to Home (camera stays live in the
- * background throughout).
- */
 document.getElementById("btnStartSession").addEventListener("click", () => {
   goToPage("setup");
   kioskTimer.start(60, _proceedFromSetup);
 });
 
 function _proceedFromSetup() {
-  // Timer expired on setup page — go back to home
   kioskTimer.hide();
   goToPage("home");
 }
 
-/* Back button on Setup — returns to Home */
 document.getElementById("btnBackFromSetup").addEventListener("click", () => {
   kioskTimer.hide();
   goToPage("home");
 });
 
-/* Setup Next button — goes to frame selection */
 setupEls.nextBtn.addEventListener("click", () => {
-  kioskTimer.hide(); // stop the 60s setup timer
+  kioskTimer.hide();
   goToPage("frame");
   kioskTimer.start(60, proceedFromFrame);
 });
 
 /* ---------------- PAGE 2: FRAME + QUANTITY ---------------- */
 
-/*
- * Pricing rules (both frame types share the same structure):
- *   1 copy  = ₱50
- *   2 copies = ₱75  (+₱25)
- *   3 copies = ₱100 (+₱25 each)
- *   n copies = ₱50 + (n-1) × ₱25
- */
 const FRAME_NAMES = {
   "2x6": "Long Frame",
   "4x6": "Wide Frame"
@@ -121,15 +103,15 @@ function calcPrice(qty) {
 }
 
 const frameEls = {
-  card2x6: document.getElementById("frameCard2x6"),
-  card4x6: document.getElementById("frameCard4x6"),
-  qtyValue: document.getElementById("qtyValue"),
-  qtyMinus: document.getElementById("btnQtyMinus"),
-  qtyPlus: document.getElementById("btnQtyPlus"),
-  labelPill: document.getElementById("qtyLabelPill"),
-  pricePill: document.getElementById("qtyPricePill"),
-  backBtn: document.getElementById("btnBackFromFrame"),
-  nextBtn: document.getElementById("btnNextFromFrame")
+  card2x6:    document.getElementById("frameCard2x6"),
+  card4x6:    document.getElementById("frameCard4x6"),
+  qtyValue:   document.getElementById("qtyValue"),
+  qtyMinus:   document.getElementById("btnQtyMinus"),
+  qtyPlus:    document.getElementById("btnQtyPlus"),
+  labelPill:  document.getElementById("qtyLabelPill"),
+  pricePill:  document.getElementById("qtyPricePill"),
+  backBtn:    document.getElementById("btnBackFromFrame"),
+  nextBtn:    document.getElementById("btnNextFromFrame")
 };
 
 frameEls.card2x6.addEventListener("click", () => selectFrame("2x6"));
@@ -144,7 +126,7 @@ function selectFrame(type) {
 }
 
 frameEls.qtyMinus.addEventListener("click", () => setQuantity(sessionState.quantity - 1));
-frameEls.qtyPlus.addEventListener("click", () => setQuantity(sessionState.quantity + 1));
+frameEls.qtyPlus.addEventListener("click",  () => setQuantity(sessionState.quantity + 1));
 
 function setQuantity(qty) {
   sessionState.quantity = Math.max(1, Math.min(20, qty));
@@ -175,12 +157,12 @@ function updateFramePricing() {
 frameEls.backBtn.addEventListener("click", () => {
   kioskTimer.hide();
   goToPage("setup");
-  kioskTimer.start(60, _proceedFromSetup); // restart 60s idle timer on setup
+  kioskTimer.start(60, _proceedFromSetup);
 });
+
 frameEls.nextBtn.addEventListener("click", () => {
   kioskTimer.hide();
 
-  // Update the frame size indicator shown bottom-left on the shooting screen
   const indicatorText = document.getElementById("shootingFrameIndicatorText");
   if (indicatorText) {
     const name = FRAME_NAMES[sessionState.frameType] || sessionState.frameType;
@@ -192,45 +174,100 @@ frameEls.nextBtn.addEventListener("click", () => {
   shootingModule.startSession();
 });
 
-/* Time's up on Page 2 without a frame being selected — return to Setup.
-   We do NOT auto-advance to shooting; the guest must make an active choice.
-   Restart the 60s setup timer so the kiosk returns to Home if nobody acts. */
 function proceedFromFrame() {
   kioskTimer.hide();
   goToPage("setup");
   kioskTimer.start(60, _proceedFromSetup);
 }
 
-/* ---------------- PAGE 6 wiring + session reset ---------------- */
+/* ---------------- PAGE 6: ALL DONE + UPLOAD PROGRESS ---------------- */
 
-// Hook into the design page's "NEXT" button (defined in strip.js) to init page 6.
-// Auto-print is triggered inside printingModule.init() immediately after navigating.
+/*
+ * uploadProgress — public API for qr.js to drive the progress bar.
+ *
+ * Usage:
+ *   uploadProgress.start()           — show indeterminate bar
+ *   uploadProgress.set(0.45)         — set 0–1 fraction (adds .has-progress)
+ *   uploadProgress.complete()        — fill to 100%, mark done, enable Done btn
+ *   uploadProgress.error(msg)        — show error state
+ */
+const uploadProgress = (() => {
+  const wrap  = document.getElementById("uploadProgressWrap");
+  const bar   = document.getElementById("uploadProgressBar");
+  const pct   = document.getElementById("uploadProgressPct");
+  const label = document.getElementById("uploadProgressLabel");
+  const hint  = document.getElementById("uploadProgressHint");
+  const doneBtn = document.getElementById("btnPrintingDone");
+
+  function show() {
+    if (wrap) wrap.removeAttribute("hidden");
+  }
+
+  return {
+    start() {
+      show();
+      if (wrap)  { wrap.classList.remove("complete", "error", "has-progress"); }
+      if (bar)   { bar.style.width = "0%"; }
+      if (pct)   { pct.textContent = "0%"; }
+      if (label) { label.textContent = "Uploading your photos…"; }
+      if (hint)  { hint.textContent = "Your digital copy will be ready soon"; }
+    },
+
+    set(fraction) {
+      show();
+      const pctVal = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
+      if (wrap)  { wrap.classList.add("has-progress"); }
+      if (bar)   { bar.style.width = `${pctVal}%`; }
+      if (pct)   { pct.textContent = `${pctVal}%`; }
+    },
+
+    complete() {
+      show();
+      if (wrap)  { wrap.classList.add("complete", "has-progress"); wrap.classList.remove("error"); }
+      if (bar)   { bar.style.width = "100%"; }
+      if (pct)   { pct.textContent = "100%"; }
+      if (label) { label.textContent = "Upload complete!"; }
+      if (hint)  { hint.textContent = "Scan the QR code to access your digital copy"; }
+      // Enable Done button now that QR is ready
+      if (doneBtn) { doneBtn.disabled = false; }
+    },
+
+    error(msg) {
+      show();
+      if (wrap)  { wrap.classList.add("error"); wrap.classList.remove("complete"); }
+      if (pct)   { pct.textContent = "—"; }
+      if (label) { label.textContent = msg || "Upload failed"; }
+      if (hint)  { hint.textContent = "Your photos were printed. Contact staff for the digital copy."; }
+      // Still enable Done so the session isn't stuck
+      if (doneBtn) { doneBtn.disabled = false; }
+    }
+  };
+})();
+
+/* Hook into the design page's "NEXT" button — defined in strip.js. */
 const _origDesignNext = document.getElementById("btnNextFromDesign");
 _origDesignNext.addEventListener("click", async () => {
-  // Fire immediately — sessionState.galleryUrlPromise is assigned
-  // synchronously at the very start of generateAndRender(), so
-  // printingModule.init() can safely read it right after this call.
+  // Reset + start progress bar immediately
+  uploadProgress.start();
+  // Fire QR generation (assigns sessionState.galleryUrlPromise synchronously)
   qrModule.generateAndRender();
   await printingModule.init();
 });
 
-/* Done button on Page 6 — shows the "End session?" confirmation modal.
-   The button stays disabled until printingModule enables it after upload. */
+/* Done button */
 document.getElementById("btnPrintingDone").addEventListener("click", () => {
-  kioskTimer.hide(); // pause the 60s countdown while modal is open
+  kioskTimer.hide();
   document.getElementById("confirmModal").hidden = false;
   document.getElementById("confirmModal").classList.add("show");
 });
 
-/* Confirmation modal — wired for both the Done button path and the
-   auto-timeout "End Session" path used by printingModule.endSessionOnTimeout(). */
 document.getElementById("btnConfirmBack").addEventListener("click", () => {
   const m = document.getElementById("confirmModal");
   m.classList.remove("show");
   m.hidden = true;
-  // Resume the 60s timer after the guest cancels
   kioskTimer.start(60, () => printingModule.endSessionOnTimeout());
 });
+
 document.getElementById("btnConfirmProceed").addEventListener("click", () => {
   const m = document.getElementById("confirmModal");
   m.classList.remove("show");
@@ -240,38 +277,17 @@ document.getElementById("btnConfirmProceed").addEventListener("click", () => {
 
 /*
  * resetSessionAndRestart — waits for any in-progress Supabase upload to
- * finish before tearing down the session. This prevents blob URLs from
- * being revoked mid-upload, which was causing sessions to upload nothing
- * when the guest hit Done before the upload completed.
- *
- * The wait is capped at 10 seconds. If the upload hasn't confirmed by
- * then it has either already finished, already timed out inside qr.js
- * (which resolves uploadPromise), or is genuinely stuck — in all cases
- * it is safe to proceed with the reset.
+ * finish before tearing down the session and returning to Home.
  */
 async function resetSessionAndRestart() {
   kioskTimer.hide();
 
-  // Wait for the upload to finish before revoking anything.
-  // uploadPromise is always resolved by qr.js (via its own finally block),
-  // so this await will never hang indefinitely. The extra 10s race here is
-  // a belt-and-suspenders guard in case uploadPromise was never set at all
-  // (e.g. the guest navigated directly to this page without a full session).
   if (sessionState.uploadPromise) {
     const uploadGracePeriod = new Promise((resolve) => setTimeout(resolve, 10000));
     await Promise.race([sessionState.uploadPromise, uploadGracePeriod]);
   }
 
-  // Safe to revoke now — upload has confirmed or definitively ended.
-  //
-  // IMPORTANT: evict each blob URL from stripModule._imageCache BEFORE
-  // revoking it. loadImage() caches a Promise that resolves to an
-  // HTMLImageElement. Once the blob URL is revoked the cached element
-  // becomes broken (width/height → 0), so the next session's compositeLayout
-  // would draw black rectangles instead of photos for any URL that was
-  // previously cached. Deleting the cache entry here forces a fresh load
-  // on the next reference to the same key (which will be a brand-new blob
-  // URL from the next session anyway, so the key will never collide).
+  // Evict blob URLs from strip cache before revoking
   sessionState.shots.forEach((s) => {
     if (s.imageUrl) {
       if (typeof stripModule !== "undefined") stripModule._imageCache.delete(s.imageUrl);
@@ -283,18 +299,25 @@ async function resetSessionAndRestart() {
     }
   });
 
-  sessionState.id = Date.now().toString(36);
+  sessionState.id        = Date.now().toString(36);
   sessionState.frameType = null;
-  sessionState.quantity = 1;
-  sessionState.shots = [];
+  sessionState.quantity  = 1;
+  sessionState.shots     = [];
   sessionState.selectedShots = [];
-  sessionState.design = null;
+  sessionState.design    = null;
   sessionState.galleryUrl = null;
   sessionState.galleryUrlPromise = null;
-  sessionState.uploadPromise = null;
+  sessionState.uploadPromise     = null;
 
-  // Reset Page 6 Done button
+  // Reset Page 6 Done button + upload progress
   document.getElementById("btnPrintingDone").disabled = true;
+  const wrap = document.getElementById("uploadProgressWrap");
+  if (wrap) {
+    wrap.setAttribute("hidden", "");
+    wrap.classList.remove("complete", "error", "has-progress");
+  }
+  const bar = document.getElementById("uploadProgressBar");
+  if (bar) bar.style.width = "0%";
 
   // Reset Page 2 UI
   document.getElementById("frameCard2x6").classList.remove("selected");
@@ -304,13 +327,16 @@ async function resetSessionAndRestart() {
   document.getElementById("qtyLabelPill").textContent = "Select a frame";
   document.getElementById("qtyPricePill").textContent = "—";
 
-  cameraController.attachPreview(setupEls.video, setupEls.img);
+  // Reset QR wrap state
+  const qrUploading = document.getElementById("qrUploading");
+  if (qrUploading) qrUploading.style.display = "";
+  const qrCodeCanvas = document.getElementById("qrCodeCanvas");
+  if (qrCodeCanvas) qrCodeCanvas.innerHTML = "";
 
-  // Return to Home (not Setup) between guests — matches the flow everywhere
-  // else (Boot → Home → Setup). Authentication is still only required once
-  // at kiosk startup, not between individual guest sessions.
+  cameraController.attachPreview(setupEls.video, setupEls.img);
   goToPage("home");
 }
 
-document.getElementById("frameThumb2x6").src = "assets/designs/thumbnail/2x6_Strip_Thumbnail.png";
-document.getElementById("frameThumb4x6").src = "assets/designs/thumbnail/4x6_Strip_Thumbnail.png";
+/* Frame thumbnails — paths relative to /kiosk/ */
+document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";
+document.getElementById("frameThumb4x6").src = "assets/designs/4x6_Strip_Thumbnail.png";

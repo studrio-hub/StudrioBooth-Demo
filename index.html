@@ -1,399 +1,1355 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Photobooth Kiosk</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
-<link rel="stylesheet" href="css/print.css" media="print">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Studrio Booth — Your Memories, Printed Instantly</title>
+  <meta name="description" content="A modern photobooth experience with instant prints, digital copies, and video strips. Available in San Fernando, Bukidnon.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ══════════════════════════════════════════════════════════
+       DESIGN TOKENS
+       Palette:
+         --yellow      #f0c231  (brand accent — Studrio gold)
+         --yellow-deep #c9a028  (hover / dark variant)
+         --yellow-pale #fef9e7  (tint backgrounds)
+         --ink         #111111  (headline text)
+         --body        #444444  (body copy)
+         --muted       #888888  (captions, labels)
+         --surface     #f8f8f6  (off-white section fills)
+         --white       #ffffff
+         --border      #e8e8e4
+
+       Type:
+         Display  — Syne 700/800 (bold geometric, distinctive)
+         Body     — Inter 400/500/600 (neutral, readable)
+
+       Signature element:
+         Animated photo strip that "fans out" on page load —
+         three strip mockups that rotate from a stacked position
+         to a spread. This is the one memorable motion moment.
+    ══════════════════════════════════════════════════════════ */
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --yellow:      #f0c231;
+      --yellow-deep: #c9a028;
+      --yellow-pale: #fef9e7;
+      --yellow-mid:  #fde68a;
+      --ink:         #111111;
+      --body:        #444444;
+      --muted:       #888888;
+      --surface:     #f8f8f6;
+      --white:       #ffffff;
+      --border:      #e8e8e4;
+      --radius-sm:   10px;
+      --radius-md:   18px;
+      --radius-lg:   28px;
+      --radius-pill: 999px;
+      --shadow-sm:   0 2px 12px rgba(0,0,0,0.07);
+      --shadow-md:   0 6px 32px rgba(0,0,0,0.11);
+      --shadow-lg:   0 16px 64px rgba(0,0,0,0.14);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      color: var(--body);
+      background: var(--white);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Typography ── */
+    .display { font-family: 'Syne', sans-serif; font-weight: 800; color: var(--ink); line-height: 1.05; letter-spacing: -0.02em; }
+    .heading  { font-family: 'Syne', sans-serif; font-weight: 700; color: var(--ink); line-height: 1.15; }
+    .eyebrow  { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+
+    /* ── Layout ── */
+    .container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .section   { padding: 96px 0; }
+    .section--tight { padding: 72px 0; }
+    .section--yellow { background: var(--yellow-pale); }
+    .section--surface { background: var(--surface); }
+    .section--ink { background: var(--ink); color: var(--white); }
+    .section--ink .heading { color: var(--white); }
+    .section--ink .eyebrow { color: rgba(255,255,255,0.45); }
+    .section--ink .body-text { color: rgba(255,255,255,0.7); }
+
+    /* ── Shared section header ── */
+    .section-header { text-align: center; margin-bottom: 56px; }
+    .section-header .heading { font-size: clamp(1.8rem, 3vw, 2.6rem); margin-top: 12px; }
+    .body-text { font-size: 1.05rem; line-height: 1.7; }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--yellow); color: var(--ink);
+      font-family: 'Inter', sans-serif; font-size: 0.95rem; font-weight: 700;
+      padding: 14px 32px; border-radius: var(--radius-pill);
+      border: none; cursor: pointer; text-decoration: none;
+      transition: background 0.18s, transform 0.1s, box-shadow 0.18s;
+      box-shadow: 0 4px 20px rgba(240,194,49,0.35);
+      letter-spacing: 0.01em;
+    }
+    .btn-primary:hover { background: var(--yellow-deep); box-shadow: 0 6px 28px rgba(240,194,49,0.45); }
+    .btn-primary:active { transform: scale(0.97); }
+
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: transparent; color: var(--ink);
+      font-family: 'Inter', sans-serif; font-size: 0.95rem; font-weight: 600;
+      padding: 13px 28px; border-radius: var(--radius-pill);
+      border: 2px solid var(--border); cursor: pointer; text-decoration: none;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .btn-outline:hover { border-color: var(--ink); background: var(--surface); }
+
+    /* ══════════════════════════════════════════════
+       NAV
+    ══════════════════════════════════════════════ */
+    .nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px; max-width: 1120px; margin: 0 auto; padding: 0 24px;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo img { height: 32px; width: auto; }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { font-size: 0.88rem; font-weight: 600; color: var(--body); text-decoration: none; transition: color 0.15s; }
+    .nav-links a:hover { color: var(--ink); }
+    .nav-cta { font-size: 0.85rem !important; }
+
+    /* ══════════════════════════════════════════════
+       HERO
+    ══════════════════════════════════════════════ */
+    .hero {
+      min-height: 92vh;
+      display: flex; align-items: center;
+      background: radial-gradient(ellipse 80% 70% at 65% 50%, #fde68a 0%, #fef3c7 45%, #ffffff 100%);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
+      width: 100%;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 80px 24px;
+    }
+
+    .hero-text { z-index: 2; }
+    .hero-eyebrow { margin-bottom: 16px; }
+    .hero-headline {
+      font-size: clamp(2.6rem, 5.5vw, 4.2rem);
+      margin-bottom: 24px;
+      max-width: 480px;
+    }
+    .hero-headline em {
+      font-style: normal;
+      color: var(--yellow-deep);
+    }
+    .hero-sub {
+      font-size: 1.1rem; line-height: 1.7; color: var(--body);
+      max-width: 420px; margin-bottom: 40px;
+    }
+    .hero-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .hero-note { font-size: 0.8rem; color: var(--muted); margin-top: 16px; }
+
+    /* ── Strip fan (signature element) ── */
+    .hero-visual {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 540px;
+    }
+
+    .strip-fan {
+      position: relative;
+      width: 220px;
+      height: 480px;
+      transform-style: preserve-3d;
+    }
+
+    .strip-fan-item {
+      position: absolute;
+      width: 200px;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+      transform-origin: bottom center;
+      transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* Three strips — left, center, right */
+    .strip-fan-item:nth-child(1) {
+      left: 50%; margin-left: -100px;
+      animation: fanLeft 1s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+    }
+    .strip-fan-item:nth-child(2) {
+      left: 50%; margin-left: -100px;
+      z-index: 3;
+      animation: fanCenter 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+    }
+    .strip-fan-item:nth-child(3) {
+      left: 50%; margin-left: -100px;
+      animation: fanRight 1s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+    }
+
+    @keyframes fanLeft   { from { transform: rotate(0deg) translateY(20px); opacity:0; } to { transform: rotate(-18deg) translateX(-60px) translateY(8px); opacity:1; } }
+    @keyframes fanCenter { from { transform: translateY(30px); opacity:0; }              to { transform: translateY(0); opacity:1; } }
+    @keyframes fanRight  { from { transform: rotate(0deg) translateY(20px); opacity:0; } to { transform: rotate(18deg) translateX(60px) translateY(8px); opacity:1; } }
+
+    /* Strip content — pure CSS mock (no photos needed) */
+    .strip-mock {
+      width: 100%;
+      background: white;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .strip-mock-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 2px;
+    }
+
+    .strip-mock-logo-text {
+      font-family: 'Syne', sans-serif;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .strip-mock-qr {
+      width: 24px; height: 24px;
+      background: var(--ink);
+      border-radius: 3px;
+      display: grid;
+      grid-template-columns: repeat(3,1fr);
+      gap: 2px;
+      padding: 3px;
+    }
+    .strip-mock-qr-cell { background: white; border-radius: 1px; }
+    .strip-mock-qr-cell.dark { background: var(--ink); }
+
+    .strip-mock-photo {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border-radius: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Strip 1: yellow gradient theme */
+    .strip-fan-item:nth-child(1) .strip-mock-photo {
+      background: radial-gradient(circle at 40% 40%, #fde68a, #f59e0b);
+    }
+    /* Strip 2: pink theme */
+    .strip-fan-item:nth-child(2) .strip-mock-photo {
+      background: radial-gradient(circle at 60% 35%, #fce7f3, #f9a8d4);
+    }
+    /* Strip 3: minimal white */
+    .strip-fan-item:nth-child(3) .strip-mock-photo {
+      background: radial-gradient(circle at 50% 40%, #e0f2fe, #7dd3fc);
+    }
+
+    .strip-mock-footer {
+      text-align: center;
+      padding: 4px 0 2px;
+      font-size: 7px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* ══════════════════════════════════════════════
+       WHAT'S NEW (Video + QR)
+    ══════════════════════════════════════════════ */
+    .new-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+    }
+
+    .new-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .new-card:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); }
+
+    .new-card-icon {
+      width: 52px; height: 52px;
+      background: var(--yellow-pale);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+    }
+
+    .new-card h3 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 1.3rem; color: var(--ink);
+    }
+
+    .new-card p { font-size: 0.95rem; line-height: 1.7; color: var(--body); }
+
+    .new-badge {
+      display: inline-block;
+      background: var(--yellow);
+      color: var(--ink);
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      align-self: flex-start;
+    }
+
+    /* ══════════════════════════════════════════════
+       HOW IT WORKS
+    ══════════════════════════════════════════════ */
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 24px;
+      position: relative;
+    }
+
+    /* Connecting line */
+    .steps-grid::before {
+      content: '';
+      position: absolute;
+      top: 26px;
+      left: calc(10% + 8px);
+      right: calc(10% + 8px);
+      height: 2px;
+      background: var(--border);
+      z-index: 0;
+    }
+
+    .step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 14px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step-num {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: var(--white);
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1.1rem; color: var(--ink);
+      transition: background 0.2s, border-color 0.2s;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .step:hover .step-num {
+      background: var(--yellow);
+      border-color: var(--yellow);
+    }
+
+    .step-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--ink);
+      line-height: 1.35;
+    }
+
+    .step-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ══════════════════════════════════════════════
+       PRICE LIST
+    ══════════════════════════════════════════════ */
+    .price-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .price-card {
+      background: var(--white);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .price-card:hover { border-color: var(--yellow); box-shadow: 0 0 0 4px rgba(240,194,49,0.15); }
+
+    .price-card-header {
+      background: var(--yellow-pale);
+      padding: 28px 28px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .price-card-name {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1.25rem; color: var(--ink);
+    }
+
+    .price-card-amount {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 2.2rem; color: var(--ink);
+    }
+    .price-card-amount span { font-size: 1rem; font-weight: 600; color: var(--muted); }
+
+    .price-card-body {
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .price-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      font-size: 0.88rem;
+      gap: 12px;
+    }
+    .price-row-label { color: var(--muted); font-weight: 500; }
+    .price-row-value { color: var(--ink); font-weight: 600; text-align: right; }
+
+    .price-divider { height: 1px; background: var(--border); margin: 4px 0; }
+
+    .price-inclusion-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .price-inclusion-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    .price-inclusion-list li::before {
+      content: '';
+      width: 7px; height: 7px;
+      background: var(--yellow);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ══════════════════════════════════════════════
+       TEMPLATES (gallery-style)
+    ══════════════════════════════════════════════ */
+    .templates-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 16px;
+    }
+
+    .template-card {
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      aspect-ratio: 2 / 5;
+      position: relative;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .template-card:hover { transform: translateY(-4px) scale(1.02); box-shadow: var(--shadow-md); }
+
+    .template-card-fill {
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+      gap: 4px;
+    }
+
+    /* Distinct template color palettes */
+    .tpl-1 { background: linear-gradient(160deg, #fde68a, #f59e0b); }
+    .tpl-2 { background: linear-gradient(160deg, #fce7f3, #f9a8d4); }
+    .tpl-3 { background: linear-gradient(160deg, #e0f2fe, #7dd3fc); }
+    .tpl-4 { background: linear-gradient(160deg, #d1fae5, #6ee7b7); }
+    .tpl-5 { background: linear-gradient(160deg, #ede9fe, #a78bfa); }
+    .tpl-6 { background: linear-gradient(160deg, #fee2e2, #fca5a5); }
+    .tpl-7 { background: linear-gradient(160deg, #111, #333); }
+    .tpl-8 { background: linear-gradient(160deg, #f4e3c1, #c9a24a); }
+
+    .template-photo-slot {
+      flex: 1;
+      border-radius: 5px;
+      background: rgba(255,255,255,0.3);
+    }
+
+    .template-label {
+      text-align: center;
+      font-size: 0.62rem;
+      font-weight: 700;
+      color: rgba(0,0,0,0.5);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 2px 0;
+    }
+    .tpl-7 .template-label { color: rgba(255,255,255,0.5); }
+
+    .templates-note {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    /* ══════════════════════════════════════════════
+       GALLERY (sample shots)
+    ══════════════════════════════════════════════ */
+    .gallery-mosaic {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: auto auto;
+      gap: 12px;
+    }
+
+    .gallery-item {
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--yellow-pale);
+      position: relative;
+    }
+    .gallery-item:nth-child(1) { grid-column: span 2; grid-row: span 2; }
+
+    .gallery-item-inner {
+      width: 100%;
+      padding-bottom: 80%;
+      background: radial-gradient(circle at 40% 40%, #fde68a, #f59e0b);
+    }
+    .gallery-item:nth-child(1) .gallery-item-inner { padding-bottom: 95%; background: radial-gradient(circle at 30% 35%, #fce7f3, #f9a8d4); }
+    .gallery-item:nth-child(3) .gallery-item-inner { background: radial-gradient(circle at 60% 40%, #d1fae5, #6ee7b7); }
+    .gallery-item:nth-child(4) .gallery-item-inner { background: radial-gradient(circle at 50% 35%, #e0f2fe, #7dd3fc); }
+    .gallery-item:nth-child(5) .gallery-item-inner { background: radial-gradient(circle at 40% 40%, #111, #333); }
+    .gallery-item:nth-child(6) .gallery-item-inner { background: radial-gradient(circle at 55% 45%, #ede9fe, #a78bfa); }
+
+    .gallery-item-label {
+      position: absolute;
+      bottom: 10px; left: 12px;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(4px);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--ink);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+    }
+
+    /* ══════════════════════════════════════════════
+       FAQ
+    ══════════════════════════════════════════════ */
+    .faq-list {
+      max-width: 680px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .faq-item {
+      border-bottom: 1px solid var(--border);
+    }
+    .faq-item:first-child { border-top: 1px solid var(--border); }
+
+    .faq-q {
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 22px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      text-align: left;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--ink);
+      transition: color 0.15s;
+    }
+    .faq-q:hover { color: var(--yellow-deep); }
+
+    .faq-icon {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--muted);
+      transition: background 0.15s, transform 0.25s;
+    }
+
+    .faq-item.open .faq-icon {
+      background: var(--yellow);
+      border-color: var(--yellow);
+      color: var(--ink);
+      transform: rotate(45deg);
+    }
+
+    .faq-a {
+      font-size: 0.92rem;
+      line-height: 1.7;
+      color: var(--body);
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease, padding 0.2s;
+    }
+    .faq-item.open .faq-a {
+      max-height: 300px;
+      padding-bottom: 20px;
+    }
+
+    /* ══════════════════════════════════════════════
+       CONTACT + LOCATION
+    ══════════════════════════════════════════════ */
+    .contact-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: start;
+    }
+
+    .contact-info { display: flex; flex-direction: column; gap: 20px; }
+
+    .contact-item {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .contact-icon {
+      width: 44px; height: 44px;
+      background: var(--yellow-pale);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .contact-item-text { display: flex; flex-direction: column; gap: 3px; }
+    .contact-item-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+    .contact-item-value { font-size: 0.95rem; font-weight: 600; color: var(--ink); }
+    .contact-item-value a { color: var(--ink); text-decoration: none; }
+    .contact-item-value a:hover { color: var(--yellow-deep); }
+
+    /* Map placeholder */
+    .map-wrap {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      height: 280px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .map-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+    }
+    .map-placeholder-icon { font-size: 36px; }
+    .map-placeholder-text { font-size: 0.88rem; font-weight: 600; }
+    .map-placeholder-sub { font-size: 0.78rem; }
+
+    /* ══════════════════════════════════════════════
+       FOOTER
+    ══════════════════════════════════════════════ */
+    .footer {
+      background: var(--ink);
+      color: rgba(255,255,255,0.5);
+      padding: 48px 0;
+    }
+
+    .footer-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    .footer-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .footer-brand { display: flex; flex-direction: column; gap: 10px; }
+    .footer-logo { height: 28px; width: auto; filter: brightness(0) invert(1); opacity: 0.85; }
+    .footer-tagline { font-size: 0.82rem; max-width: 240px; line-height: 1.5; }
+
+    .footer-links {
+      display: flex;
+      gap: 48px;
+      flex-wrap: wrap;
+    }
+
+    .footer-col { display: flex; flex-direction: column; gap: 10px; }
+    .footer-col-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.3); margin-bottom: 2px; }
+    .footer-col a { font-size: 0.88rem; color: rgba(255,255,255,0.55); text-decoration: none; transition: color 0.15s; }
+    .footer-col a:hover { color: var(--white); }
+
+    .footer-bottom {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.78rem;
+    }
+
+    .footer-credit a { color: rgba(255,255,255,0.4); text-decoration: none; }
+    .footer-credit a:hover { color: rgba(255,255,255,0.7); }
+
+    /* ══════════════════════════════════════════════
+       RESPONSIVE
+    ══════════════════════════════════════════════ */
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; text-align: center; gap: 40px; padding: 60px 24px; }
+      .hero-headline { max-width: none; }
+      .hero-sub { max-width: none; }
+      .hero-actions { justify-content: center; }
+      .hero-visual { height: 340px; }
+      .strip-fan { width: 160px; height: 340px; }
+      .strip-fan-item { width: 150px; margin-left: -75px; }
+      @keyframes fanLeft   { from { transform: rotate(0deg); opacity:0; } to { transform: rotate(-15deg) translateX(-40px) translateY(6px); opacity:1; } }
+      @keyframes fanRight  { from { transform: rotate(0deg); opacity:0; } to { transform: rotate(15deg) translateX(40px) translateY(6px); opacity:1; } }
+      .steps-grid { grid-template-columns: repeat(3, 1fr); }
+      .steps-grid::before { display: none; }
+      .new-grid { grid-template-columns: 1fr; }
+      .contact-grid { grid-template-columns: 1fr; }
+      .gallery-mosaic { grid-template-columns: repeat(2, 1fr); }
+      .gallery-item:nth-child(1) { grid-column: span 2; grid-row: span 1; }
+    }
+
+    @media (max-width: 600px) {
+      .nav-links { display: none; }
+      .section { padding: 64px 0; }
+      .steps-grid { grid-template-columns: repeat(2, 1fr); }
+      .price-grid { grid-template-columns: 1fr; }
+      .footer-top { flex-direction: column; }
+      .templates-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    /* ══════════════════════════════════════════════
+       SCROLL REVEAL
+    ══════════════════════════════════════════════ */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+    .reveal-delay-4 { transition-delay: 0.4s; }
+  </style>
 </head>
 <body>
 
-<div id="kiosk">
+<!-- ══════════ NAV ══════════ -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <img src="assets/studrio_logo.png" alt="Studrio Booth">
+    </a>
+    <ul class="nav-links">
+      <li><a href="#whats-new">What's New</a></li>
+      <li><a href="#how-it-works">How It Works</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#templates">Templates</a></li>
+      <li><a href="#contact">Contact</a></li>
+      <li><a href="/kiosk/" class="btn-primary nav-cta">Open Kiosk</a></li>
+    </ul>
+  </div>
+</nav>
 
-<!-- ===================== PAGE LOCK: STAFF AUTHENTICATION ===================== -->
-  <section class="page active" id="page-lock" data-page="lock">
-    <div class="lock-screen">
-
-      <div class="lock-top">
-        <img class="lock-logo" src="assets/designs/studrio_logo.png" alt="Studrio Booth" onerror="this.style.display='none'">
-        <p class="lock-subtitle">Staff Authentication Required</p>
+<!-- ══════════ HERO ══════════ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-text">
+      <p class="eyebrow hero-eyebrow">Studrio Booth · San Fernando, Bukidnon</p>
+      <h1 class="display hero-headline">
+        Your memories,<br><em>printed in seconds.</em>
+      </h1>
+      <p class="hero-sub">
+        A modern photobooth with instant prints, live video strips, and digital copies — 
+        all delivered before you leave. Starting at just ₱50.
+      </p>
+      <div class="hero-actions">
+        <a href="#pricing" class="btn-primary">See Pricing</a>
+        <a href="#how-it-works" class="btn-outline">How It Works</a>
       </div>
-
-      <!-- Email + Password sign-in form -->
-      <form class="lock-form" id="lockForm">
-
-        <label class="lock-field">
-          <span class="lock-field-label">Email</span>
-          <input
-            type="email"
-            id="lockEmail"
-            class="lock-input"
-            placeholder="staff@example.com"
-            autocomplete="username"
-            required
-          >
-        </label>
-
-        <label class="lock-field">
-          <span class="lock-field-label">Password</span>
-          <input
-            type="password"
-            id="lockPassword"
-            class="lock-input"
-            placeholder="••••••••"
-            autocomplete="current-password"
-            required
-          >
-        </label>
-
-        <button type="submit" class="lock-submit-btn" id="lockSubmitBtn">
-          Sign In
-        </button>
-
-      </form>
-
-      <!-- Status message (errors, success) -->
-      <p class="lock-status-msg" id="lockStatusMsg"></p>
-
-    </div>
-  </section>
-
-  <!-- ===================== PAGE HOME: LANDING ===================== -->
-  <section class="page" id="page-home" data-page="home">
-
-    <!-- Centered logo + CTA -->
-    <div class="home-center">
-      <img class="home-logo" src="assets/designs/studrio_logo.png" alt="Studrio Booth">
-      <button class="home-start-btn" id="btnStartSession">Start</button>
+      <p class="hero-note">Digital copies included with every session ✦ QR code for instant access</p>
     </div>
 
-  </section>
-
-  <!-- ===================== PAGE 1: DSLR CAMERA SETUP ===================== -->
-  <section class="page" id="page-setup" data-page="setup">
-    <div class="setup-header">
-      <h1 class="page-title">Camera Setup</h1>
-    </div>
-
-    <div class="setup-layout">
-
-      <div class="preview-panel">
-        <div class="preview-frame frame-34">
-          <video id="livePreviewVideo" autoplay playsinline muted></video>
-          <img id="livePreviewImg" alt="Live preview" hidden>
-          <div id="previewPlaceholder" class="preview-placeholder"></div>
-        </div>
-      </div>
-
-      <div class="status-panel">
-        <div class="status-box" id="statusBox">
-          <p class="status-heading">HOW IT WORKS</p>
-          <ol class="guide-list">
-            <li><span class="guide-step-num">1</span> Choose your frame size and quantity.</li>
-            <li><span class="guide-step-num">2</span> Take your photos.</li>
-            <li><span class="guide-step-num">3</span> Select your favorite photos.</li>
-            <li><span class="guide-step-num">4</span> Choose a strip design.</li>
-            <li><span class="guide-step-num">5</span> Print your photos.</li>
-          </ol>
-        </div>
-
-        <div class="zoom-controls">
-          <p class="zoom-label">Zoom: <span id="zoomLevelLabel">1.0x</span> <span id="zoomTypeLabel" class="zoom-type">(—)</span></p>
-          <div class="zoom-buttons">
-            <button class="btn btn-toggle active" id="btnZoomWide" data-zoom="1.0">1.0x WIDE</button>
-            <button class="btn btn-toggle" id="btnZoomNormal" data-zoom="2.0">2.0x NORMAL</button>
-            <button class="btn btn-toggle" id="btnMirrorToggle">MIRROR</button>
+    <!-- Signature element: fanned photo strips -->
+    <div class="hero-visual">
+      <div class="strip-fan">
+        <!-- Strip 1 (left) -->
+        <div class="strip-fan-item">
+          <div class="strip-mock">
+            <div class="strip-mock-header">
+              <span class="strip-mock-logo-text">studrio</span>
+              <div class="strip-mock-qr">
+                <div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div>
+                <div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div>
+                <div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div>
+              </div>
+            </div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-footer">SHOT FROM STUDRIO</div>
           </div>
         </div>
-
-        <div class="nav-row">
-          <button class="btn btn-outline" id="btnBackFromSetup">← BACK</button>
-          <button class="btn btn-primary btn-large" id="btnNextFromSetup" disabled>NEXT →</button>
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- ===================== PAGE 2: FRAME SIZE + QUANTITY ===================== -->
-  <section class="page" id="page-frame" data-page="frame">
-    <h1 class="page-title">Choose Your Frame</h1>
-
-    <div class="frame-layout">
-
-      <!-- Left: frame type cards -->
-      <div class="frame-options">
-        <button class="frame-card" id="frameCard2x6" data-frame="2x6">
-          <div class="frame-card-visual frame-visual-2x6">
-            <img id="frameThumb2x6" class="frame-thumb-img" alt="2x6 preview">
+        <!-- Strip 2 (center, on top) -->
+        <div class="strip-fan-item">
+          <div class="strip-mock">
+            <div class="strip-mock-header">
+              <span class="strip-mock-logo-text">studrio</span>
+              <div class="strip-mock-qr">
+                <div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div>
+                <div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div>
+                <div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div>
+              </div>
+            </div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-footer">SHOT FROM STUDRIO</div>
           </div>
-          <p class="frame-card-title">LONG FRAME</p>
-          <p class="frame-card-sub">2 identical strips per sheet</p>
-        </button>
-
-        <button class="frame-card" id="frameCard4x6" data-frame="4x6">
-          <div class="frame-card-visual frame-visual-4x6">
-            <img id="frameThumb4x6" class="frame-thumb-img" alt="4x6 preview">
+        </div>
+        <!-- Strip 3 (right) -->
+        <div class="strip-fan-item">
+          <div class="strip-mock">
+            <div class="strip-mock-header">
+              <span class="strip-mock-logo-text">studrio</span>
+              <div class="strip-mock-qr">
+                <div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div>
+                <div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div>
+                <div class="strip-mock-qr-cell dark"></div><div class="strip-mock-qr-cell"></div><div class="strip-mock-qr-cell dark"></div>
+              </div>
+            </div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-photo"></div>
+            <div class="strip-mock-footer">SHOT FROM STUDRIO</div>
           </div>
-          <p class="frame-card-title">WIDE FRAME</p>
-          <p class="frame-card-sub">1 photo per sheet</p>
-        </button>
-      </div>
-
-      <!-- Right: quantity selector (reference design) -->
-      <div class="quantity-panel">
-
-        <div class="qty-selector-wrap">
-          <button class="qty-btn qty-btn-minus" id="btnQtyMinus">−</button>
-          <div class="qty-number-box">
-            <span class="qty-number" id="qtyValue">1</span>
-          </div>
-          <button class="qty-btn qty-btn-plus" id="btnQtyPlus">+</button>
         </div>
-
-        <!-- Pill: "1 Wide Frame" / "2 Long Frame" -->
-        <div class="qty-pill qty-label-pill" id="qtyLabelPill">Select a frame</div>
-
-        <!-- Pill: price -->
-        <div class="qty-pill qty-price-pill" id="qtyPricePill">—</div>
-
-        <div class="nav-row">
-          <button class="btn btn-outline" id="btnBackFromFrame">← BACK</button>
-          <button class="btn btn-primary btn-large" id="btnNextFromFrame" disabled>NEXT →</button>
-        </div>
-
-      </div>
-
-    </div>
-  </section>
-
-  <!-- ===================== PAGE 3: DSLR PHOTO SHOOTING ===================== -->
-<section class="page" id="page-shooting" data-page="shooting">
-  <div class="shooting-layout-solo">
-
-    <div class="shooting-preview-frame" id="shootingPreviewFrame">
-      <video id="shootingVideo" autoplay playsinline muted></video>
-      <img id="shootingImg" alt="Live preview" hidden>
-
-      <div class="shot-counter" id="shotCounter">PHOTO 1 OF 8</div>
-
-      <div class="heads-up-overlay" id="headsUpOverlay">
-        <span class="heads-up-text" id="headsUpText">3</span>
-      </div>
-
-      <div class="countdown-overlay" id="countdownOverlay">
-        <span id="countdownNumber">8</span>
-      </div>
-
-      <div class="interval-preview" id="intervalPreview">
-        <img id="intervalPreviewImg" alt="Photo just captured">
-        <div class="interval-countdown-bottom">
-          <span class="interval-label">NEXT PHOTO IN</span>
-          <span class="interval-number" id="intervalNumber">3</span>
-        </div>
-      </div>
-
-      <div class="recording-badge" id="recordingBadge" hidden>
-        <span class="rec-dot"></span> RECORDING
-      </div>
-
-      <div class="captured-flash" id="capturedFlash"></div>
-
-      <!-- Frame size indicator — bottom-left, always visible during shooting -->
-      <div class="shooting-frame-indicator" id="shootingFrameIndicator">
-        <span id="shootingFrameIndicatorText">—</span>
       </div>
     </div>
   </div>
 </section>
 
-  <!-- ===================== PAGE 4: PHOTO SELECTION ===================== -->
-  <section class="page" id="page-selection" data-page="selection">
-    <h1 class="page-title">Choose 4 Photos</h1>
+<!-- ══════════ WHAT'S NEW ══════════ -->
+<section class="section section--surface" id="whats-new">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">What's New</p>
+      <h2 class="heading">More than just a print.</h2>
+    </div>
 
-    <div class="selection-layout">
+    <div class="new-grid">
+      <div class="new-card reveal">
+        <div class="new-card-icon">🎥</div>
+        <span class="new-badge">New</span>
+        <h3>Live Video Strip</h3>
+        <p>Your photo strip comes alive. We record a video of your entire session — synced to your selected photos — so you get a moving memory you can share on social media instantly.</p>
+      </div>
+      <div class="new-card reveal reveal-delay-2">
+        <div class="new-card-icon">📱</div>
+        <span class="new-badge">New</span>
+        <h3>QR Code for Digital Copy</h3>
+        <p>Every session gets a unique QR code printed right on your strip. Scan it to access and download your full-resolution photos and video — no app needed, works on any phone.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-      <div class="selection-grid" id="selectionGrid">
-        <!-- 8 photo cards + 1 selection-counter tile injected by selection.js -->
+<!-- ══════════ HOW IT WORKS ══════════ -->
+<section class="section" id="how-it-works">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">The Experience</p>
+      <h2 class="heading">Five steps to a perfect strip.</h2>
+    </div>
+
+    <div class="steps-grid">
+      <div class="step reveal">
+        <div class="step-num">1</div>
+        <div class="step-label">Pick your frame</div>
+        <p class="step-desc">Long (2×6) or Wide (4×6) — both include a digital copy</p>
+      </div>
+      <div class="step reveal reveal-delay-1">
+        <div class="step-num">2</div>
+        <div class="step-label">Strike a pose</div>
+        <p class="step-desc">8 shots with 8-second countdowns — plenty of time to be yourself</p>
+      </div>
+      <div class="step reveal reveal-delay-2">
+        <div class="step-num">3</div>
+        <div class="step-label">Choose 4 favorites</div>
+        <p class="step-desc">Pick from all 8 shots right on the kiosk touchscreen</p>
+      </div>
+      <div class="step reveal reveal-delay-3">
+        <div class="step-num">4</div>
+        <div class="step-label">Pick a design</div>
+        <p class="step-desc">Dozens of frame templates, updated regularly</p>
+      </div>
+      <div class="step reveal reveal-delay-4">
+        <div class="step-num">5</div>
+        <div class="step-label">Print &amp; scan</div>
+        <p class="step-desc">Instant print plus a QR for your digital copy</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ GALLERY ══════════ -->
+<section class="section section--surface" id="gallery">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">Sample Strips</p>
+      <h2 class="heading">Every session, different vibe.</h2>
+    </div>
+    <div class="gallery-mosaic">
+      <div class="gallery-item reveal">
+        <div class="gallery-item-inner"></div>
+        <span class="gallery-item-label">Birthday Party</span>
+      </div>
+      <div class="gallery-item reveal reveal-delay-1">
+        <div class="gallery-item-inner"></div>
+        <span class="gallery-item-label">Barkada Goals</span>
+      </div>
+      <div class="gallery-item reveal reveal-delay-2">
+        <div class="gallery-item-inner"></div>
+        <span class="gallery-item-label">Graduation</span>
+      </div>
+      <div class="gallery-item reveal reveal-delay-1">
+        <div class="gallery-item-inner"></div>
+        <span class="gallery-item-label">Night Out</span>
+      </div>
+      <div class="gallery-item reveal reveal-delay-2">
+        <div class="gallery-item-inner"></div>
+        <span class="gallery-item-label">Debut</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ PRICING ══════════ -->
+<section class="section" id="pricing">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">Pricing</p>
+      <h2 class="heading">Simple, transparent pricing.</h2>
+    </div>
+
+    <div class="price-grid">
+      <!-- Long Frame -->
+      <div class="price-card reveal">
+        <div class="price-card-header">
+          <div class="price-card-name">Long Frame</div>
+          <div class="price-card-amount">₱50 <span>/ session</span></div>
+        </div>
+        <div class="price-card-body">
+          <div class="price-row">
+            <span class="price-row-label">Print size</span>
+            <span class="price-row-value">2×6 inch strip</span>
+          </div>
+          <div class="price-row">
+            <span class="price-row-label">Photos taken</span>
+            <span class="price-row-value">8 shots, choose 4</span>
+          </div>
+          <div class="price-row">
+            <span class="price-row-label">Shooting time</span>
+            <span class="price-row-value">8 seconds per shot</span>
+          </div>
+          <div class="price-row">
+            <span class="price-row-label">Print quantity</span>
+            <span class="price-row-value">2 identical strips</span>
+          </div>
+          <div class="price-divider"></div>
+          <p class="price-row-label" style="font-size:0.75rem; letter-spacing:0.08em; text-transform:uppercase;">Inclusions</p>
+          <ul class="price-inclusion-list">
+            <li>2× Long Frame print</li>
+            <li>Digital photo copy (QR)</li>
+            <li>Digital video copy</li>
+          </ul>
+          <p class="price-row-label" style="margin-top:8px; font-size:0.78rem;">Extra copies: ₱25 each</p>
+        </div>
       </div>
 
-      <div class="selection-preview-panel">
-        <p class="preview-panel-label">Strip Preview</p>
-        <div class="strip-preview-wrap">
-          <div class="strip-preview-container" id="stripPreviewContainer">
-            <!-- built dynamically by strip.js -->
+      <!-- Wide Frame -->
+      <div class="price-card reveal reveal-delay-2">
+        <div class="price-card-header">
+          <div class="price-card-name">Wide Frame</div>
+          <div class="price-card-amount">₱50 <span>/ session</span></div>
+        </div>
+        <div class="price-card-body">
+          <div class="price-row">
+            <span class="price-row-label">Print size</span>
+            <span class="price-row-value">4×6 inch sheet</span>
+          </div>
+          <div class="price-row">
+            <span class="price-row-label">Photos taken</span>
+            <span class="price-row-value">8 shots, choose 4</span>
+          </div>
+          <div class="price-row">
+            <span class="price-row-label">Shooting time</span>
+            <span class="price-row-value">8 seconds per shot</span>
+          </div>
+          <div class="price-row">
+            <span class="price-row-label">Print quantity</span>
+            <span class="price-row-value">1 wide sheet</span>
+          </div>
+          <div class="price-divider"></div>
+          <p class="price-row-label" style="font-size:0.75rem; letter-spacing:0.08em; text-transform:uppercase;">Inclusions</p>
+          <ul class="price-inclusion-list">
+            <li>1× Wide Frame print</li>
+            <li>Digital photo copy (QR)</li>
+            <li>Digital video copy</li>
+          </ul>
+          <p class="price-row-label" style="margin-top:8px; font-size:0.78rem;">Extra copies: ₱25 each</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ TEMPLATES ══════════ -->
+<section class="section section--surface" id="templates">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">Available Templates</p>
+      <h2 class="heading">A design for every mood.</h2>
+    </div>
+
+    <div class="templates-grid">
+      <div class="template-card reveal">
+        <div class="template-card-fill tpl-1">
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-label">Golden</div>
+        </div>
+      </div>
+      <div class="template-card reveal reveal-delay-1">
+        <div class="template-card-fill tpl-2">
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-label">Rosy</div>
+        </div>
+      </div>
+      <div class="template-card reveal reveal-delay-2">
+        <div class="template-card-fill tpl-3">
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-label">Sky</div>
+        </div>
+      </div>
+      <div class="template-card reveal reveal-delay-3">
+        <div class="template-card-fill tpl-4">
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-label">Mint</div>
+        </div>
+      </div>
+      <div class="template-card reveal">
+        <div class="template-card-fill tpl-5">
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-label">Dream</div>
+        </div>
+      </div>
+      <div class="template-card reveal reveal-delay-1">
+        <div class="template-card-fill tpl-6">
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-label">Blush</div>
+        </div>
+      </div>
+      <div class="template-card reveal reveal-delay-2">
+        <div class="template-card-fill tpl-7">
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-label">Night</div>
+        </div>
+      </div>
+      <div class="template-card reveal reveal-delay-3">
+        <div class="template-card-fill tpl-8">
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-photo-slot"></div>
+          <div class="template-label">Retro</div>
+        </div>
+      </div>
+    </div>
+    <p class="templates-note">New templates added regularly. Admins can upload custom designs from the dashboard.</p>
+  </div>
+</section>
+
+<!-- ══════════ FAQ ══════════ -->
+<section class="section" id="faq">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">FAQ</p>
+      <h2 class="heading">Got questions?</h2>
+    </div>
+
+    <div class="faq-list">
+      <div class="faq-item">
+        <button class="faq-q">
+          How long does a session take?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">
+          A full session — 8 photos, design selection, and printing — takes about 3 to 5 minutes. The kiosk guides you through every step automatically.
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">
+          Can I take more photos than 4?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">
+          The kiosk takes 8 photos per session. You pick your 4 favorites to appear on the strip. All 8 shots are included in your digital copy via the QR code.
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">
+          How do I get my digital copy?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">
+          A QR code is printed right on your photo strip. Scan it with your phone camera — no app needed — to open a gallery where you can download your photos and video in full resolution.
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">
+          Can I order extra prints?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">
+          Yes! During the kiosk session, you can choose up to 20 copies. Each additional copy is ₱25 on top of the base price.
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">
+          Is there a video version of my strip?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">
+          Yes — your digital gallery includes both a still photo strip and a live video strip that animates your photos in sequence. Perfect for sharing on Instagram or TikTok.
+        </div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">
+          What's the difference between Long Frame and Wide Frame?
+          <span class="faq-icon">+</span>
+        </button>
+        <div class="faq-a">
+          Long Frame (2×6) gives you two identical portrait strips — great for splitting with a friend. Wide Frame (4×6) gives you one landscape sheet with all 4 photos arranged in a grid, printed on a standard 4×6 photo paper.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ CONTACT + LOCATION ══════════ -->
+<section class="section section--surface" id="contact">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">Find Us</p>
+      <h2 class="heading">Come say hi.</h2>
+    </div>
+
+    <div class="contact-grid">
+      <div class="contact-info">
+        <div class="contact-item reveal">
+          <div class="contact-icon">📍</div>
+          <div class="contact-item-text">
+            <span class="contact-item-label">Address</span>
+            <span class="contact-item-value">M.L. Quezon, Halapitan<br>San Fernando, Bukidnon</span>
           </div>
         </div>
-
-        <div class="nav-row">
-          <button class="btn btn-primary btn-large" id="btnNextFromSelection" disabled>NEXT →</button>
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- ===================== PAGE 5: STRIP DESIGN SELECTION ===================== -->
-  <section class="page" id="page-design" data-page="design">
-    <h1 class="page-title">Choose a Strip Design</h1>
-
-    <div class="design-layout">
-
-      <div class="design-options" id="designOptions">
-        <!-- design swatches injected by strip.js -->
-      </div>
-
-      <div class="design-preview-panel">
-        <p class="preview-panel-label">Live Preview</p>
-        <div class="strip-preview-wrap">
-          <div class="strip-preview-container" id="designPreviewContainer">
-            <!-- built dynamically by strip.js -->
+        <div class="contact-item reveal reveal-delay-1">
+          <div class="contact-icon">📧</div>
+          <div class="contact-item-text">
+            <span class="contact-item-label">Email</span>
+            <span class="contact-item-value"><a href="mailto:studriobooth@gmail.com">studriobooth@gmail.com</a></span>
           </div>
         </div>
-
-        <div class="nav-row">
-          <button class="btn btn-outline" id="btnBackFromDesign">← BACK</button>
-          <button class="btn btn-primary btn-large" id="btnNextFromDesign" disabled>NEXT →</button>
+        <div class="contact-item reveal reveal-delay-2">
+          <div class="contact-icon">📞</div>
+          <div class="contact-item-text">
+            <span class="contact-item-label">Phone / Viber</span>
+            <span class="contact-item-value"><a href="tel:+639478890710">0947 889 0710</a></span>
+          </div>
+        </div>
+        <div class="contact-item reveal reveal-delay-3">
+          <div class="contact-icon">🏢</div>
+          <div class="contact-item-text">
+            <span class="contact-item-label">Operated by</span>
+            <span class="contact-item-value">LJ Computer &amp; Printing Services</span>
+          </div>
         </div>
       </div>
 
-    </div>
-  </section>
-
-  <!-- ===================== PAGE 6: ALL DONE ===================== -->
-  <section class="page" id="page-printing" data-page="printing">
-    <h1 class="page-title">All Done!</h1>
-
-    <div class="printing-layout">
-
-      <!-- Left: print status badge (shown during auto-print) -->
-      <div class="printing-status-col" id="printingStatusCol">
-        <div class="print-status-badge" id="printStatusBadge">
-          <span class="print-status-icon" id="printStatusIcon">🖨</span>
-          <span class="print-status-text" id="printStatusText">Printing…</span>
+      <div class="map-wrap reveal">
+        <div class="map-placeholder">
+          <div class="map-placeholder-icon">🗺️</div>
+          <div class="map-placeholder-text">M.L. Quezon, Halapitan</div>
+          <div class="map-placeholder-sub">San Fernando, Bukidnon</div>
         </div>
-        <p class="print-qty-note" id="printQtyNote">—</p>
-        <button class="btn printing-done-btn" id="btnPrintingDone" disabled>Done</button>
-      </div>
-
-      <!-- Center: looping video strip (no controls) -->
-      <div class="printing-video-col">
-        <div class="printing-video-frame" id="printingVideoFrame">
-          <!-- video or canvas injected by printing.js -->
-        </div>
-      </div>
-
-      <!-- Right: QR code + timer -->
-      <div class="printing-qr-col">
-        <p class="preview-panel-label">Your Digital Copy</p>
-        <div class="qr-wrap" id="qrWrap">
-          <div id="qrCodeCanvas"></div>
-        </div>
-        <p class="qr-caption">Scan to save your photos &amp; videos</p>
-
-        <!-- Uploading state shown until QR is ready -->
-        <div class="qr-uploading" id="qrUploading">
-          <span class="qr-uploading-dot"></span> Uploading…
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- Print-only layout, hidden on screen, shown only by print.css -->
-  <div id="printArea" class="print-only"></div>
-
-  <!-- 60-second circular timer — shared across Pages 2, 4, 5, 6 -->
-  <div class="kiosk-timer" id="kioskTimer" hidden>
-    <svg viewBox="0 0 100 100" class="kiosk-timer-ring">
-      <circle class="kiosk-timer-track" cx="50" cy="50" r="45"></circle>
-      <circle class="kiosk-timer-progress" id="kioskTimerProgress" cx="50" cy="50" r="45"></circle>
-    </svg>
-    <span class="kiosk-timer-number" id="kioskTimerNumber">60</span>
-  </div>
-
-  <!-- Confirmation modal for ending the session — replaces the old browser confirm() -->
-  <div class="modal-overlay" id="confirmModal" hidden>
-    <div class="modal-box">
-      <p class="modal-message">End session?</p>
-      <div class="modal-actions">
-        <button class="btn btn-outline" id="btnConfirmBack">Back</button>
-        <button class="btn btn-primary" id="btnConfirmProceed">Proceed</button>
       </div>
     </div>
   </div>
+</section>
 
-  <!-- Shown automatically when Page 6's 60s timer runs out without the
-       guest pressing Done — no buttons, just a brief notice before the
-       kiosk resets itself for the next guest. -->
-  <div class="modal-overlay" id="endingSessionModal" hidden>
-    <div class="modal-box">
-      <p class="modal-message">Ending Session…</p>
+<!-- ══════════ FOOTER ══════════ -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <img src="assets/studrio_logo.png" alt="Studrio Booth" class="footer-logo">
+        <p class="footer-tagline">Your memories, printed instantly. Available in San Fernando, Bukidnon.</p>
+      </div>
+      <div class="footer-links">
+        <div class="footer-col">
+          <span class="footer-col-title">Experience</span>
+          <a href="#whats-new">What's New</a>
+          <a href="#how-it-works">How It Works</a>
+          <a href="#gallery">Gallery</a>
+          <a href="#templates">Templates</a>
+        </div>
+        <div class="footer-col">
+          <span class="footer-col-title">Info</span>
+          <a href="#pricing">Pricing</a>
+          <a href="#faq">FAQ</a>
+          <a href="#contact">Contact</a>
+        </div>
+        <div class="footer-col">
+          <span class="footer-col-title">System</span>
+          <a href="/kiosk/">Kiosk</a>
+          <a href="/admin/">Admin</a>
+          <a href="/g/">Gallery</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Studrio Booth · LJ Computer &amp; Printing Services</span>
+      <span class="footer-credit">Powered by <a href="https://studrio.cc">studrio.cc</a></span>
     </div>
   </div>
-</div>
+</footer>
 
-<!-- ═══════════════════════════════════════════════════════════════════════
-     SCRIPT LOAD ORDER — do not reorder without understanding dependencies.
+<script>
+  /* ── Scroll reveal ── */
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        revealObserver.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
 
-     Rule: a script must appear AFTER every script it depends on.
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
 
-     Dependency graph (simplified):
-       supabase SDK
-         └─ cloud-storage.js   (wraps supabase — provides getSupabaseClient + CLOUD_CONFIG)
-              └─ asset-sync.js  (queries Supabase directly — no local server)
-                   └─ strip.js  (calls assetSync.getTemplates() inside initDesigns())
-                        └─ selection.js, printing.js, qr.js  (call stripModule)
-       camera-bridge.js
-         └─ camera-controller.js
-       layout-config.js        (consumed by strip.js + shooting.js)
-       app.js                  (session state + page nav — must precede boot.js)
-       auth-lock.js            (must precede boot.js)
-       boot.js                 (last — orchestrates everything above)
-     ═══════════════════════════════════════════════════════════════════════ -->
-
-<!-- mp4-muxer: produces properly finalized MP4 files (moov at front)
-     that pass social media upload validation on Instagram/TikTok/etc.
-     Pure JS, runs entirely in-browser, no server needed. -->
-<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@latest/build/mp4-muxer.js"></script>
-
-<!-- Supabase SDK — must load before cloud-storage.js -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-
-<!-- Cloud + sync — must load before strip.js so assetSync is defined -->
-<script src="js/cloud-storage.js"></script>
-<script src="js/asset-sync.js"></script>
-
-<!-- Camera -->
-<script src="js/camera-bridge.js"></script>
-<script src="js/camera-controller.js"></script>
-
-<!-- Core UI -->
-<script src="js/layout-config.js"></script>
-<script src="js/kiosk-timer.js"></script>
-
-<!-- Strip / design — depends on layout-config.js + asset-sync.js -->
-<script src="js/strip.js"></script>
-
-<!-- Session pages -->
-<script src="js/shooting.js"></script>
-<script src="js/selection.js"></script>
-<script src="js/print-alignment.js"></script>
-<script src="js/printing.js"></script>
-<script src="js/qr.js"></script>
-
-<!-- App wiring + auth — must precede boot.js -->
-<script src="js/app.js"></script>
-<script src="js/auth-lock.js"></script>
-
-<!-- Boot — LAST: orchestrates camera connect → template sync → initDesigns → lock screen -->
-<script src="js/boot.js"></script>
-
+  /* ── FAQ accordion ── */
+  document.querySelectorAll('.faq-q').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = btn.closest('.faq-item');
+      const isOpen = item.classList.contains('open');
+      // Close all
+      document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+      // Toggle clicked
+      if (!isOpen) item.classList.add('open');
+    });
+  });
+</script>
 
 </body>
 </html>
