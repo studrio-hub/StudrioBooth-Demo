@@ -373,5 +373,7 @@ async function resetSessionAndRestart() {
 }
 
 /* Frame thumbnails — paths relative to /kiosk/ */
-document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";
-document.getElementById("frameThumb4x6").src = "assets/designs/4x6_Strip_Thumbnail.png";
+const thumb2x6 = document.getElementById("frameThumb2x6");
+const thumb4x6 = document.getElementById("frameThumb4x6");
+if (thumb2x6) thumb2x6.src = "assets/designs/thumbnail/2x6_Strip_Thumbnail.png";
+if (thumb4x6) thumb4x6.src = "assets/designs/thumbnail/4x6_Strip_Thumbnail.png";

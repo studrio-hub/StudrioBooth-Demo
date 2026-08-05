@@ -15,14 +15,14 @@
 
 @font-face {
   font-family: 'Pangram Sans Mori';
-  src: url('../fonts/Mori-Regular.woff2') format('woff2');
+  src: url('../font/PPMori-Regular.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
 }
 
 @font-face {
   font-family: 'Pangram Sans Mori';
-  src: url('../fonts/Mori-Bold.woff2') format('woff2');
+  src: url('../font/PPMori-SemiBold.otf') format('opentype');
   font-weight: 700;
   font-style: normal;
 }
