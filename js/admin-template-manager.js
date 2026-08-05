@@ -7,10 +7,14 @@
  * What it does:
  *   • Lists all templates from the Supabase `templates` table
  *   • Upload new frame template + thumbnail (both for 2x6 and/or 4x6)
+ *   • Edit existing templates — replace 2×6 / 4×6 overlays or thumbnail,
+ *     update name and asset type (bumps version so kiosks re-download)
  *   • Enable / disable templates (kiosk skips disabled ones during sync)
  *   • Rename templates (updates `name` column)
  *   • Reorder templates by drag-handle or up/down buttons (updates `sort_order`)
  *   • Delete templates (removes Supabase Storage files + table row)
+ *   • Sync Templates button — triggers the kiosk's local server to re-pull
+ *     the latest templates immediately, without waiting for the 3-min poll
  *
  * This module is self-contained — it owns its DOM section and wires
  * everything up internally. admin-dashboard.js calls templateManager.init()
@@ -22,6 +26,15 @@
  *   authenticated role. If your bucket only has a session-scoped INSERT
  *   policy, uploads will fail with an RLS violation — see
  *   supabase-storage-templates-policy-patch.sql.
+ *
+ * SYNC BUTTON BEHAVIOR:
+ *   The kiosk's local server (localhost:3000) exposes a POST endpoint at
+ *   /sync/trigger that calls assetSync.forceRefresh() on the running kiosk.
+ *   Because Admin runs on studrio.cc and the kiosk is on localhost, the
+ *   button POSTs to that endpoint and reports success/failure. If the kiosk
+ *   is offline (or the local server isn't running), the button still refreshes
+ *   the admin's own template list and shows a clear offline notice.
+ *   Templates always auto-sync on the kiosk every 3 minutes regardless.
  */
 
 const templateManager = (() => {
@@ -39,11 +52,9 @@ const templateManager = (() => {
 
   // ── Toast (reuse admin-dashboard's toast element) ───────────────────────────
 
-  function showToast(message) {
+  function showToast(message, duration = 3500) {
     if (!_toast) _toast = document.getElementById("adminToast");
     if (!_toast) {
-      // No toast element found — fall back to an alert so the message is
-      // never silently lost (this should not normally happen).
       console.warn("[templateManager] No toast element found — falling back to alert()");
       alert(message);
       return;
@@ -51,7 +62,7 @@ const templateManager = (() => {
     _toast.textContent = message;
     _toast.hidden = false;
     clearTimeout(showToast._t);
-    showToast._t = setTimeout(() => { _toast.hidden = true; }, 3500);
+    showToast._t = setTimeout(() => { _toast.hidden = true; }, duration);
   }
 
   // ── Template card renderer ──────────────────────────────────────────────────
@@ -90,6 +101,7 @@ const templateManager = (() => {
           <p class="template-card-type">${escapeHtml(t.asset_type || "frame_template")}</p>
         </div>
         <div class="template-card-actions">
+          <button class="btn-admin btn-admin-outline btn-sm" data-action="edit">Edit</button>
           <button class="btn-admin btn-admin-outline btn-sm" data-action="rename">Rename</button>
           <button class="btn-admin btn-admin-outline btn-sm" data-action="toggle">
             ${t.enabled ? "Disable" : "Enable"}
@@ -101,6 +113,11 @@ const templateManager = (() => {
           <button class="btn-order" data-action="move-down" ${index === templates.length - 1 ? "disabled" : ""}>▼</button>
         </div>
       `;
+
+      // ── Edit ────────────────────────────────────────────────────────────────
+      card.querySelector('[data-action="edit"]').addEventListener("click", () => {
+        showEditModal(t);
+      });
 
       // ── Rename ──────────────────────────────────────────────────────────────
       card.querySelector('[data-action="rename"]').addEventListener("click", () => {
@@ -272,6 +289,149 @@ const templateManager = (() => {
     });
   }
 
+  // ── Edit modal ──────────────────────────────────────────────────────────────
+  /*
+   * Shows a modal pre-filled with the template's current values.
+   * Each file input is optional — leaving it blank keeps the existing asset.
+   * Saving any file field bumps the template's version so kiosks re-download.
+   */
+
+  let _editingTemplateId = null;
+
+  function showEditModal(template) {
+    _editingTemplateId = template.id;
+
+    const modal = sel("templateEditModal");
+
+    // Pre-fill name and type
+    const nameEl = sel("editTemplateName");
+    const typeEl = sel("editTemplateAssetType");
+    if (nameEl) nameEl.value = template.name || "";
+    if (typeEl) typeEl.value = template.asset_type || "frame_template";
+
+    // Clear file inputs (they can't be pre-filled for security reasons)
+    const f2El = sel("editTemplateFile2x6");
+    const f4El = sel("editTemplateFile4x6");
+    const thEl = sel("editTemplateThumb");
+    if (f2El) f2El.value = "";
+    if (f4El) f4El.value = "";
+    if (thEl) thEl.value = "";
+
+    // Show what's currently set
+    const cur2x6El = sel("editCurrent2x6");
+    const cur4x6El = sel("editCurrent4x6");
+    const curThEl  = sel("editCurrentThumb");
+    if (cur2x6El) cur2x6El.textContent = template.overlay_path_2x6 ? "✓ Existing file" : "None";
+    if (cur4x6El) cur4x6El.textContent = template.overlay_path_4x6 ? "✓ Existing file" : "None";
+    if (curThEl)  curThEl.textContent  = template.thumbnail_path    ? "✓ Existing file" : "None";
+
+    // Reset progress/error state
+    const progressEl = sel("editTemplateProgress");
+    if (progressEl) { progressEl.textContent = ""; progressEl.hidden = true; }
+
+    if (modal) modal.hidden = false;
+  }
+
+  function wireEditModal() {
+    const modal      = sel("templateEditModal");
+    const cancelBtn  = sel("btnTemplateEditCancel");
+    const submitBtn  = sel("btnTemplateEditSubmit");
+    const progressEl = sel("editTemplateProgress");
+
+    if (!modal || !cancelBtn || !submitBtn) {
+      console.error("[templateManager] wireEditModal: missing required element(s)", {
+        modal: !!modal, cancelBtn: !!cancelBtn, submitBtn: !!submitBtn
+      });
+      return;
+    }
+
+    cancelBtn.addEventListener("click", () => {
+      _editingTemplateId = null;
+      modal.hidden = true;
+    });
+
+    submitBtn.addEventListener("click", async () => {
+      if (!_editingTemplateId) return;
+
+      const nameEl = sel("editTemplateName");
+      const typeEl = sel("editTemplateAssetType");
+      const f2El   = sel("editTemplateFile2x6");
+      const f4El   = sel("editTemplateFile4x6");
+      const thEl   = sel("editTemplateThumb");
+
+      const newName     = nameEl ? nameEl.value.trim() : "";
+      const newType     = typeEl ? typeEl.value : "";
+      const newFile2x6  = f2El ? (f2El.files[0] || null) : null;
+      const newFile4x6  = f4El ? (f4El.files[0] || null) : null;
+      const newThumb    = thEl ? (thEl.files[0] || null) : null;
+
+      if (!newName) { showToast("Template name cannot be empty."); return; }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Saving…";
+      if (progressEl) { progressEl.hidden = false; progressEl.textContent = "Saving…"; }
+
+      try {
+        // Fetch current template record so we know the slug/prefix for storage paths
+        const current = _templates.find((t) => t.id === _editingTemplateId);
+        if (!current) throw new Error("Template not found — try refreshing.");
+
+        // Derive the storage prefix from the existing overlay path (keeps files together)
+        let storagePrefix = null;
+        if (current.overlay_path_2x6) {
+          storagePrefix = current.overlay_path_2x6.replace(/\/overlay_2x6\.png$/, "");
+        } else if (current.overlay_path_4x6) {
+          storagePrefix = current.overlay_path_4x6.replace(/\/overlay_4x6\.png$/, "");
+        } else if (current.thumbnail_path) {
+          storagePrefix = current.thumbnail_path.replace(/\/thumbnail\.png$/, "");
+        }
+
+        // If no storage prefix can be derived (e.g. very old template), create one
+        if (!storagePrefix) {
+          const slug = newName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").substring(0, 48);
+          storagePrefix = `templates/${slug}-${Date.now()}`;
+        }
+
+        const updates = { name: newName, asset_type: newType };
+
+        // Upload any replacement files; upsert:true (authenticated) overwrites the existing path
+        if (newFile2x6) {
+          if (progressEl) progressEl.textContent = "Uploading 2×6 overlay…";
+          updates.overlay_path_2x6 = await adminTemplates._uploadFile(
+            newFile2x6, `${storagePrefix}/overlay_2x6.png`, "image/png"
+          );
+        }
+        if (newFile4x6) {
+          if (progressEl) progressEl.textContent = "Uploading 4×6 overlay…";
+          updates.overlay_path_4x6 = await adminTemplates._uploadFile(
+            newFile4x6, `${storagePrefix}/overlay_4x6.png`, "image/png"
+          );
+        }
+        if (newThumb) {
+          if (progressEl) progressEl.textContent = "Uploading thumbnail…";
+          updates.thumbnail_path = await adminTemplates._uploadFile(
+            newThumb, `${storagePrefix}/thumbnail.png`, newThumb.type || "image/png"
+          );
+        }
+
+        if (progressEl) progressEl.textContent = "Updating database…";
+        await adminTemplates.updateTemplate(_editingTemplateId, updates);
+
+        showToast(`Template "${newName}" updated.`);
+        modal.hidden = true;
+        _editingTemplateId = null;
+        await loadTemplates();
+      } catch (e) {
+        console.error("[templateManager] Edit failed:", e);
+        showToast(`Save failed: ${e.message}`);
+        if (progressEl) progressEl.textContent = `Error: ${e.message}`;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Save";
+      }
+    });
+  }
+
   // ── Upload modal ────────────────────────────────────────────────────────────
 
   function wireUploadModal() {
@@ -330,7 +490,6 @@ const templateManager = (() => {
         file4x6   = f4El.files[0] || null;
         thumbFile = thEl ? (thEl.files[0] || null) : null;
       } catch (e) {
-        // Reading form values failed — surface it instead of dying silently.
         console.error("[templateManager] Could not read upload form:", e);
         showToast(`Could not read upload form: ${e.message}`);
         return;
@@ -350,10 +509,6 @@ const templateManager = (() => {
         await loadTemplates();
       } catch (e) {
         console.error("[templateManager] Upload failed:", e);
-        // Row Level Security violations land here — if you see
-        // "new row violates row-level security policy" or similar, run
-        // supabase-storage-templates-policy-patch.sql in the Supabase SQL
-        // editor to add the missing templates/ path INSERT/UPDATE policies.
         showToast(`Upload failed: ${e.message}`);
         if (progressEl) progressEl.textContent = `Error: ${e.message}`;
       } finally {
@@ -361,6 +516,63 @@ const templateManager = (() => {
         submitBtn.textContent = "Upload";
       }
     });
+  }
+
+  // ── Sync Templates button ───────────────────────────────────────────────────
+  /*
+   * POSTs to the kiosk's local server sync trigger endpoint so the running
+   * kiosk re-pulls templates from Supabase immediately, without waiting for
+   * the 3-minute background poll.
+   *
+   * Because the Admin runs on studrio.cc and the kiosk is on localhost, this
+   * can only work when the browser window running the admin panel is on the
+   * same machine as the kiosk (i.e. the operator opens the admin page on the
+   * booth PC itself). In all other cases, the button still refreshes the
+   * admin's own template list and shows a clear "kiosk offline" notice.
+   *
+   * The kiosk will also pick up new templates within 3 minutes automatically
+   * via the background poll in asset-sync.js — no sync button press needed.
+   */
+  const KIOSK_SYNC_ENDPOINT = "https://localhost:3000/sync/trigger";
+
+  async function triggerKioskSync(btn) {
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = "Syncing…";
+
+    let kioskReached = false;
+    try {
+      const res = await fetch(KIOSK_SYNC_ENDPOINT, {
+        method: "POST",
+        // Short timeout — if the local server isn't running we want to fail
+        // fast and fall through to the "offline" message rather than hanging.
+        signal: AbortSignal.timeout(4000)
+      });
+      kioskReached = res.ok;
+    } catch (_) {
+      kioskReached = false;
+    }
+
+    // Always refresh the admin's own template list regardless of kiosk status
+    await loadTemplates();
+
+    if (kioskReached) {
+      showToast("✓ Kiosk synced — templates updated.", 4000);
+    } else {
+      showToast("Templates list refreshed. Kiosk not reachable (it will auto-sync within 3 min).", 5000);
+    }
+
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+
+  function wireSyncButton() {
+    const btn = sel("btnSyncTemplates");
+    if (!btn) {
+      console.warn("[templateManager] wireSyncButton: #btnSyncTemplates not found — sync button will not work.");
+      return;
+    }
+    btn.addEventListener("click", () => triggerKioskSync(btn));
   }
 
   // ── Load ────────────────────────────────────────────────────────────────────
@@ -372,6 +584,14 @@ const templateManager = (() => {
     try {
       _templates = await adminTemplates.listTemplates();
       renderTemplateList(_templates);
+
+      // Update the count label
+      const countEl = sel("templateCount");
+      if (countEl) {
+        countEl.textContent = _templates.length
+          ? `${_templates.length} template${_templates.length !== 1 ? "s" : ""}`
+          : "";
+      }
     } catch (e) {
       console.error("[templateManager] loadTemplates failed:", e);
       _statusEl.hidden = false;
@@ -395,13 +615,16 @@ const templateManager = (() => {
           <h2>Template Manager</h2>
           <p class="gallery-count" id="templateCount"></p>
         </div>
-        <button class="btn-admin btn-admin-primary" id="btnUploadTemplate" type="button">+ Upload Template</button>
+        <div class="template-header-actions">
+          <button class="btn-admin btn-admin-outline btn-sm" id="btnSyncTemplates" type="button">↻ Sync Templates</button>
+          <button class="btn-admin btn-admin-primary btn-sm" id="btnUploadTemplate" type="button">+ Upload Template</button>
+        </div>
       </div>
 
       <p class="admin-status" id="templateStatus">Loading templates…</p>
       <div class="template-grid" id="templateGrid"></div>
 
-      <!-- Delete confirmation modal -->
+      <!-- ── Delete confirmation modal ──────────────────────────────────── -->
       <div class="admin-modal-overlay" id="templateDeleteModal" hidden>
         <div class="admin-modal-box">
           <p class="admin-modal-message" id="templateDeleteMessage">
@@ -414,7 +637,71 @@ const templateManager = (() => {
         </div>
       </div>
 
-      <!-- Upload modal -->
+      <!-- ── Edit modal ─────────────────────────────────────────────────── -->
+      <div class="admin-modal-overlay" id="templateEditModal" hidden>
+        <div class="admin-modal-box admin-modal-box--wide">
+          <h3 class="admin-modal-title">Edit Template</h3>
+
+          <div class="template-upload-form">
+
+            <div class="form-field">
+              <label for="editTemplateName">Template name</label>
+              <input type="text" id="editTemplateName" placeholder="e.g. Coastal Cool" maxlength="80">
+            </div>
+
+            <div class="form-field">
+              <label for="editTemplateAssetType">Asset type</label>
+              <select id="editTemplateAssetType">
+                <option value="frame_template">Frame Template</option>
+                <option value="sticker">Sticker</option>
+                <option value="background">Background</option>
+                <option value="gif_video">GIF / Video</option>
+                <option value="logo">Logo</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="editTemplateFile2x6">
+                Replace Frame PNG — 2×6 (Long Frame)
+                <span class="edit-current-label" id="editCurrent2x6"></span>
+              </label>
+              <input type="file" id="editTemplateFile2x6" accept=".png,image/png">
+              <p class="form-hint">Leave blank to keep the existing 2×6 overlay. Full-size PNG at 2400×3600px, 600dpi.</p>
+            </div>
+
+            <div class="form-field">
+              <label for="editTemplateFile4x6">
+                Replace Frame PNG — 4×6 (Wide Frame)
+                <span class="edit-current-label" id="editCurrent4x6"></span>
+              </label>
+              <input type="file" id="editTemplateFile4x6" accept=".png,image/png">
+              <p class="form-hint">Leave blank to keep the existing 4×6 overlay.</p>
+            </div>
+
+            <div class="form-field">
+              <label for="editTemplateThumb">
+                Replace Thumbnail
+                <span class="edit-current-label" id="editCurrentThumb"></span>
+              </label>
+              <input type="file" id="editTemplateThumb" accept=".png,.jpg,.jpeg,image/png,image/jpeg">
+              <p class="form-hint">Leave blank to keep the existing thumbnail.</p>
+            </div>
+
+            <p class="form-hint template-edit-version-note">
+              Replacing any file will bump the template's version number so all kiosks re-download the updated assets automatically.
+            </p>
+
+            <p class="template-upload-progress" id="editTemplateProgress" hidden></p>
+          </div>
+
+          <div class="admin-modal-actions">
+            <button class="btn-admin btn-admin-outline" id="btnTemplateEditCancel" type="button">Cancel</button>
+            <button class="btn-admin btn-admin-primary" id="btnTemplateEditSubmit" type="button">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Upload modal ───────────────────────────────────────────────── -->
       <div class="admin-modal-overlay" id="templateUploadModal" hidden>
         <div class="admin-modal-box admin-modal-box--wide">
           <h3 class="admin-modal-title">Upload Template</h3>
@@ -490,7 +777,9 @@ const templateManager = (() => {
         return;
       }
       wireUploadModal();
+      wireEditModal();
       wireDeleteModal();
+      wireSyncButton();
       await loadTemplates();
     },
 

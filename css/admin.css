@@ -744,6 +744,41 @@ a { color: inherit; }
   font-size: 0.82rem;
 }
 
+/* ── Template header action buttons row ──────────────────────────────────── */
+/*
+ * Sits on the right side of the Template Manager section header.
+ * Groups the "Sync Templates" and "+ Upload Template" buttons.
+ */
+.template-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Edit modal: current-file status label ───────────────────────────────── */
+/*
+ * Small green label shown next to each file input's heading when an
+ * existing asset is already stored for that slot (e.g. "✓ Existing file").
+ * Reassures the admin that leaving the input blank keeps the current file.
+ */
+.edit-current-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ok);
+  margin-left: 8px;
+  font-style: normal;
+}
+
+/* Version bump notice at the bottom of the edit form */
+.template-edit-version-note {
+  padding: 10px 12px;
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
 /* ── Responsive tweaks ───────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .admin-topbar-inner { padding: 0 16px; gap: 12px; }
