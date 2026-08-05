@@ -338,25 +338,60 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SCRIPT LOAD ORDER — do not reorder without understanding dependencies.
+
+     Rule: a script must appear AFTER every script it depends on.
+
+     Dependency graph (simplified):
+       supabase SDK
+         └─ cloud-storage.js   (wraps supabase — provides getSupabaseClient + CLOUD_CONFIG)
+              └─ asset-sync.js  (queries Supabase directly — no local server)
+                   └─ strip.js  (calls assetSync.getTemplates() inside initDesigns())
+                        └─ selection.js, printing.js, qr.js  (call stripModule)
+       camera-bridge.js
+         └─ camera-controller.js
+       layout-config.js        (consumed by strip.js + shooting.js)
+       app.js                  (session state + page nav — must precede boot.js)
+       auth-lock.js            (must precede boot.js)
+       boot.js                 (last — orchestrates everything above)
+     ═══════════════════════════════════════════════════════════════════════ -->
+
 <!-- mp4-muxer: produces properly finalized MP4 files (moov at front)
      that pass social media upload validation on Instagram/TikTok/etc.
      Pure JS, runs entirely in-browser, no server needed. -->
 <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@latest/build/mp4-muxer.js"></script>
+
+<!-- Supabase SDK — must load before cloud-storage.js -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<!-- Cloud + sync — must load before strip.js so assetSync is defined -->
+<script src="js/cloud-storage.js"></script>
+<script src="js/asset-sync.js"></script>
+
+<!-- Camera -->
 <script src="js/camera-bridge.js"></script>
 <script src="js/camera-controller.js"></script>
+
+<!-- Core UI -->
 <script src="js/layout-config.js"></script>
 <script src="js/kiosk-timer.js"></script>
+
+<!-- Strip / design — depends on layout-config.js + asset-sync.js -->
 <script src="js/strip.js"></script>
+
+<!-- Session pages -->
 <script src="js/shooting.js"></script>
 <script src="js/selection.js"></script>
 <script src="js/print-alignment.js"></script>
 <script src="js/printing.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="js/cloud-storage.js"></script>
-<script src="js/asset-sync.js"></script>
 <script src="js/qr.js"></script>
+
+<!-- App wiring + auth — must precede boot.js -->
 <script src="js/app.js"></script>
 <script src="js/auth-lock.js"></script>
+
+<!-- Boot — LAST: orchestrates camera connect → template sync → initDesigns → lock screen -->
 <script src="js/boot.js"></script>
 
 

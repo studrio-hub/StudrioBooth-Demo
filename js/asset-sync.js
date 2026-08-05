@@ -1,72 +1,48 @@
 /*
  * ASSET-SYNC.JS — Kiosk-side template sync module
  * ─────────────────────────────────────────────────────────────────────────────
- * On every boot, this module:
- *   1. Queries the Supabase `templates` table directly using the anon key.
- *      The RLS policy "kiosk can read enabled templates" allows unauthenticated
- *      SELECT on enabled=true rows — no local server or proxy needed.
- *   2. Compares each template's version number against whatever is stored
- *      in localStorage (the local version cache).
- *   3. Downloads any new or updated asset files directly from the Supabase
- *      public Storage bucket URL (no signed URL needed — bucket is Public).
- *   4. Stores downloaded asset files as Object URLs (in-memory blob URLs)
- *      backed by IndexedDB. These are safe to use in <img src>,
- *      canvas.loadImage(), etc. for the duration of the session.
- *   5. Falls back to whatever is already cached in localStorage metadata
- *      (with the last-known asset Object URLs rebuilt from IndexedDB blobs)
- *      if Supabase is unreachable.
+ * Fetches templates DIRECTLY from Supabase — no local server involved.
  *
- * After sync completes (online or from cache), `assetSync.getTemplates()`
- * returns the resolved template list with local `overlayUrl` / `thumbnailUrl`
- * properties pointing to blob: URLs — strip.js reads these instead of the
- * hardcoded assets/designs/ paths that were there before.
+ * On every boot (and every 3 minutes while the kiosk stays open) this module:
+ *   1. Queries the `templates` table via the Supabase JS client.
+ *   2. Compares each template's version number against the locally cached version.
+ *   3. Downloads any new or updated asset files directly from Supabase Storage
+ *      as public URLs — no proxy, no localhost, no server required.
+ *   4. Stores downloaded blobs in IndexedDB and exposes them as blob: Object URLs.
+ *   5. Falls back to the IndexedDB cache if Supabase is unreachable.
  *
- * WHY PERIODIC RE-SYNC?
- *   The kiosk pulls on its own schedule: once at boot, and then every
- *   SYNC_POLL_INTERVAL_MS while the app stays open. This means a booth left
- *   running for hours or days still picks up new or edited templates
- *   automatically. Each poll is cheap: it only re-downloads assets whose
- *   version number increased since the last sync (see syncAsset()).
+ * After sync, assetSync.getTemplates() returns the resolved template list with
+ * local overlayUrl2x6 / overlayUrl4x6 / thumbnailUrl blob: URLs that
+ * strip.js uses for canvas compositing and the design picker.
  *
- * WHY IndexedDB for blob storage?
- *   localStorage can only hold strings. Storing a 500 KB PNG as a base64
- *   string is wasteful and slow. IndexedDB supports binary blobs natively
- *   and has a much higher storage quota.
+ * DEPENDS ON: cloud-storage.js (must load first — provides getSupabaseClient()
+ * and CLOUD_CONFIG with the bucket name).
  *
- * WHY version numbers (not ETags or timestamps)?
- *   Simple integer version bumps are easy to manage in the admin panel and
- *   unambiguous to compare. The admin increments a template's version when
- *   uploading a new frame or thumbnail file; the kiosk re-downloads only
- *   those assets — not the whole catalog.
+ * NO LOCAL SERVER DEPENDENCY — templates and assets come directly from Supabase.
  */
 
 const assetSync = (() => {
-  // No local server — the kiosk talks directly to Supabase.
-  // Template metadata is fetched via the Supabase JS SDK (anon key, same
-  // client used by cloud-storage.js). Asset blobs are fetched from the
-  // public Storage bucket URL directly — no CORS issues because the bucket
-  // is set to Public in the Supabase dashboard.
 
-  const IDB_DB_NAME        = "studrio-asset-cache";
-  const IDB_DB_VERSION     = 1;
-  const IDB_STORE_BLOBS    = "blobs";    // key = storage path, value = Blob
-  const LS_KEY_META        = "studrio_template_meta"; // JSON array of template metadata
+  const IDB_DB_NAME     = "studrio-asset-cache";
+  const IDB_DB_VERSION  = 1;
+  const IDB_STORE_BLOBS = "blobs";           // key = storage path, value = Blob
+  const LS_KEY_META     = "studrio_template_meta"; // JSON array of cached template metadata
 
-  // How often to re-check Supabase for new/updated templates while the
-  // kiosk stays open, in addition to the sync that runs once at boot.
-  const SYNC_POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+  // Re-check Supabase for template changes every 3 minutes while the kiosk
+  // stays open — so new templates uploaded in the admin panel appear without
+  // needing a reboot or a manual sync step.
+  const SYNC_POLL_INTERVAL_MS = 3 * 60 * 1000;
 
-  // In-memory map of storage path → Object URL (built once after sync)
+  // In-memory map of storage path → blob: Object URL
   const _objectUrls = new Map();
 
-  // Resolved template list (populated by sync or cache load)
-  let _templates = [];
-  let _syncStatus = "idle"; // "idle" | "syncing" | "online" | "offline" | "error"
-  let _lastSyncAt = null;   // Date of the last successful sync attempt (online or offline fallback)
-  let _syncing = false;     // guards against overlapping sync() calls
-  let _pollTimer = null;
+  let _templates  = [];
+  let _syncStatus = "idle";  // "idle" | "syncing" | "online" | "offline" | "error"
+  let _lastSyncAt = null;
+  let _syncing    = false;
+  let _pollTimer  = null;
 
-  // ── IndexedDB ───────────────────────────────────────────────────────────────
+  // ── IndexedDB helpers ───────────────────────────────────────────────────────
 
   function openDb() {
     return new Promise((resolve, reject) => {
@@ -85,9 +61,9 @@ const assetSync = (() => {
   async function idbPut(key, blob) {
     const db = await openDb();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE_BLOBS, "readwrite");
+      const tx    = db.transaction(IDB_STORE_BLOBS, "readwrite");
       const store = tx.objectStore(IDB_STORE_BLOBS);
-      const req = store.put(blob, key);
+      const req   = store.put(blob, key);
       req.onsuccess = () => resolve();
       req.onerror   = () => reject(req.error);
     });
@@ -96,9 +72,9 @@ const assetSync = (() => {
   async function idbGet(key) {
     const db = await openDb();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE_BLOBS, "readonly");
+      const tx    = db.transaction(IDB_STORE_BLOBS, "readonly");
       const store = tx.objectStore(IDB_STORE_BLOBS);
-      const req = store.get(key);
+      const req   = store.get(key);
       req.onsuccess = () => resolve(req.result || null);
       req.onerror   = () => reject(req.error);
     });
@@ -107,9 +83,9 @@ const assetSync = (() => {
   async function idbDelete(key) {
     const db = await openDb();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE_BLOBS, "readwrite");
+      const tx    = db.transaction(IDB_STORE_BLOBS, "readwrite");
       const store = tx.objectStore(IDB_STORE_BLOBS);
-      const req = store.delete(key);
+      const req   = store.delete(key);
       req.onsuccess = () => resolve();
       req.onerror   = () => reject(req.error);
     });
@@ -118,15 +94,15 @@ const assetSync = (() => {
   async function idbGetAllKeys() {
     const db = await openDb();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE_BLOBS, "readonly");
+      const tx    = db.transaction(IDB_STORE_BLOBS, "readonly");
       const store = tx.objectStore(IDB_STORE_BLOBS);
-      const req = store.getAllKeys();
+      const req   = store.getAllKeys();
       req.onsuccess = () => resolve(req.result || []);
       req.onerror   = () => reject(req.error);
     });
   }
 
-  // ── Metadata cache (localStorage) ──────────────────────────────────────────
+  // ── localStorage metadata cache ─────────────────────────────────────────────
 
   function loadCachedMeta() {
     try { return JSON.parse(localStorage.getItem(LS_KEY_META) || "[]"); }
@@ -135,13 +111,12 @@ const assetSync = (() => {
 
   function saveCachedMeta(templates) {
     try { localStorage.setItem(LS_KEY_META, JSON.stringify(templates)); }
-    catch (e) { console.warn("[assetSync] Could not save template metadata to localStorage:", e); }
+    catch (e) { console.warn("[assetSync] Could not save metadata to localStorage:", e); }
   }
 
   // ── Object URL helpers ──────────────────────────────────────────────────────
 
   function makeObjectUrl(blob, storagePath) {
-    // Revoke any existing URL for this path before creating a new one
     if (_objectUrls.has(storagePath)) {
       URL.revokeObjectURL(_objectUrls.get(storagePath));
     }
@@ -150,31 +125,61 @@ const assetSync = (() => {
     return url;
   }
 
-  function getObjectUrl(storagePath) {
-    return _objectUrls.get(storagePath) || null;
-  }
+  // ── Supabase: fetch template list ───────────────────────────────────────────
 
-  // ── Asset download ──────────────────────────────────────────────────────────
   /*
-   * Downloads a template asset directly from Supabase public Storage.
-   * The photobooth bucket is Public, so no signed URL or auth header is needed —
-   * getPublicUrl() gives a stable https:// URL that fetch() can hit directly.
+   * Queries the `templates` table directly via the Supabase JS client.
+   * Returns rows ordered by sort_order, then created_at.
+   * No local server involved — this is a direct Supabase REST call.
    */
-  async function downloadAsset(storagePath) {
+  async function fetchTemplatesFromSupabase() {
     const client = getSupabaseClient();
     if (!client) throw new Error("Supabase client not available.");
-    const { data } = client.storage.from(CLOUD_CONFIG.bucketName).getPublicUrl(storagePath);
-    if (!data || !data.publicUrl) throw new Error(`Could not resolve public URL for ${storagePath}`);
+
+    const { data, error } = await client
+      .from("templates")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at",  { ascending: true });
+
+    if (error) throw new Error(`Supabase templates query failed: ${error.message}`);
+    return data || [];
+  }
+
+  // ── Supabase: download a single asset blob ──────────────────────────────────
+
+  /*
+   * Downloads a template asset (overlay PNG or thumbnail) directly from
+   * Supabase Storage using its public URL.
+   *
+   * The photobooth bucket is public, so we can fetch the public URL directly
+   * without signing — same as how the admin panel displays thumbnails.
+   * No local server proxy needed.
+   */
+  async function downloadAssetFromSupabase(storagePath) {
+    const client = getSupabaseClient();
+    if (!client) throw new Error("Supabase client not available.");
+
+    // Get the public URL for this storage path
+    const { data } = client.storage
+      .from(CLOUD_CONFIG.bucketName)
+      .getPublicUrl(storagePath);
+
+    if (!data || !data.publicUrl) {
+      throw new Error(`Could not resolve public URL for: ${storagePath}`);
+    }
+
+    // Fetch the blob directly from Supabase CDN
     const res = await fetch(data.publicUrl);
-    if (!res.ok) throw new Error(`Asset download failed: HTTP ${res.status} for ${storagePath}`);
+    if (!res.ok) throw new Error(`Asset fetch failed: HTTP ${res.status} for ${storagePath}`);
+
     const blob = await res.blob();
     await idbPut(storagePath, blob);
     return makeObjectUrl(blob, storagePath);
   }
 
-  // ── Per-template sync ───────────────────────────────────────────────────────
+  // ── Per-asset sync (version-aware, IDB-cached) ──────────────────────────────
 
-  // Returns the cached version number for a given storage path, or -1 if not cached.
   function getCachedVersion(storagePath, cachedMeta) {
     for (const t of cachedMeta) {
       if (t.overlay_path_2x6 === storagePath && t._overlay_version_2x6 !== undefined) return t._overlay_version_2x6;
@@ -185,10 +190,11 @@ const assetSync = (() => {
   }
 
   /*
-   * Syncs a single asset file. Downloads from Supabase (via server proxy) if:
+   * Downloads an asset from Supabase only if:
    *   a) it is not in IndexedDB at all, OR
-   *   b) the server version > the locally cached version.
+   *   b) the Supabase version > the locally cached version.
    * Otherwise rebuilds the Object URL from the existing IndexedDB blob.
+   * This keeps sync fast — only changed assets are re-downloaded.
    */
   async function syncAsset(storagePath, serverVersion, cachedMeta) {
     if (!storagePath) return null;
@@ -203,17 +209,17 @@ const assetSync = (() => {
 
     // Needs download (new or updated)
     try {
-      console.log(`[assetSync] Downloading: ${storagePath} (v${serverVersion})`);
-      return await downloadAsset(storagePath);
+      console.log(`[assetSync] Downloading from Supabase: ${storagePath} (v${serverVersion})`);
+      return await downloadAssetFromSupabase(storagePath);
     } catch (e) {
       console.warn(`[assetSync] Could not download ${storagePath}:`, e.message);
-      // Fall back to whatever is cached, even if stale
+      // Fall back to stale cached blob rather than showing nothing
       if (existingBlob) return makeObjectUrl(existingBlob, storagePath);
       return null;
     }
   }
 
-  // ── Offline: load from IDB cache ────────────────────────────────────────────
+  // ── Offline fallback: load from IDB ────────────────────────────────────────
 
   async function loadFromCache() {
     const cachedMeta = loadCachedMeta();
@@ -230,15 +236,15 @@ const assetSync = (() => {
 
       resolved.push({
         ...t,
-        overlayUrl2x6:  overlayBlob2x6 ? makeObjectUrl(overlayBlob2x6, t.overlay_path_2x6) : null,
-        overlayUrl4x6:  overlayBlob4x6 ? makeObjectUrl(overlayBlob4x6, t.overlay_path_4x6) : null,
-        thumbnailUrl:   thumbBlob       ? makeObjectUrl(thumbBlob,       t.thumbnail_path)   : null
+        overlayUrl2x6: overlayBlob2x6 ? makeObjectUrl(overlayBlob2x6, t.overlay_path_2x6) : null,
+        overlayUrl4x6: overlayBlob4x6 ? makeObjectUrl(overlayBlob4x6, t.overlay_path_4x6) : null,
+        thumbnailUrl:  thumbBlob       ? makeObjectUrl(thumbBlob,       t.thumbnail_path)   : null
       });
     }
     return resolved.filter((t) => t.enabled !== false);
   }
 
-  // ── Prune deleted templates from IDB ────────────────────────────────────────
+  // ── Prune assets for deleted templates ─────────────────────────────────────
 
   async function pruneDeletedAssets(serverTemplates) {
     const activePaths = new Set();
@@ -264,42 +270,35 @@ const assetSync = (() => {
 
   async function sync() {
     if (_syncing) {
-      console.log("[assetSync] Sync already in progress — skipping this trigger.");
+      console.log("[assetSync] Sync already in progress — skipping.");
       return;
     }
-    _syncing = true;
+    _syncing    = true;
     _syncStatus = "syncing";
 
     try {
-      // Fetch templates directly from Supabase using the anon key.
-      // The RLS policy "kiosk can read enabled templates" allows anon SELECT
-      // on enabled=true rows — no authentication needed for the kiosk.
+      // Step 1: fetch the template list directly from Supabase
       let serverTemplates;
       try {
-        const client = getSupabaseClient();
-        if (!client) throw new Error("Supabase client not initialised.");
-        const { data, error } = await client
-          .from("templates")
-          .select("*")
-          .order("sort_order", { ascending: true })
-          .order("created_at",  { ascending: true });
-        if (error) throw error;
-        serverTemplates = data || [];
+        serverTemplates = await fetchTemplatesFromSupabase();
+        console.log(`[assetSync] Fetched ${serverTemplates.length} templates from Supabase.`);
       } catch (e) {
-        console.warn("[assetSync] Could not reach Supabase:", e.message, "— falling back to cache.");
+        console.warn("[assetSync] Supabase unreachable:", e.message, "— falling back to cache.");
         _syncStatus = "offline";
-        _templates = await loadFromCache();
+        _templates  = await loadFromCache();
         _lastSyncAt = new Date();
         return;
       }
 
+      // Step 2: prune IDB of any assets that no longer exist in Supabase
+      await pruneDeletedAssets(serverTemplates);
+
+      // Step 3: for each enabled template, sync its assets (download only if changed)
       const cachedMeta = loadCachedMeta();
       const resolved   = [];
 
-      await pruneDeletedAssets(serverTemplates);
-
       for (const template of serverTemplates) {
-        if (!template.enabled) continue; // skip disabled templates
+        if (!template.enabled) continue;
 
         const [overlayUrl2x6, overlayUrl4x6, thumbnailUrl] = await Promise.all([
           syncAsset(template.overlay_path_2x6, template.version || 1, cachedMeta),
@@ -312,28 +311,28 @@ const assetSync = (() => {
           overlayUrl2x6,
           overlayUrl4x6,
           thumbnailUrl,
-          // Record the synced version per-asset in the metadata cache
           _overlay_version_2x6: template.version || 1,
           _overlay_version_4x6: template.version || 1,
           _thumbnail_version:   template.version || 1
         });
       }
 
-      // Save updated metadata for offline use
+      // Step 4: persist metadata for offline use, update in-memory list
       saveCachedMeta(resolved);
       _templates  = resolved;
       _syncStatus = "online";
       _lastSyncAt = new Date();
       console.log(`[assetSync] Sync complete — ${resolved.length} templates ready.`);
+
     } finally {
       _syncing = false;
     }
   }
 
-  // ── Periodic polling ─────────────────────────────────────────────────────────
+  // ── Periodic background polling ─────────────────────────────────────────────
 
   function startPolling() {
-    if (_pollTimer) return; // already running
+    if (_pollTimer) return;
     _pollTimer = setInterval(() => {
       console.log("[assetSync] Periodic re-sync check…");
       sync().catch((e) => console.error("[assetSync] Periodic sync error:", e));
@@ -341,22 +340,15 @@ const assetSync = (() => {
   }
 
   function stopPolling() {
-    if (_pollTimer) {
-      clearInterval(_pollTimer);
-      _pollTimer = null;
-    }
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
   return {
     /*
-     * init() — call once during boot (before the kiosk reaches the design
-     * page). Returns a Promise that resolves when the first sync is done
-     * (or falls back to cache). Safe to await in boot.js.
-     * Also starts periodic background re-syncing (see SYNC_POLL_INTERVAL_MS)
-     * so newly uploaded or edited templates in the admin panel show up on
-     * this kiosk automatically — no reboot and no manual sync step needed.
+     * init() — call once in boot.js before initDesigns().
+     * Awaits the first sync (or offline cache load), then starts background polling.
      */
     async init() {
       try {
@@ -370,47 +362,37 @@ const assetSync = (() => {
     },
 
     /*
-     * getTemplates() — returns the resolved template list.
-     * Each entry has all the original Supabase columns plus:
-     *   overlayUrl2x6  — blob: URL for the 2x6 overlay PNG (or null)
-     *   overlayUrl4x6  — blob: URL for the 4x6 overlay PNG (or null)
-     *   thumbnailUrl   — blob: URL for the swatch thumbnail PNG (or null)
+     * getTemplates() — returns the resolved template list with blob: URLs.
+     * Each entry has the original Supabase columns plus:
+     *   overlayUrl2x6  — blob: URL for the 2×6 overlay PNG (or null)
+     *   overlayUrl4x6  — blob: URL for the 4×6 overlay PNG (or null)
+     *   thumbnailUrl   — blob: URL for the swatch thumbnail (or null)
      */
     getTemplates() {
       return _templates;
     },
 
-    /*
-     * status() — "idle" | "syncing" | "online" | "offline" | "error"
-     * Useful for a boot screen or debug overlay to show "Downloading templates…"
-     */
+    /* "idle" | "syncing" | "online" | "offline" | "error" */
     status() {
       return _syncStatus;
     },
 
-    /*
-     * lastSyncAt() — Date of the last completed sync attempt, or null if
-     * no sync has run yet. Useful for a small "last synced Xm ago" label.
-     */
+    /* Date of the last completed sync, or null. */
     lastSyncAt() {
       return _lastSyncAt;
     },
 
     /*
-     * forceRefresh() — re-runs the sync immediately without waiting for the
-     * next poll interval. Safe to call from the browser console on the kiosk:
-     *   assetSync.forceRefresh()
-     * A full page reload is only needed if strip.js has already consumed
-     * getTemplates() and needs to re-render the swatch picker with new designs.
+     * forceRefresh() — re-runs sync immediately without waiting for the
+     * next poll. Call this after the admin uploads a new template and you
+     * want the kiosk to pick it up instantly without a 3-minute wait.
+     * Note: strip.js will need initDesigns() re-called + the design page
+     * re-rendered to show the new templates — or just reload the kiosk page.
      */
     async forceRefresh() {
       await sync();
     },
 
-    /*
-     * stopPolling() — stops the periodic background re-sync. Not normally
-     * needed; exposed in case a future settings screen wants to pause it.
-     */
     stopPolling
   };
 })();
