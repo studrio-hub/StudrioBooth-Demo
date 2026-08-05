@@ -43,45 +43,66 @@ const cloudStorage = {
       && !!CLOUD_CONFIG.supabaseUrl && !!CLOUD_CONFIG.supabaseAnonKey;
   },
 
-  async uploadBlob(blob, path) {
+  async uploadBlob(blob, path, { retries = 2, retryDelayMs = 1500 } = {}) {
     const client = getSupabaseClient();
     // upsert is intentionally false — every session has a unique ID so paths
     // are never reused. upsert:true internally requires UPDATE permission on
     // storage.objects which the anon role does not have.
-    const { error } = await client.storage.from(CLOUD_CONFIG.bucketName).upload(path, blob, {
-      upsert: false,
-      contentType: blob.type || "application/octet-stream"
-    });
-    if (error) throw error;
-    const { data } = client.storage.from(CLOUD_CONFIG.bucketName).getPublicUrl(path);
-    return data.publicUrl;
+    //
+    // Retry loop: ERR_HTTP2_PROTOCOL_ERROR and transient Supabase connection
+    // resets (common after large canvas exports stall the HTTP/2 connection)
+    // are almost always resolved by a single retry. We wait retryDelayMs
+    // between attempts to give the connection time to recover.
+    let lastError;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      if (attempt > 0) {
+        console.warn(`[cloudStorage] uploadBlob retry ${attempt}/${retries} for ${path} after: ${lastError && lastError.message || lastError}`);
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+      }
+      const { error } = await client.storage.from(CLOUD_CONFIG.bucketName).upload(path, blob, {
+        upsert: false,
+        contentType: blob.type || "application/octet-stream"
+      });
+      if (!error) {
+        const { data } = client.storage.from(CLOUD_CONFIG.bucketName).getPublicUrl(path);
+        return data.publicUrl;
+      }
+      lastError = error;
+    }
+    throw lastError;
   },
 
   async saveSession(sessionData) {
-    const finalStripUrl = sessionData.finalStripPng
-      ? await this.uploadBlob(sessionData.finalStripPng, `sessions/${sessionData.id}/strip.png`)
-      : null;
+    const prefix = `sessions/${sessionData.id}`;
 
-    const finalStripVideoUrl = sessionData.finalStripVideo
-      ? await this.uploadBlob(sessionData.finalStripVideo, `sessions/${sessionData.id}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}`)
-      : null;
-
-    const printReadyUrl = sessionData.printReadyPng
-      ? await this.uploadBlob(sessionData.printReadyPng, `sessions/${sessionData.id}/strip-print.png`)
-      : null;
+    // Upload strip, video, and print-ready PNG in parallel rather than
+    // sequentially. This halves total upload time on typical connections and
+    // avoids HTTP/2 connection staleness that can accumulate when individual
+    // uploads are queued back-to-back after a long canvas/video export phase.
+    const [finalStripUrl, finalStripVideoUrl, printReadyUrl] = await Promise.all([
+      sessionData.finalStripPng
+        ? this.uploadBlob(sessionData.finalStripPng, `${prefix}/strip.png`)
+        : Promise.resolve(null),
+      sessionData.finalStripVideo
+        ? this.uploadBlob(sessionData.finalStripVideo, `${prefix}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}`)
+        : Promise.resolve(null),
+      sessionData.printReadyPng
+        ? this.uploadBlob(sessionData.printReadyPng, `${prefix}/strip-print.png`)
+        : Promise.resolve(null)
+    ]);
 
     const sessionJson = {
       id: sessionData.id,
       frameType: sessionData.frameType,
       design: sessionData.design,
-      stripPath:       finalStripUrl      ? `sessions/${sessionData.id}/strip.png`                                             : null,
-      stripVideoPath:  finalStripVideoUrl ? `sessions/${sessionData.id}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}` : null,
-      printReadyPath:  printReadyUrl      ? `sessions/${sessionData.id}/strip-print.png`                                       : null,
+      stripPath:       finalStripUrl      ? `${prefix}/strip.png`                                                        : null,
+      stripVideoPath:  finalStripVideoUrl ? `${prefix}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}`     : null,
+      printReadyPath:  printReadyUrl      ? `${prefix}/strip-print.png`                                                  : null,
       createdAt: new Date().toISOString()
     };
 
     const jsonBlob = new Blob([JSON.stringify(sessionJson)], { type: "application/json" });
-    await this.uploadBlob(jsonBlob, `sessions/${sessionData.id}/session.json`);
+    await this.uploadBlob(jsonBlob, `${prefix}/session.json`);
 
     try {
       const client = getSupabaseClient();

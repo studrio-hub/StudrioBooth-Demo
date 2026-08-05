@@ -31,6 +31,21 @@ let STRIP_DESIGNS = [];
 function initDesigns() {
   const templates = (typeof assetSync !== "undefined") ? assetSync.getTemplates() : [];
 
+  // Clear the image cache every time designs are (re-)loaded.
+  //
+  // assetSync's periodic resync revokes old overlay blob URLs and creates
+  // new ones. If we don't clear the cache here, stripModule._imageCache
+  // still holds the old dead Promise<HTMLImageElement> entries under the
+  // old blob URL keys — compositeLayout() then calls loadImage(oldBlobUrl),
+  // gets back a cached promise that resolved to null (broken image), and
+  // draws nothing for every photo slot. Clearing the cache forces a fresh
+  // load from the new blob URLs on first use. Overlays are backed by
+  // IndexedDB and re-resolve immediately from the local store, so there
+  // is no meaningful performance cost here.
+  if (typeof stripModule !== "undefined") {
+    stripModule._imageCache.clear();
+  }
+
   STRIP_DESIGNS = templates.map((t) => ({
     id:       t.id,
     label:    t.name,
