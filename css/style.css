@@ -101,7 +101,7 @@ button {
 .lock-screen {
   width: 100%; height: 100%;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2vh;
+  gap: 2.4vh;
   padding: 2vh 3vw;
 }
 
@@ -121,44 +121,69 @@ button {
   font-weight: 600;
 }
 
-/* NFC hint banner */
-.lock-nfc-hint {
-  display: flex; flex-direction: column; align-items: center; gap: 0.4vh;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.4vh 2.4vw;
-  text-align: center;
+/* Email + Password form */
+.lock-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6vh;
+  width: min(36vw, 380px);
 }
-.lock-nfc-icon { font-size: 2.6vh; line-height: 1; }
-.lock-nfc-hint p { font-size: 1.5vh; font-weight: 600; color: var(--text); }
-.lock-nfc-or { font-size: 1.2vh !important; color: var(--text-dim) !important; font-weight: 400 !important; margin-top: 0.2vh; }
 
-/* PIN dots row */
-.lock-pin-display {
-  display: flex; gap: 1.2vw; align-items: center;
+.lock-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6vh;
 }
-.lock-pin-dot {
-  width: 1.8vh; height: 1.8vh;
-  border-radius: 50%;
+
+.lock-field-label {
+  font-size: 1.2vh;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.lock-input {
+  width: 100%;
+  padding: 1.4vh 1.4vw;
   border: 2px solid var(--border);
-  background: transparent;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 1.8vh;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.lock-pin-dot.filled {
-  background: var(--accent);
+.lock-input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
+.lock-input::placeholder { color: var(--text-dim); opacity: 0.6; }
 
-/* Shake animation for wrong PIN */
-@keyframes lockShake {
-  0%,100% { transform: translateX(0); }
-  20%      { transform: translateX(-6px); }
-  40%      { transform: translateX(6px); }
-  60%      { transform: translateX(-4px); }
-  80%      { transform: translateX(4px); }
+.lock-submit-btn {
+  margin-top: 0.8vh;
+  padding: 1.6vh 0;
+  width: 100%;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #1a1a1a;
+  font-size: 1.8vh;
+  font-weight: 800;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
 }
-.lock-pin-display.shake { animation: lockShake 0.5s ease; }
+.lock-submit-btn:hover  { opacity: 0.88; }
+.lock-submit-btn:active { transform: scale(0.98); }
+.lock-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
 
 /* Status message */
 .lock-status-msg {
@@ -170,39 +195,6 @@ button {
 }
 .lock-status-msg.error   { color: var(--off); }
 .lock-status-msg.success { color: var(--ok); }
-
-/* Number pad */
-.lock-keypad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1vh 1.2vw;
-  width: auto;
-}
-
-.lock-key {
-  width: 8vh; height: 8vh;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
-  font-size: 2.4vh;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
-}
-.lock-key:hover  { border-color: var(--text-dim); }
-.lock-key:active { transform: scale(0.92); background: var(--panel-light); }
-
-.lock-key-clear {
-  background: var(--panel-light);
-  font-size: 2vh;
-}
-
-.lock-key-empty {
-  width: 8vh; height: 8vh; /* spacer for the 7-8-9 / _-0-⌫ layout */
-}
 
 /* ================= PAGE HOME: LANDING ================= */
 

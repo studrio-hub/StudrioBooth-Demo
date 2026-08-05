@@ -15,7 +15,7 @@
 
 <div id="kiosk">
 
-  <!-- ===================== PAGE LOCK: STAFF AUTHENTICATION ===================== -->
+<!-- ===================== PAGE LOCK: STAFF AUTHENTICATION ===================== -->
   <section class="page active" id="page-lock" data-page="lock">
     <div class="lock-screen">
 
@@ -24,41 +24,41 @@
         <p class="lock-subtitle">Staff Authentication Required</p>
       </div>
 
-      <!-- NFC hint — hidden if Supabase is not configured -->
-      <div class="lock-nfc-hint" id="lockNfcHint">
-        <span class="lock-nfc-icon">📱</span>
-        <p>Tap your NFC tag to unlock</p>
-        <p class="lock-nfc-or">— or enter PIN below —</p>
-      </div>
+      <!-- Email + Password sign-in form -->
+      <form class="lock-form" id="lockForm">
 
-      <!-- PIN display -->
-      <div class="lock-pin-display" id="lockPinDisplay">
-        <div class="lock-pin-dot" data-index="0"></div>
-        <div class="lock-pin-dot" data-index="1"></div>
-        <div class="lock-pin-dot" data-index="2"></div>
-        <div class="lock-pin-dot" data-index="3"></div>
-        <div class="lock-pin-dot" data-index="4"></div>
-        <div class="lock-pin-dot" data-index="5"></div>
-      </div>
+        <label class="lock-field">
+          <span class="lock-field-label">Email</span>
+          <input
+            type="email"
+            id="lockEmail"
+            class="lock-input"
+            placeholder="staff@example.com"
+            autocomplete="username"
+            required
+          >
+        </label>
+
+        <label class="lock-field">
+          <span class="lock-field-label">Password</span>
+          <input
+            type="password"
+            id="lockPassword"
+            class="lock-input"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            required
+          >
+        </label>
+
+        <button type="submit" class="lock-submit-btn" id="lockSubmitBtn">
+          Sign In
+        </button>
+
+      </form>
 
       <!-- Status message (errors, success) -->
       <p class="lock-status-msg" id="lockStatusMsg"></p>
-
-      <!-- Number pad -->
-      <div class="lock-keypad">
-        <button class="lock-key" data-digit="1">1</button>
-        <button class="lock-key" data-digit="2">2</button>
-        <button class="lock-key" data-digit="3">3</button>
-        <button class="lock-key" data-digit="4">4</button>
-        <button class="lock-key" data-digit="5">5</button>
-        <button class="lock-key" data-digit="6">6</button>
-        <button class="lock-key" data-digit="7">7</button>
-        <button class="lock-key" data-digit="8">8</button>
-        <button class="lock-key" data-digit="9">9</button>
-        <div class="lock-key-empty"></div>
-        <button class="lock-key" data-digit="0">0</button>
-        <button class="lock-key lock-key-clear" id="lockKeyClear">⌫</button>
-      </div>
 
     </div>
   </section>
