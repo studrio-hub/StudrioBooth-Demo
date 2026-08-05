@@ -1,16 +1,20 @@
 /*
- * CLOUD-STORAGE.JS — Supabase Storage + Database backend.
+ * CLOUD-STORAGE.JS — Supabase Storage backend (free tier, no card required).
  *
  * TO ENABLE:
- * 1. Create a free project at supabase.com.
+ * 1. Create a free project at supabase.com (no card needed).
  * 2. Storage → New bucket → name it "photobooth" → toggle Public ON.
  * 3. Project Settings → API → copy "Project URL" and "anon public" key
  *    into CLOUD_CONFIG below.
  * 4. Set CLOUD_CONFIG.enabled = true.
- * 5. Run supabase-templates-setup.sql in the Supabase SQL Editor to create
- *    the `templates` table and RLS policies.
+ *
+ * Session metadata (frameType, design, media URLs) is stored as a
+ * small session.json file inside the same public bucket — no separate
+ * database table needed. Until enabled, the app automatically keeps
+ * using local-only IndexedDB storage (same-device preview).
  *
  * Gallery URL format: https://studrio.cc/g/#<sessionId>
+ * Hash-based so GitHub Pages serves /g/index.html without any rewrite rules.
  */
 
 const CLOUD_CONFIG = {
@@ -33,6 +37,9 @@ function getSupabaseClient() {
   return _supabaseClient;
 }
 
+// Recording now prefers MP4 when the browser supports it (see camera-bridge.js
+// / strip.js) — this makes sure the uploaded filename's extension always
+// matches what was actually recorded, instead of assuming WebM.
 function videoExtensionFor(blob) {
   return blob && blob.type && blob.type.includes("mp4") ? "mp4" : "webm";
 }
@@ -47,7 +54,7 @@ const cloudStorage = {
     const client = getSupabaseClient();
     // upsert is intentionally false — every session has a unique ID so paths
     // are never reused. upsert:true internally requires UPDATE permission on
-    // storage.objects which the anon role does not have.
+    // storage.objects, which the anon role does not have, causing a 403.
     const { error } = await client.storage.from(CLOUD_CONFIG.bucketName).upload(path, blob, {
       upsert: false,
       contentType: blob.type || "application/octet-stream"
@@ -58,6 +65,11 @@ const cloudStorage = {
   },
 
   async saveSession(sessionData) {
+    // Individual per-photo files are intentionally NOT uploaded here.
+    // The gallery only shows the composite strip (photo + video), so there
+    // is no need to store or expose raw per-shot files. Keeping them out
+    // of storage also prevents guests from discovering each other's unedited
+    // photos by guessing storage paths.
     const finalStripUrl = sessionData.finalStripPng
       ? await this.uploadBlob(sessionData.finalStripPng, `sessions/${sessionData.id}/strip.png`)
       : null;
@@ -66,23 +78,30 @@ const cloudStorage = {
       ? await this.uploadBlob(sessionData.finalStripVideo, `sessions/${sessionData.id}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}`)
       : null;
 
+    // QR-baked, print-ready copy — stored for admin dashboard reprints.
     const printReadyUrl = sessionData.printReadyPng
       ? await this.uploadBlob(sessionData.printReadyPng, `sessions/${sessionData.id}/strip-print.png`)
       : null;
 
+    // The session JSON stores only storage *paths* (not public URLs) so that
+    // getSession() can generate short-lived signed URLs on demand. This means
+    // even if someone discovers the session JSON URL, the media links it
+    // returns will expire within an hour and cannot be hotlinked permanently.
     const sessionJson = {
       id: sessionData.id,
       frameType: sessionData.frameType,
       design: sessionData.design,
-      stripPath:       finalStripUrl      ? `sessions/${sessionData.id}/strip.png`                                             : null,
-      stripVideoPath:  finalStripVideoUrl ? `sessions/${sessionData.id}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}` : null,
-      printReadyPath:  printReadyUrl      ? `sessions/${sessionData.id}/strip-print.png`                                       : null,
+      // Paths relative to the bucket root — signed at read time, not write time
+      stripPath: finalStripUrl ? `sessions/${sessionData.id}/strip.png` : null,
+      stripVideoPath: finalStripVideoUrl ? `sessions/${sessionData.id}/strip-live.${videoExtensionFor(sessionData.finalStripVideo)}` : null,
+      printReadyPath: printReadyUrl ? `sessions/${sessionData.id}/strip-print.png` : null,
       createdAt: new Date().toISOString()
     };
 
     const jsonBlob = new Blob([JSON.stringify(sessionJson)], { type: "application/json" });
     await this.uploadBlob(jsonBlob, `sessions/${sessionData.id}/session.json`);
 
+    // Mirror into the `sessions` table for admin dashboard. Best-effort.
     try {
       const client = getSupabaseClient();
       const { error } = await client.from("sessions").insert({
@@ -101,6 +120,11 @@ const cloudStorage = {
     return { url: `${CLOUD_CONFIG.galleryBaseUrl}${sessionData.id}` };
   },
 
+  /* Fetches session metadata and converts all storage paths to short-lived
+     signed URLs (1 hour TTL). This means the gallery page serves real
+     expiring links — guests can view and download within an hour of
+     scanning the QR, but the URLs cannot be scraped and hotlinked
+     permanently, and raw bucket paths are never exposed to the browser. */
   async getSession(sessionId) {
     const client = getSupabaseClient();
     const { data: urlData } = client.storage
@@ -110,19 +134,26 @@ const cloudStorage = {
     if (!res.ok) return null;
     const session = await res.json();
 
+    // Generate signed URLs for all media paths in the session.
+    // createSignedUrl() returns { data: { signedUrl }, error }.
     async function sign(path) {
       if (!path) return null;
       const { data, error } = await client.storage
         .from(CLOUD_CONFIG.bucketName)
-        .createSignedUrl(path, 3600);
-      if (error) { console.warn("[cloudStorage] Could not sign URL for", path, error.message); return null; }
+        .createSignedUrl(path, 3600); // 1 hour TTL
+      if (error) {
+        console.warn("[cloudStorage] Could not sign URL for", path, error.message);
+        return null;
+      }
       return data.signedUrl;
     }
 
+    // Backwards-compat: old sessions stored full URLs instead of paths.
+    // Detect by checking whether the value starts with "sessions/".
     function isPath(v) { return v && v.startsWith("sessions/"); }
 
     const [finalStripUrl, finalStripVideoUrl] = await Promise.all([
-      isPath(session.stripPath)      ? sign(session.stripPath)      : (session.finalStripUrl || null),
+      isPath(session.stripPath) ? sign(session.stripPath) : (session.finalStripUrl || null),
       isPath(session.stripVideoPath) ? sign(session.stripVideoPath) : (session.finalStripVideoUrl || null)
     ]);
 
@@ -132,10 +163,14 @@ const cloudStorage = {
       design: session.design,
       finalStripUrl,
       finalStripVideoUrl,
+      // No individual photo URLs — gallery only shows the composite strips.
       photos: []
     };
   },
 
+  /* Called by the kiosk (printing.js) each time a print job actually
+     fires — logs one row per print job so "copies printed" is a real
+     sum, not a counter that can drift. Anon-insert-only, see SQL setup. */
   async logPrintEvent(sessionId, quantity) {
     try {
       const client = getSupabaseClient();
@@ -148,9 +183,10 @@ const cloudStorage = {
 };
 
 /* ===========================================================
- * ADMIN-ONLY FUNCTIONS — used exclusively by admin pages.
- * Relies on an authenticated Supabase session; RLS policies
- * in supabase-templates-setup.sql reject anonymous callers.
+ * ADMIN-ONLY FUNCTIONS — used exclusively by admin.html/admin.js.
+ * Everything here relies on an authenticated Supabase session; the
+ * RLS policies in supabase-admin-setup.sql reject these calls for
+ * anonymous (kiosk) callers.
  * =========================================================== */
 const adminStorage = {
   async signIn(email, password) {
@@ -176,6 +212,7 @@ const adminStorage = {
     client.auth.onAuthStateChange((_event, session) => callback(session?.user || null));
   },
 
+  /* All sessions, newest first — powers the dashboard's gallery grid. */
   async listAllSessions() {
     const client = getSupabaseClient();
     const { data, error } = await client
@@ -186,24 +223,34 @@ const adminStorage = {
     return data || [];
   },
 
+  /* Deletes a session's files from storage AND its table rows.
+     Files are removed first — if that fails, the row is kept so the
+     dashboard doesn't lose track of an orphaned-but-still-present set
+     of files. */
   async deleteSession(sessionId) {
     const client = getSupabaseClient();
     const prefix = `sessions/${sessionId}`;
+
     const { data: files, error: listError } = await client.storage
       .from(CLOUD_CONFIG.bucketName)
       .list(prefix);
     if (listError) throw listError;
+
     if (files && files.length) {
       const paths = files.map((f) => `${prefix}/${f.name}`);
       const { error: removeError } = await client.storage.from(CLOUD_CONFIG.bucketName).remove(paths);
       if (removeError) throw removeError;
     }
+
     const { error: deleteRowError } = await client.from("sessions").delete().eq("id", sessionId);
     if (deleteRowError) throw deleteRowError;
   },
 
+  /* Photostrips taken, total copies printed, and total storage bytes
+     used — for the dashboard's stats panel. */
   async getStats() {
     const client = getSupabaseClient();
+
     const [{ count: photostripCount, error: countError }, printResult, sessions] = await Promise.all([
       client.from("sessions").select("*", { count: "exact", head: true }),
       client.from("print_events").select("quantity"),
@@ -211,7 +258,9 @@ const adminStorage = {
     ]);
     if (countError) throw countError;
     if (printResult.error) throw printResult.error;
+
     const totalCopiesPrinted = (printResult.data || []).reduce((sum, row) => sum + (row.quantity || 0), 0);
+
     let totalBytes = 0;
     for (const session of sessions) {
       const { data: files, error } = await client.storage
@@ -220,188 +269,11 @@ const adminStorage = {
       if (error) continue;
       totalBytes += (files || []).reduce((sum, f) => sum + (f.metadata?.size || 0), 0);
     }
-    return { photostripCount: photostripCount || 0, totalCopiesPrinted, totalStorageBytes: totalBytes };
-  }
-};
 
-/* ===========================================================
- * TEMPLATE MANAGEMENT — admin-only, authenticated.
- * =========================================================== */
-const adminTemplates = {
-
-  /*
-   * Lists all templates, ordered by sort_order then created_at.
-   * Returns resolved public URLs for thumbnail and overlay files.
-   */
-  async listTemplates() {
-    const client = getSupabaseClient();
-    const { data, error } = await client
-      .from("templates")
-      .select("*")
-      .order("sort_order", { ascending: true })
-      .order("created_at",  { ascending: true });
-    if (error) throw error;
-
-    // Resolve public storage URLs for display in the admin panel
-    return (data || []).map((t) => ({
-      ...t,
-      thumbnail_url:    t.thumbnail_path    ? this._publicUrl(t.thumbnail_path)    : null,
-      overlay_url_2x6:  t.overlay_path_2x6  ? this._publicUrl(t.overlay_path_2x6)  : null,
-      overlay_url_4x6:  t.overlay_path_4x6  ? this._publicUrl(t.overlay_path_4x6)  : null
-    }));
-  },
-
-  _publicUrl(storagePath) {
-    const client = getSupabaseClient();
-    const { data } = client.storage.from(CLOUD_CONFIG.bucketName).getPublicUrl(storagePath);
-    return data.publicUrl;
-  },
-
-  /*
-   * Uploads a new template.
-   * Parameters:
-   *   name        — display name (string)
-   *   assetType   — "frame_template" | "sticker" | "background" | "gif_video" | "logo"
-   *   file2x6     — File object for the 2×6 overlay PNG (or null)
-   *   file4x6     — File object for the 4×6 overlay PNG (or null)
-   *   thumbFile   — File object for the thumbnail image (or null)
-   *
-   * Storage layout in the photobooth bucket:
-   *   templates/<slug>/overlay_2x6.png
-   *   templates/<slug>/overlay_4x6.png
-   *   templates/<slug>/thumbnail.png
-   */
-  async uploadTemplate({ name, assetType, file2x6, file4x6, thumbFile }) {
-    const client = getSupabaseClient();
-
-    // Derive a URL-safe slug from the name for the storage prefix
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .substring(0, 48);
-    // Append a short timestamp to avoid collisions on same-name uploads
-    const prefix = `templates/${slug}-${Date.now()}`;
-
-    const [overlayPath2x6, overlayPath4x6, thumbnailPath] = await Promise.all([
-      file2x6    ? this._uploadFile(file2x6,    `${prefix}/overlay_2x6.png`, "image/png") : Promise.resolve(null),
-      file4x6    ? this._uploadFile(file4x6,    `${prefix}/overlay_4x6.png`, "image/png") : Promise.resolve(null),
-      thumbFile  ? this._uploadFile(thumbFile,  `${prefix}/thumbnail.png`,   thumbFile.type || "image/png") : Promise.resolve(null)
-    ]);
-
-    // Get the current max sort_order and place the new template at the end
-    const { data: maxRow } = await client
-      .from("templates")
-      .select("sort_order")
-      .order("sort_order", { ascending: false })
-      .limit(1)
-      .single();
-    const nextOrder = maxRow ? (maxRow.sort_order || 0) + 1 : 0;
-
-    const { data, error } = await client.from("templates").insert({
-      name,
-      asset_type:       assetType || "frame_template",
-      overlay_path_2x6: overlayPath2x6,
-      overlay_path_4x6: overlayPath4x6,
-      thumbnail_path:   thumbnailPath,
-      enabled:          true,
-      sort_order:       nextOrder,
-      version:          1
-    }).select().single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  async _uploadFile(file, storagePath, mimeType) {
-    const client = getSupabaseClient();
-    const { error } = await client.storage.from(CLOUD_CONFIG.bucketName).upload(storagePath, file, {
-      upsert: true,   // admin uploads use upsert:true (authenticated role has UPDATE permission)
-      contentType: mimeType
-    });
-    if (error) throw error;
-    return storagePath;
-  },
-
-  /*
-   * Updates mutable template fields.
-   * Bumps the version number on any file-changing fields so the kiosk
-   * re-downloads the updated assets on next sync.
-   */
-  async updateTemplate(id, updates) {
-    const client = getSupabaseClient();
-
-    // If any overlay/thumbnail path changed, bump the version
-    const bumpVersion = updates.overlay_path_2x6 || updates.overlay_path_4x6 || updates.thumbnail_path;
-    if (bumpVersion) {
-      // Fetch current version first
-      const { data: current } = await client
-        .from("templates")
-        .select("version")
-        .eq("id", id)
-        .single();
-      updates.version = ((current && current.version) || 1) + 1;
-    }
-
-    const { data, error } = await client
-      .from("templates")
-      .update(updates)
-      .eq("id", id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  /*
-   * Reorders templates by assigning sort_order = array index.
-   * ids — array of template IDs in the desired order.
-   */
-  async reorderTemplates(ids) {
-    const client = getSupabaseClient();
-    // Supabase JS doesn't support bulk update in one query without a trigger,
-    // so we send them sequentially. For typical template counts (<50) this
-    // is fast enough; a stored procedure could batch this if needed.
-    for (let i = 0; i < ids.length; i++) {
-      const { error } = await client
-        .from("templates")
-        .update({ sort_order: i })
-        .eq("id", ids[i]);
-      if (error) throw error;
-    }
-  },
-
-  /*
-   * Deletes a template: removes Supabase Storage files then the table row.
-   */
-  async deleteTemplate(id) {
-    const client = getSupabaseClient();
-
-    // Fetch the row first to know which storage paths to remove
-    const { data: template, error: fetchError } = await client
-      .from("templates")
-      .select("*")
-      .eq("id", id)
-      .single();
-    if (fetchError) throw fetchError;
-
-    const pathsToRemove = [
-      template.overlay_path_2x6,
-      template.overlay_path_4x6,
-      template.thumbnail_path
-    ].filter(Boolean);
-
-    if (pathsToRemove.length) {
-      const { error: removeError } = await client.storage
-        .from(CLOUD_CONFIG.bucketName)
-        .remove(pathsToRemove);
-      if (removeError) throw removeError;
-    }
-
-    const { error: deleteError } = await client
-      .from("templates")
-      .delete()
-      .eq("id", id);
-    if (deleteError) throw deleteError;
+    return {
+      photostripCount: photostripCount || 0,
+      totalCopiesPrinted,
+      totalStorageBytes: totalBytes
+    };
   }
 };

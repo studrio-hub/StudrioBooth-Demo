@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studrio Booth — Admin</title>
+<!-- Asset paths are relative: this file lives at /admin/index.html,
+     so CSS and JS are one level up (../css/, ../js/). -->
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body>
+
+<!-- ===================== LOGIN SCREEN ===================== -->
+<div id="adminLogin" class="admin-login-screen">
+  <form id="loginForm" class="login-card">
+    <p class="login-eyebrow">STUDRIO BOOTH — STAFF ONLY</p>
+    <h1 class="login-title">Control Room</h1>
+
+    <label class="login-field">
+      <span>Email</span>
+      <input type="email" id="loginEmail" required autocomplete="username">
+    </label>
+    <label class="login-field">
+      <span>Password</span>
+      <input type="password" id="loginPassword" required autocomplete="current-password">
+    </label>
+
+    <button type="submit" class="btn-admin btn-admin-primary" id="loginSubmitBtn">Sign in</button>
+    <p class="login-error" id="loginError" hidden></p>
+  </form>
+</div>
+
+<!-- ===================== DASHBOARD ===================== -->
+<div id="adminDashboard" class="admin-dashboard" hidden>
+
+  <header class="admin-header">
+    <div class="admin-header-title">
+      <p class="admin-eyebrow">STUDRIO BOOTH</p>
+      <h1>Control Room</h1>
+    </div>
+    <div class="admin-header-actions">
+      <button class="btn-admin btn-admin-outline" id="btnRefresh">↻ Refresh</button>
+      <button class="btn-admin btn-admin-ghost" id="btnLogout">Sign out</button>
+    </div>
+  </header>
+
+  <!-- Mechanical odometer-style counters — a nod to real coin-op
+       photobooth counters rather than a generic stats-card row -->
+  <section class="counter-row" id="counterRow">
+    <div class="counter-unit">
+      <p class="counter-label">Photostrips Taken</p>
+      <div class="counter-digits" id="statStrips">— — —</div>
+    </div>
+    <div class="counter-unit">
+      <p class="counter-label">Copies Printed</p>
+      <div class="counter-digits" id="statPrints">— — —</div>
+    </div>
+    <div class="counter-unit">
+      <p class="counter-label">Storage Used</p>
+      <div class="counter-digits" id="statStorage">— — —</div>
+    </div>
+  </section>
+
+  <section class="printer-prefs-section">
+    <div class="gallery-section-head">
+      <h2>Printer Preferences</h2>
+    </div>
+
+    <div class="printer-prefs-card">
+
+      <!-- ① Printer Setup — talks to the local print-agent (see /print-agent) -->
+      <div class="pref-row">
+        <div class="pref-label-group">
+          <p class="pref-label">Printer Setup</p>
+          <p class="pref-desc">
+            The kiosk never shows a print dialog. The
+            <code>studio-booth-print-agent</code> running on this PC sends
+            every job straight to the printer selected below via CUPS
+            (under WSL).
+          </p>
+        </div>
+        <span class="agent-status" id="agentStatus">
+          <span class="agent-status-dot" id="agentStatusDot"></span>
+          <span id="agentStatusText">Checking agent…</span>
+        </span>
+      </div>
+
+      <div class="pref-row pref-row-stack">
+        <label class="pref-label" for="printerSelect">Target printer</label>
+        <select id="printerSelect" class="printer-select" disabled>
+          <option value="">— Agent offline —</option>
+        </select>
+      </div>
+
+      <div class="pref-save-row">
+        <button class="btn-admin btn-admin-primary" id="btnSavePrinter" disabled>Save Printer</button>
+        <button class="btn-admin btn-admin-outline" id="btnOpenCups">Open Printer Settings ↗</button>
+        <span class="pref-saved-msg" id="printerSavedMsg" hidden>✓ Saved</span>
+      </div>
+      <p class="pref-desc" style="margin-top:8px;">
+        "Open Printer Settings" opens CUPS' own admin page
+        (<code>localhost:631</code>) to add a printer and set its native
+        paper size, orientation, and quality — the real OS-level driver
+        screen, not something this app reimplements.
+      </p>
+
+      <div class="pref-divider"></div>
+
+      <!-- ② Printer alignment -->
+      <div class="pref-row">
+        <div class="pref-label-group">
+          <p class="pref-label">Printer alignment</p>
+          <p class="pref-desc">
+            Use these to center the print on the photo paper if the printer's
+            output comes out misaligned or cropped. Scale shrinks the strip to
+            leave headroom; Horizontal/Vertical Position then nudge it within
+            that headroom.
+          </p>
+        </div>
+      </div>
+
+      <div class="pref-align-grid">
+        <div class="pref-align-control">
+          <div class="pref-align-control-head">
+            <label for="alignScale">Scale</label>
+            <output id="alignScaleValue" for="alignScale">100%</output>
+          </div>
+          <input type="range" id="alignScale" min="80" max="100" step="1" value="100">
+          <p class="pref-align-hint">80%–100% of the print size</p>
+        </div>
+
+        <div class="pref-align-control">
+          <div class="pref-align-control-head">
+            <label for="alignOffsetX">Horizontal Position</label>
+            <output id="alignOffsetXValue" for="alignOffsetX">0</output>
+          </div>
+          <input type="range" id="alignOffsetX" min="-15" max="15" step="1" value="0">
+          <p class="pref-align-hint">Negative = left, positive = right</p>
+        </div>
+
+        <div class="pref-align-control">
+          <div class="pref-align-control-head">
+            <label for="alignOffsetY">Vertical Position</label>
+            <output id="alignOffsetYValue" for="alignOffsetY">0</output>
+          </div>
+          <input type="range" id="alignOffsetY" min="-15" max="15" step="1" value="0">
+          <p class="pref-align-hint">Negative = up, positive = down</p>
+        </div>
+      </div>
+
+      <div class="pref-save-row">
+        <button class="btn-admin btn-admin-primary" id="btnSavePrefs">Save Preferences</button>
+        <button class="btn-admin btn-admin-outline" id="btnTestPrint">🖨 Test Print</button>
+        <span class="pref-saved-msg" id="prefSavedMsg" hidden>✓ Saved</span>
+        <span class="pref-saved-msg" id="testPrintMsg" hidden>Sending test print…</span>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="gallery-section">
+    <div class="gallery-section-head">
+      <h2>Sessions</h2>
+      <p class="gallery-count" id="sessionCount"></p>
+    </div>
+
+    <p class="admin-status" id="galleryStatus">Loading sessions…</p>
+    <p class="admin-status admin-status-empty" id="galleryEmpty" hidden>
+      No sessions yet. They'll show up here the moment a guest finishes a photostrip.
+    </p>
+
+    <div class="filmstrip-grid" id="filmstripGrid"></div>
+  </section>
+
+</div>
+
+<!-- Delete confirmation modal — consistent with the kiosk's own
+     custom modal (index.html), never a native confirm() -->
+<div class="admin-modal-overlay" id="deleteModal" hidden>
+  <div class="admin-modal-box">
+    <p class="admin-modal-message">Delete this session and all its photos/videos? This can't be undone.</p>
+    <div class="admin-modal-actions">
+      <button class="btn-admin btn-admin-outline" id="btnCancelDelete">Cancel</button>
+      <button class="btn-admin btn-admin-danger" id="btnConfirmDelete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<p class="admin-toast" id="adminToast" hidden></p>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../js/cloud-storage.js"></script>
+<script src="../js/print-alignment.js"></script>
+<script src="../js/admin.js"></script>
+</body>
+</html>

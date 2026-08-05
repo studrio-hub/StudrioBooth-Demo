@@ -1,107 +1,160 @@
 /*
- * BOOT.JS — Kiosk startup sequence.
+ * BOOT.JS — Page 0 startup sequence + authentication gate.
  *
- * Run order (all awaited in sequence):
- *   1. assetSync.init()              — fetch templates from Supabase, cache in IDB
- *   2. initDesigns()                 — populate STRIP_DESIGNS from synced templates
- *   3. cameraController.connect()    — connect real DSLR or fall back to mock webcam
- *   4. cameraController.attachPreview() — wire the live preview to the Setup page
- *   5. authLock.init()               — show email+password lock screen
+ * Flow:
+ *   1. Lock screen shown immediately (auth-lock.js).
+ *   2. Camera connection attempt runs IN PARALLEL in the background.
+ *   3. Staff authenticates (NFC tap or PIN).
+ *   4. Boot page shown — replays camera status visually.
+ *      If camera already connected: steps animate quickly and we advance.
+ *      If camera still connecting: we wait for it.
+ *   5. goToPage("setup") — staff hands off to guest.
  *
- * WHY assetSync.init() must complete before initDesigns():
- *   strip.js's initDesigns() reads assetSync.getTemplates(), which returns
- *   the in-memory array populated by sync(). If initDesigns() runs before
- *   sync() resolves, getTemplates() returns [] and the design picker shows
- *   "No templates available." every time.
- *
- * WHY camera connects before the lock screen:
- *   getUserMedia() triggers a browser permission prompt the first time it
- *   runs. Connecting here — while the lock screen is visible — means the
- *   prompt appears before any guest interaction, and the live preview is
- *   already streaming when staff navigate to the Setup page. The real DSLR
- *   bridge is tried first; if the camera agent isn't reachable it falls
- *   back to the device webcam automatically (see camera-controller.js).
+ * The camera init starts immediately so guests aren't waiting for it
+ * after the operator unlocks. On a fast webcam this is typically done
+ * before the PIN is even finished.
  */
 
-(async function boot() {
+const bootModule = (() => {
+  const steps = [
+    "Starting photobooth system",
+    "Connecting to DSLR camera",
+    "Checking camera connection",
+    "Preparing live preview",
+    "Loading camera settings",
+    "Camera ready"
+  ];
 
-  /* ── 1. Sync templates directly from Supabase ─────────────────────────────
-   *
-   * assetSync.init() (see asset-sync.js):
-   *   - Queries the `templates` table directly via the Supabase JS client
-   *   - Downloads overlay PNGs from Supabase Storage as public URLs
-   *   - Caches blobs in IndexedDB — only re-downloads assets whose version changed
-   *   - Falls back to the IDB cache if Supabase is unreachable
-   *   - Starts a background poll (every 3 min) for automatic template updates
-   *
-   * MUST complete before initDesigns() is called below.
-   */
-  try {
-    await assetSync.init();
-    console.log(`[boot] Template sync complete — ${assetSync.getTemplates().length} templates ready.`);
-  } catch (e) {
-    console.error("[boot] Unexpected error during template sync:", e);
+  // Camera connection result — resolved in background before auth completes
+  let _cameraStatusPromise = null;
+  let _cameraStatus        = null; // set once resolved
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const els = {
+    list:       () => document.getElementById("bootStatusList"),
+    spinner:    () => document.getElementById("bootSpinner"),
+    error:      () => document.getElementById("bootError"),
+    errorText:  () => document.getElementById("bootErrorText"),
+    retryBtn:   () => document.getElementById("btnBootRetry"),
+    restartBtn: () => document.getElementById("btnBootRestart")
+  };
+
+  // ── Step rendering ────────────────────────────────────────────────────────
+  function renderSteps() {
+    els.list().innerHTML = steps
+      .map((label, i) => `
+        <div class="boot-status-item" id="boot-step-${i}">
+          <span class="boot-status-icon"></span>
+          <span>${label}</span>
+        </div>
+      `).join("");
   }
 
-  /* ── 2. Populate STRIP_DESIGNS from the synced template list ──────────────
-   *
-   * initDesigns() converts assetSync's resolved template records into the
-   * shape strip.js expects (id, label, overlays with "2x6"/"4x6" blob: URLs).
-   * MUST be called after assetSync.init() resolves — not before.
-   */
-  initDesigns();
-
-  /* ── 3. Connect camera ─────────────────────────────────────────────────────
-   *
-   * cameraController.connect() tries the real DSLR bridge first (localhost:3000
-   * / gphoto2 agent). If it's unreachable, falls back to the mock bridge which
-   * uses the device webcam via getUserMedia — no DSLR required for testing.
-   *
-   * Runs before the lock screen so:
-   *   a) Any browser permission prompt for webcam access appears early, before
-   *      guests are in front of the kiosk.
-   *   b) The preview is already streaming when staff navigate to Setup — no
-   *      perceptible delay between page navigation and seeing the live feed.
-   */
-  try {
-    const cameraStatus = await cameraController.connect();
-    console.log(`[boot] Camera connected — mode: ${cameraController.mode}, model: ${cameraStatus.model}`);
-  } catch (e) {
-    console.error("[boot] Camera connect failed:", e);
+  function setStepState(index, state) {
+    const el = document.getElementById(`boot-step-${index}`);
+    if (!el) return;
+    el.classList.remove("active", "done");
+    if (state) el.classList.add(state);
   }
 
-  /* ── 4. Attach live preview to the Setup page elements ────────────────────
-   *
-   * setupEls.video and setupEls.img are defined in app.js (the <video> and
-   * <img> elements on the Setup page). Attaching here means the preview
-   * element is already receiving frames before the lock screen clears.
-   *
-   * After connect(), cameraController.mode is either "real" (DSLR via agent)
-   * or "mock" (webcam). attachPreview() routes to the right bridge.
-   */
-  if (cameraController.mode) {
-    try {
-      cameraController.attachPreview(setupEls.video, setupEls.img);
-      // Enable the NEXT button on the Setup page now that the camera is live.
-      const nextBtn = document.getElementById("btnNextFromSetup");
-      if (nextBtn) nextBtn.disabled = false;
-      console.log(`[boot] Preview attached — ${cameraController.mode === "mock" ? "webcam (mock)" : "DSLR"} live.`);
-    } catch (e) {
-      console.error("[boot] Preview attach failed:", e);
+  function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // ── Camera init (runs immediately, before auth) ───────────────────────────
+  function _startCameraInBackground() {
+    _cameraStatusPromise = (async () => {
+      try {
+        const status = await cameraController.connect();
+        _cameraStatus = status;
+        return status;
+      } catch (e) {
+        _cameraStatus = { connected: false };
+        return _cameraStatus;
+      }
+    })();
+  }
+
+  // ── Boot sequence (shown after auth, camera already connecting/done) ──────
+  async function _runBootSequence() {
+    renderSteps();
+    els.error().hidden  = true;
+    els.spinner().hidden = false;
+
+    // Show the boot page
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.querySelector('.page[data-page="boot"]').classList.add("active");
+
+    // Steps 0–1: cosmetic pacing
+    setStepState(0, "active");
+    await wait(300);
+    setStepState(0, "done");
+    setStepState(1, "active");
+
+    // Wait for camera (may already be done)
+    const status = await _cameraStatusPromise;
+
+    setStepState(1, "done");
+    setStepState(2, "active");
+    await wait(250);
+
+    if (!status || !status.connected) {
+      setStepState(2, null);
+      els.spinner().hidden = true;
+      els.error().hidden   = false;
+      els.errorText().textContent = "Camera not detected";
+      return; // stays on boot error — Retry button re-runs sequence
     }
-  }
 
-  /* ── 5. Show the lock screen ───────────────────────────────────────────────
-   *
-   * authLock.init() shows the email+password sign-in form on page-lock.
-   * After the staff authenticates via Supabase Auth, it calls goToPage("home").
-   * Authentication is only required once at startup — not between guest sessions.
-   */
-  if (typeof authLock !== "undefined") {
-    authLock.init();
-  } else {
-    console.warn("[boot] authLock not found — skipping lock screen.");
+    setStepState(2, "done");
+    setStepState(3, "active");
+    cameraController.attachPreview(setupEls.video, setupEls.img);
+    await wait(250);
+    setStepState(3, "done");
+
+    setStepState(4, "active");
+    renderCameraStatus(status); // no-op shim in app.js
+    setupEls.placeholder.hidden = false; // will hide once preview renders
+    setupEls.nextBtn.disabled   = false;
+    await wait(250);
+    setStepState(4, "done");
+
+    setStepState(5, "done");
+    els.spinner().hidden = true;
+    await wait(350);
+
+    // Go to home (collage) first — guest presses Start to reach setup.
+    // Collage init happens here so videos start loading immediately.
+    homeCollage.init();
     goToPage("home");
   }
 
+  // ── Retry (camera failed) ─────────────────────────────────────────────────
+  async function _retry() {
+    // Re-attempt camera connection
+    _cameraStatus        = null;
+    _cameraStatusPromise = null;
+    _startCameraInBackground();
+    await _runBootSequence();
+  }
+
+  // ── Public init ───────────────────────────────────────────────────────────
+  function init() {
+    // Wire retry buttons
+    document.getElementById("btnBootRetry").addEventListener("click", _retry);
+    document.getElementById("btnBootRestart").addEventListener("click", _retry);
+
+    // 1. Start camera connecting immediately (background)
+    _startCameraInBackground();
+
+    // 2. Show lock screen — boot sequence runs after staff authenticates
+    authLock.lock(async () => {
+      await _runBootSequence();
+    });
+  }
+
+  return { init };
 })();
+
+// Kick everything off
+bootModule.init();
