@@ -2,38 +2,31 @@
  * ASSET-SYNC.JS — Kiosk-side template sync module
  * ─────────────────────────────────────────────────────────────────────────────
  * On every boot, this module:
- *   1. Asks the unified local server for the latest templates list
- *      (GET https://localhost:3000/sync/templates).
+ *   1. Queries the Supabase `templates` table directly using the anon key.
+ *      The RLS policy "kiosk can read enabled templates" allows unauthenticated
+ *      SELECT on enabled=true rows — no local server or proxy needed.
  *   2. Compares each template's version number against whatever is stored
  *      in localStorage (the local version cache).
- *   3. Downloads any new or updated asset files via the server's asset proxy
- *      (GET https://localhost:3000/sync/asset?path=…), which fetches from
- *      Supabase Storage and streams back — so the kiosk only ever talks to
- *      localhost, not directly to Supabase.
- *   4. Stores downloaded asset files as Object URLs (in-memory blob URLs).
- *      These are safe to use in <img src>, canvas.loadImage(), etc. for the
- *      duration of the session.
+ *   3. Downloads any new or updated asset files directly from the Supabase
+ *      public Storage bucket URL (no signed URL needed — bucket is Public).
+ *   4. Stores downloaded asset files as Object URLs (in-memory blob URLs)
+ *      backed by IndexedDB. These are safe to use in <img src>,
+ *      canvas.loadImage(), etc. for the duration of the session.
  *   5. Falls back to whatever is already cached in localStorage metadata
  *      (with the last-known asset Object URLs rebuilt from IndexedDB blobs)
- *      if the server is unreachable or Supabase is offline.
+ *      if Supabase is unreachable.
  *
  * After sync completes (online or from cache), `assetSync.getTemplates()`
  * returns the resolved template list with local `overlayUrl` / `thumbnailUrl`
  * properties pointing to blob: URLs — strip.js reads these instead of the
  * hardcoded assets/designs/ paths that were there before.
  *
- * WHY PERIODIC RE-SYNC (added — was boot-only before)?
- *   The Admin panel runs on studrio.cc; the kiosk's local server runs on
- *   localhost on the booth PC. These are different origins on different
- *   machines, so there is no way for the Admin panel to "push" a sync
- *   signal to a running kiosk — there's nothing on the Admin side that
- *   could reach the booth's localhost. Instead, the kiosk pulls on its own
- *   schedule: once at boot (as before), and now also every
- *   SYNC_POLL_INTERVAL_MS while the app stays open, so a booth left running
- *   for hours/days still picks up new or edited templates automatically,
- *   without needing a manual "sync" button anywhere or a reboot.
- *   Each poll is cheap: it only re-downloads assets whose version number
- *   increased since the last sync (see syncAsset()).
+ * WHY PERIODIC RE-SYNC?
+ *   The kiosk pulls on its own schedule: once at boot, and then every
+ *   SYNC_POLL_INTERVAL_MS while the app stays open. This means a booth left
+ *   running for hours or days still picks up new or edited templates
+ *   automatically. Each poll is cheap: it only re-downloads assets whose
+ *   version number increased since the last sync (see syncAsset()).
  *
  * WHY IndexedDB for blob storage?
  *   localStorage can only hold strings. Storing a 500 KB PNG as a base64
@@ -45,19 +38,14 @@
  *   unambiguous to compare. The admin increments a template's version when
  *   uploading a new frame or thumbnail file; the kiosk re-downloads only
  *   those assets — not the whole catalog.
- *
- * NOTE on assets/cache/ directory:
- *   The spec says "inside the kiosk project folder (e.g. assets/cache/ —
- *   wiped on git pull, must re-sync)". In a browser context we can't write
- *   to the filesystem — we use IndexedDB blobs instead, which survive page
- *   reloads and are cleared by clearing site data (equivalent to git pull
- *   wiping the folder). The semantics are identical.
  */
 
 const assetSync = (() => {
-  const SERVER_BASE        = "https://localhost:3000";
-  const TEMPLATES_ENDPOINT = `${SERVER_BASE}/sync/templates`;
-  const ASSET_ENDPOINT     = `${SERVER_BASE}/sync/asset`;
+  // No local server — the kiosk talks directly to Supabase.
+  // Template metadata is fetched via the Supabase JS SDK (anon key, same
+  // client used by cloud-storage.js). Asset blobs are fetched from the
+  // public Storage bucket URL directly — no CORS issues because the bucket
+  // is set to Public in the Supabase dashboard.
 
   const IDB_DB_NAME        = "studrio-asset-cache";
   const IDB_DB_VERSION     = 1;
@@ -167,10 +155,17 @@ const assetSync = (() => {
   }
 
   // ── Asset download ──────────────────────────────────────────────────────────
-
+  /*
+   * Downloads a template asset directly from Supabase public Storage.
+   * The photobooth bucket is Public, so no signed URL or auth header is needed —
+   * getPublicUrl() gives a stable https:// URL that fetch() can hit directly.
+   */
   async function downloadAsset(storagePath) {
-    const url = `${ASSET_ENDPOINT}?path=${encodeURIComponent(storagePath)}`;
-    const res = await fetch(url);
+    const client = getSupabaseClient();
+    if (!client) throw new Error("Supabase client not available.");
+    const { data } = client.storage.from(CLOUD_CONFIG.bucketName).getPublicUrl(storagePath);
+    if (!data || !data.publicUrl) throw new Error(`Could not resolve public URL for ${storagePath}`);
+    const res = await fetch(data.publicUrl);
     if (!res.ok) throw new Error(`Asset download failed: HTTP ${res.status} for ${storagePath}`);
     const blob = await res.blob();
     await idbPut(storagePath, blob);
@@ -276,14 +271,22 @@ const assetSync = (() => {
     _syncStatus = "syncing";
 
     try {
-      // Try to reach the local server (which proxies Supabase)
+      // Fetch templates directly from Supabase using the anon key.
+      // The RLS policy "kiosk can read enabled templates" allows anon SELECT
+      // on enabled=true rows — no authentication needed for the kiosk.
       let serverTemplates;
       try {
-        const res = await fetch(TEMPLATES_ENDPOINT);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        serverTemplates = await res.json();
+        const client = getSupabaseClient();
+        if (!client) throw new Error("Supabase client not initialised.");
+        const { data, error } = await client
+          .from("templates")
+          .select("*")
+          .order("sort_order", { ascending: true })
+          .order("created_at",  { ascending: true });
+        if (error) throw error;
+        serverTemplates = data || [];
       } catch (e) {
-        console.warn("[assetSync] Could not reach server:", e.message, "— falling back to cache.");
+        console.warn("[assetSync] Could not reach Supabase:", e.message, "— falling back to cache.");
         _syncStatus = "offline";
         _templates = await loadFromCache();
         _lastSyncAt = new Date();
@@ -395,11 +398,10 @@ const assetSync = (() => {
 
     /*
      * forceRefresh() — re-runs the sync immediately without waiting for the
-     * next poll interval, and without a page reload. Exposed for debugging
-     * from the browser console on the kiosk itself:
-     *   assetSync.forceRefresh().then(() => location.reload())
-     * (a full reload is only needed if strip.js has already read
-     * getTemplates() and needs to re-render with the new list).
+     * next poll interval. Safe to call from the browser console on the kiosk:
+     *   assetSync.forceRefresh()
+     * A full page reload is only needed if strip.js has already consumed
+     * getTemplates() and needs to re-render the swatch picker with new designs.
      */
     async forceRefresh() {
       await sync();

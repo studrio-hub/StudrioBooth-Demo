@@ -28,13 +28,11 @@
  *   supabase-storage-templates-policy-patch.sql.
  *
  * SYNC BUTTON BEHAVIOR:
- *   The kiosk's local server (localhost:3000) exposes a POST endpoint at
- *   /sync/trigger that calls assetSync.forceRefresh() on the running kiosk.
- *   Because Admin runs on studrio.cc and the kiosk is on localhost, the
- *   button POSTs to that endpoint and reports success/failure. If the kiosk
- *   is offline (or the local server isn't running), the button still refreshes
- *   the admin's own template list and shows a clear offline notice.
- *   Templates always auto-sync on the kiosk every 3 minutes regardless.
+ *   Refreshes the admin's template list directly from Supabase and confirms
+ *   the latest templates are live. No local server involved. The kiosk picks
+ *   up changes automatically within 3 minutes via asset-sync.js's background
+ *   poll — the button is a UI affordance for the admin to confirm an upload
+ *   went through, not a push mechanism.
  */
 
 const templateManager = (() => {
@@ -520,50 +518,26 @@ const templateManager = (() => {
 
   // ── Sync Templates button ───────────────────────────────────────────────────
   /*
-   * POSTs to the kiosk's local server sync trigger endpoint so the running
-   * kiosk re-pulls templates from Supabase immediately, without waiting for
-   * the 3-minute background poll.
-   *
-   * Because the Admin runs on studrio.cc and the kiosk is on localhost, this
-   * can only work when the browser window running the admin panel is on the
-   * same machine as the kiosk (i.e. the operator opens the admin page on the
-   * booth PC itself). In all other cases, the button still refreshes the
-   * admin's own template list and shows a clear "kiosk offline" notice.
-   *
-   * The kiosk will also pick up new templates within 3 minutes automatically
-   * via the background poll in asset-sync.js — no sync button press needed.
+   * Refreshes the admin's template list from Supabase and confirms the
+   * latest templates are live. No local server is involved — the kiosk
+   * talks directly to Supabase and picks up changes via its 3-minute
+   * background poll (asset-sync.js). This button is a UI affordance that
+   * lets the admin confirm an upload is live immediately without waiting.
    */
-  const KIOSK_SYNC_ENDPOINT = "https://localhost:3000/sync/trigger";
-
   async function triggerKioskSync(btn) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = "Syncing…";
 
-    let kioskReached = false;
     try {
-      const res = await fetch(KIOSK_SYNC_ENDPOINT, {
-        method: "POST",
-        // Short timeout — if the local server isn't running we want to fail
-        // fast and fall through to the "offline" message rather than hanging.
-        signal: AbortSignal.timeout(4000)
-      });
-      kioskReached = res.ok;
-    } catch (_) {
-      kioskReached = false;
+      await loadTemplates();
+      showToast("✓ Templates synced — kiosk will pick up changes within 3 minutes.", 4500);
+    } catch (e) {
+      showToast(`Sync failed: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
     }
-
-    // Always refresh the admin's own template list regardless of kiosk status
-    await loadTemplates();
-
-    if (kioskReached) {
-      showToast("✓ Kiosk synced — templates updated.", 4000);
-    } else {
-      showToast("Templates list refreshed. Kiosk not reachable (it will auto-sync within 3 min).", 5000);
-    }
-
-    btn.disabled = false;
-    btn.textContent = originalText;
   }
 
   function wireSyncButton() {
