@@ -65,12 +65,29 @@
    *   b) The preview is already streaming when staff navigate to Setup — no
    *      perceptible delay between page navigation and seeing the live feed.
    */
-  try {
-    const cameraStatus = await cameraController.connect();
-    console.log(`[boot] Camera connected — mode: ${cameraController.mode}, model: ${cameraStatus.model}`);
-  } catch (e) {
-    console.error("[boot] Camera connect failed:", e);
+  async function tryConnectCamera() {
+    try {
+      const cameraStatus = await cameraController.connect();
+      console.log(`[boot] Camera connected — mode: ${cameraController.mode}, model: ${cameraStatus.model}`);
+      
+      // If we're in Electron and it's a real camera, monitor for disconnect
+      if (window.electronAPI && cameraController.mode === "real") {
+        // Simple polling for reconnection if lost
+        setInterval(async () => {
+          if (!cameraController.status.connected) {
+            console.log("[boot] Attempting auto-reconnect...");
+            await cameraController.connect().catch(() => {});
+          }
+        }, 5000);
+      }
+      return true;
+    } catch (e) {
+      console.error("[boot] Camera connect failed:", e);
+      return false;
+    }
   }
+
+  await tryConnectCamera();
 
   /* ── 4. Attach live preview to the Setup page elements ────────────────────
    *

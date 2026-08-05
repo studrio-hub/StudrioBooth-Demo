@@ -540,26 +540,16 @@ const templateManager = (() => {
     const originalText = btn.textContent;
     btn.textContent = "Syncing…";
 
-    let kioskReached = false;
-    try {
-      const res = await fetch(KIOSK_SYNC_ENDPOINT, {
-        method: "POST",
-        // Short timeout — if the local server isn't running we want to fail
-        // fast and fall through to the "offline" message rather than hanging.
-        signal: AbortSignal.timeout(4000)
-      });
-      kioskReached = res.ok;
-    } catch (_) {
-      kioskReached = false;
-    }
-
-    // Always refresh the admin's own template list regardless of kiosk status
+    // Refresh the admin's own template list
     await loadTemplates();
 
-    if (kioskReached) {
-      showToast("✓ Kiosk synced — templates updated.", 4000);
+    // If we're in the Electron app, we can trigger a refresh on the kiosk side
+    // via a global event or direct call if they share the same memory space.
+    if (typeof assetSync !== "undefined" && assetSync.forceRefresh) {
+      await assetSync.forceRefresh();
+      showToast("✓ Templates synced and refreshed.", 4000);
     } else {
-      showToast("Templates list refreshed. Kiosk not reachable (it will auto-sync within 3 min).", 5000);
+      showToast("Templates list refreshed. (Kiosk will auto-sync within 3 min).", 4000);
     }
 
     btn.disabled = false;
