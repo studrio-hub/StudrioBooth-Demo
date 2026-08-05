@@ -536,8 +536,12 @@ async exportPrintPNG({ frameType, selectedShots, designId, qrText }) {
       swatch.appendChild(name);
 
       swatch.addEventListener("click", () => {
-        containerEl.querySelectorAll(".design-swatch").forEach((el) => el.classList.remove("selected"));
+        containerEl.querySelectorAll(".design-swatch").forEach((el) => {
+          el.classList.remove("selected");
+          gsap.to(el, { scale: 1, duration: 0.3, ease: "power2.out" });
+        });
         swatch.classList.add("selected");
+        gsap.to(swatch, { scale: 1.05, duration: 0.3, ease: "back.out(2)" });
         onSelect(design.id);
       });
 
@@ -547,12 +551,28 @@ async exportPrintPNG({ frameType, selectedShots, designId, qrText }) {
 
     // Fire off all thumbnail composites concurrently; each fills in its
     // own swatch the moment it's done, independent of the others.
-    entries.forEach(({ design, previewWrap }) => {
+    entries.forEach(({ design, previewWrap }, index) => {
+      // Staggered entry animation for swatches
+      gsap.from(previewWrap.parentElement, {
+        opacity: 0,
+        y: 20,
+        duration: 0.5,
+        delay: index * 0.05,
+        ease: "power2.out"
+      });
+
       this.compositeLayoutScaled({ ...opts, designId: design.id }, 0.18)
         .then((canvas) => {
           canvas.classList.add("design-swatch-canvas");
           previewWrap.innerHTML = "";
           previewWrap.appendChild(canvas);
+          
+          gsap.from(canvas, {
+            opacity: 0,
+            scale: 0.9,
+            duration: 0.4,
+            ease: "power2.out"
+          });
         })
         .catch((e) => console.warn(`[stripModule] Swatch render failed for "${design.id}":`, e));
     });

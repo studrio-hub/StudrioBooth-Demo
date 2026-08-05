@@ -42,8 +42,22 @@ const selectionModule = {
           <span class="photo-card-check">✓</span>
         `;
 
-        card.addEventListener("click", () => this.toggleShot(shot.id));
+        card.addEventListener("click", () => {
+          this.toggleShot(shot.id);
+          if (shot.selected) {
+            gsap.fromTo(card, { scale: 0.95 }, { scale: 1, duration: 0.4, ease: "back.out(2)" });
+          }
+        });
         this.els.grid.appendChild(card);
+        
+        // Staggered entry
+        gsap.from(card, {
+          opacity: 0,
+          scale: 0.8,
+          duration: 0.4,
+          delay: (shot.id - 1) * 0.05,
+          ease: "power2.out"
+        });
       });
 
     // 9th tile — live selection counter

@@ -19,8 +19,43 @@ const sessionState = {
 
 /* ---------------- Navigation ---------------- */
 function goToPage(pageName) {
-  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
-  document.querySelector(`.page[data-page="${pageName}"]`).classList.add("active");
+  const allPages = document.querySelectorAll(".page");
+  const currentPage = document.querySelector(".page.active");
+  const nextPage = document.querySelector(`.page[data-page="${pageName}"]`);
+
+  if (!nextPage || currentPage === nextPage) return;
+
+  const tl = gsap.timeline();
+
+  if (currentPage) {
+    tl.to(currentPage, {
+      opacity: 0,
+      x: -30,
+      duration: 0.4,
+      ease: "power2.inOut",
+      onComplete: () => {
+        currentPage.classList.remove("active");
+        gsap.set(currentPage, { x: 0 }); // Reset position
+      }
+    });
+  }
+
+  tl.fromTo(nextPage, 
+    { opacity: 0, x: 30 },
+    { 
+      opacity: 1, 
+      x: 0, 
+      duration: 0.5, 
+      ease: "power2.out",
+      onStart: () => {
+        nextPage.classList.add("active");
+        if (typeof uiAnimations !== 'undefined') {
+          uiAnimations.animatePageIn(nextPage);
+        }
+      }
+    },
+    "-=0.2"
+  );
 }
 
 /* ---------------- PAGE 1: SETUP ---------------- */
