@@ -203,7 +203,9 @@ const assetSync = (() => {
     const existingBlob  = await idbGet(storagePath);
 
     if (existingBlob && cachedVersion >= serverVersion) {
-      // Already up to date — rebuild Object URL from cached blob
+      // Already up to date — use existing Object URL if we have one
+      if (_objectUrls.has(storagePath)) return _objectUrls.get(storagePath);
+      // Otherwise create it once
       return makeObjectUrl(existingBlob, storagePath);
     }
 
@@ -214,7 +216,10 @@ const assetSync = (() => {
     } catch (e) {
       console.warn(`[assetSync] Could not download ${storagePath}:`, e.message);
       // Fall back to stale cached blob rather than showing nothing
-      if (existingBlob) return makeObjectUrl(existingBlob, storagePath);
+      if (existingBlob) {
+        if (_objectUrls.has(storagePath)) return _objectUrls.get(storagePath);
+        return makeObjectUrl(existingBlob, storagePath);
+      }
       return null;
     }
   }
@@ -323,6 +328,12 @@ const assetSync = (() => {
       _syncStatus = "online";
       _lastSyncAt = new Date();
       console.log(`[assetSync] Sync complete — ${resolved.length} templates ready.`);
+
+      // If stripModule is already loaded, notify it to refresh its designs
+      // so the UI stays in sync with background asset updates.
+      if (typeof stripModule !== "undefined" && typeof stripModule.initDesigns === "function") {
+        stripModule.initDesigns();
+      }
 
     } finally {
       _syncing = false;

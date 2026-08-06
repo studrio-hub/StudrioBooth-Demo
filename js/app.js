@@ -251,6 +251,7 @@ _origDesignNext.addEventListener("click", async () => {
   uploadProgress.start();
   // Fire QR generation (assigns sessionState.galleryUrlPromise synchronously)
   qrModule.generateAndRender();
+  // Ensure the printing module has the latest design selection
   await printingModule.init();
 });
 
@@ -305,6 +306,9 @@ async function resetSessionAndRestart() {
   sessionState.shots     = [];
   sessionState.selectedShots = [];
   sessionState.design    = null;
+  sessionState.finalStripPng   = null;
+  sessionState.finalStripVideo = null;
+  sessionState.printReadyPng   = null;
   sessionState.galleryUrl = null;
   sessionState.galleryUrlPromise = null;
   sessionState.uploadPromise     = null;

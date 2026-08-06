@@ -298,12 +298,20 @@ a { color: inherit; }
 }
 
 /* Thumbnail */
-.session-thumb {
+.session-card-thumb {
   width: 100%;
   aspect-ratio: 2 / 3;
-  object-fit: contain;
   background: var(--panel-light);
   border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.session-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   display: block;
 }
 .session-thumb--empty {
@@ -320,18 +328,23 @@ a { color: inherit; }
 .session-card-date { font-size: 0.8rem; font-weight: 600; color: var(--text); }
 .session-card-type { font-size: 0.75rem; color: var(--text-dim); }
 
-/* Per-session action buttons — stacked column */
+/* Per-session action buttons — flexible grid to handle 3 buttons */
 .session-card-actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
   padding-top: 4px;
 }
 .session-card-actions .btn-admin {
   width: 100%;
   text-align: center;
-  font-size: 0.75rem;
-  padding: 7px 10px;
+  font-size: 0.7rem;
+  padding: 6px 4px;
+  white-space: nowrap;
+}
+/* Make the Delete button span full width if it's the 3rd item */
+.session-card-actions .btn-admin:nth-child(3) {
+  grid-column: span 2;
 }
 
 /* Checkbox overlay for select mode */

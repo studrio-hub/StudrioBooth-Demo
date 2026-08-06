@@ -40,38 +40,32 @@ const qrModule = (() => {
       }
 
       // 1. Generate Photo Strip (milestone 30%)
-      if (!sessionState.finalStripPng) {
-        sessionState.finalStripPng = await stripModule.exportPNG({
+      sessionState.finalStripPng = await stripModule.exportPNG({
+        frameType: sessionState.frameType,
+        selectedShots: sessionState.selectedShots,
+        designId: sessionState.design
+      });
+      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.30);
+
+      // 2. Generate Video Strip (milestone 50%)
+      try {
+        sessionState.finalStripVideo = await stripModule.exportVideoStrip({
           frameType: sessionState.frameType,
           selectedShots: sessionState.selectedShots,
           designId: sessionState.design
         });
-      }
-      if (typeof uploadProgress !== "undefined") uploadProgress.set(0.30);
-
-      // 2. Generate Video Strip (milestone 50%)
-      if (!sessionState.finalStripVideo) {
-        try {
-          sessionState.finalStripVideo = await stripModule.exportVideoStrip({
-            frameType: sessionState.frameType,
-            selectedShots: sessionState.selectedShots,
-            designId: sessionState.design
-          });
-        } catch (videoErr) {
-          console.warn("[qr] Video generation failed:", videoErr);
-        }
+      } catch (videoErr) {
+        console.warn("[qr] Video generation failed:", videoErr);
       }
       if (typeof uploadProgress !== "undefined") uploadProgress.set(0.50);
 
       // 3. Generate Photo with QR (Print-ready) (milestone 70%)
-      if (!sessionState.printReadyPng) {
-        sessionState.printReadyPng = await stripModule.exportPrintPNG({
-          frameType: sessionState.frameType,
-          selectedShots: sessionState.selectedShots,
-          designId: sessionState.design,
-          qrText: galleryUrl
-        });
-      }
+      sessionState.printReadyPng = await stripModule.exportPrintPNG({
+        frameType: sessionState.frameType,
+        selectedShots: sessionState.selectedShots,
+        designId: sessionState.design,
+        qrText: galleryUrl
+      });
       if (typeof uploadProgress !== "undefined") uploadProgress.set(0.70);
 
       // 4. Upload all via cloudStorage (milestone 90%)
