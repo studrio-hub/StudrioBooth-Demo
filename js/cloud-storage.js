@@ -110,13 +110,12 @@ const cloudStorage = {
     if (!res.ok) return null;
     const session = await res.json();
 
-    async function sign(path) {
+    function sign(path) {
       if (!path) return null;
-      const { data, error } = await client.storage
+      const { data } = client.storage
         .from(CLOUD_CONFIG.bucketName)
-        .createSignedUrl(path, 3600);
-      if (error) { console.warn("[cloudStorage] Could not sign URL for", path, error.message); return null; }
-      return data.signedUrl;
+        .getPublicUrl(path);
+      return data.publicUrl;
     }
 
     function isPath(v) { return v && v.startsWith("sessions/"); }

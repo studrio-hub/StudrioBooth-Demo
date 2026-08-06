@@ -191,11 +191,13 @@ function renderSessionGrid(sessions) {
         </div>
         <div class="session-card-actions">
           <button class="btn-admin btn-admin-outline btn-sm" data-action="print">Print</button>
+          <button class="btn-admin btn-admin-outline btn-sm" data-action="download">Download</button>
           <button class="btn-admin btn-admin-ghost btn-sm" data-action="delete">Delete</button>
         </div>
       </div>
     `;
     card.querySelector('[data-action="print"]').addEventListener("click", () => handlePrint(session));
+    card.querySelector('[data-action="download"]').addEventListener("click", () => handleDownload(session));
     card.querySelector('[data-action="delete"]').addEventListener("click", () => showDeleteModal([session.id]));
     grid.appendChild(card);
   });
@@ -227,6 +229,29 @@ async function handlePrint(session) {
     reader.readAsDataURL(alignedBlob);
   } catch (e) {
     showToast(`Print error: ${e.message}`);
+  }
+}
+
+async function handleDownload(session) {
+  const url = session.print_ready_url || session.final_strip_url;
+  if (!url) { showToast("No file to download."); return; }
+  
+  try {
+    showToast("Starting download...");
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = `${session.id}-photo-with-qr.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+  } catch (e) {
+    console.error("[admin] Download failed:", e);
+    showToast("Download failed.");
   }
 }
 

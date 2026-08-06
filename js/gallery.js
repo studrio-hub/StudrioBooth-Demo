@@ -19,7 +19,7 @@
     notFound: document.getElementById("galleryNotFound"),
     downloadPhotoBtn: document.getElementById("btnDownloadPhoto"),
     downloadVideoBtn: document.getElementById("btnDownloadVideo"),
-    downloadQrBtn: document.getElementById("btnDownloadQR")
+    // downloadQrBtn: document.getElementById("btnDownloadQR") // Removed per user request
   };
 
   function extOf(url, fallback) {
@@ -62,7 +62,7 @@
   function render(data) {
     const photoUrl = data.finalStripUrl || null;
     const videoUrl = data.finalStripVideoUrl || null;
-    const qrUrl    = data.printReadyUrl || null;
+    // const qrUrl    = data.printReadyUrl || null; // Removed from gallery per user request
 
     // ---- Main strip preview ----
     if (videoUrl) {
@@ -95,12 +95,7 @@
         downloadFile(videoUrl, `${data.id}-video-strip.${extOf(videoUrl, "webm")}`, els.downloadVideoBtn);
       });
     }
-    if (qrUrl && els.downloadQrBtn) {
-      els.downloadQrBtn.hidden = false;
-      els.downloadQrBtn.addEventListener("click", () => {
-        downloadFile(qrUrl, `${data.id}-photo-with-qr.png`, els.downloadQrBtn);
-      });
-    }
+    // QR download logic removed from gallery per user request (admin panel only)
   }
 
   function getSessionIdFromHash() {
