@@ -154,6 +154,10 @@ const cloudStorage = {
  * in supabase-templates-setup.sql reject anonymous callers.
  * =========================================================== */
 const adminStorage = {
+  getClient() {
+    return getSupabaseClient();
+  },
+
   async signIn(email, password) {
     const client = getSupabaseClient();
     const { data, error } = await client.auth.signInWithPassword({ email, password });
@@ -229,6 +233,9 @@ const adminStorage = {
  * TEMPLATE MANAGEMENT — admin-only, authenticated.
  * =========================================================== */
 const adminTemplates = {
+  getClient() {
+    return getSupabaseClient();
+  },
 
   /*
    * Lists all templates, ordered by sort_order then created_at.

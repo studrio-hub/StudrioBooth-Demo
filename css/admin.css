@@ -802,3 +802,40 @@ a { color: inherit; }
   .template-grid      { grid-template-columns: 1fr 1fr; }
   .admin-modal-box--wide { max-width: 95vw; }
 }
+
+/* ── Hardware Tab Layout ────────────────────────────────────────────────── */
+.hardware-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.hardware-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.hardware-info-box {
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.btn-full {
+  width: 100%;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .hardware-layout {
+    grid-template-columns: 1fr;
+  }
+}

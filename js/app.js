@@ -35,7 +35,36 @@ const setupEls = {
 
 let currentZoom = 1.0;
 
-function renderCameraStatus(status) {}
+function renderCameraStatus(status) {
+  const statusBox = document.getElementById("statusBox");
+  if (!statusBox) return;
+
+  // Find or create status info element
+  let infoEl = document.getElementById("cameraStatusInfo");
+  if (!infoEl) {
+    infoEl = document.createElement("div");
+    infoEl.id = "cameraStatusInfo";
+    infoEl.className = "camera-status-info";
+    statusBox.prepend(infoEl);
+  }
+
+  const isConnected = status && status.connected;
+  const model = status ? status.model : "None";
+  const connection = status ? status.connection : "—";
+
+  infoEl.innerHTML = `
+    <div class="status-indicator ${isConnected ? 'online' : 'offline'}"></div>
+    <div class="status-details">
+      <p class="status-model">${model}</p>
+      <p class="status-connection">${connection}</p>
+    </div>
+  `;
+
+  // Enable/disable next button based on connection
+  if (setupEls.nextBtn) {
+    setupEls.nextBtn.disabled = !isConnected;
+  }
+}
 
 const btnZoomWide   = document.getElementById("btnZoomWide");
 const btnZoomNormal = document.getElementById("btnZoomNormal");
@@ -72,6 +101,8 @@ async function updateZoom(level) {
 /* ---------------- PAGE HOME: LANDING ------------------- */
 document.getElementById("btnStartSession").addEventListener("click", () => {
   goToPage("setup");
+  // Update UI with current camera status
+  renderCameraStatus(cameraController.status);
   kioskTimer.start(60, _proceedFromSetup);
 });
 

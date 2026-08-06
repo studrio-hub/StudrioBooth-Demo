@@ -71,6 +71,8 @@ async function remuxToMp4(inputBlob) {
 }
 
 const realCameraBridge = {
+  _previewInterval: null,
+
   async checkAvailable() {
     if (!window.electronAPI) return null;
     try {
@@ -87,47 +89,56 @@ const realCameraBridge = {
   },
 
   getLivePreviewUrl() {
-    // This custom protocol is handled in main.js via protocol.handle()
-    // We add a timestamp to bypass any internal browser caching.
+    // This custom protocol is handled in main.js
     return `electron://live-preview?t=${Date.now()}`; 
+  },
+
+  startPreviewStream(imgEl) {
+    if (this._previewInterval) clearInterval(this._previewInterval);
+    
+    // Refresh the live preview image periodically
+    this._previewInterval = setInterval(() => {
+      if (imgEl && !imgEl.hidden) {
+        imgEl.src = this.getLivePreviewUrl();
+      }
+    }, 100); // 10 FPS
+  },
+
+  stopPreviewStream() {
+    if (this._previewInterval) {
+      clearInterval(this._previewInterval);
+      this._previewInterval = null;
+    }
   },
 
   async capturePhoto() {
     const result = await window.electronAPI.capturePhoto();
     if (!result.success) throw new Error(result.error || "Capture failed");
     
-    // If Electron returns a dataUrl, convert it to a Blob
     if (result.dataUrl) {
       const res = await fetch(result.dataUrl);
       return await res.blob();
     }
     
-    // Fallback if it returns a filePath (legacy or specific setup)
-    if (result.filePath) {
-      const res = await fetch(`file://${result.filePath}`);
-      return await res.blob();
-    }
-
     throw new Error("No photo data returned from Electron");
   },
 
   async startVideoRecording() {
-    // In Electron, we can handle this natively or via the same stream logic
     console.log("[Bridge] Starting video recording via Electron...");
   },
 
   async stopVideoRecording() {
     console.log("[Bridge] Stopping video recording via Electron...");
-    // Return a mock or real blob for now
     return new Blob([], { type: "video/mp4" });
   },
 
   async disconnect() {
+    this.stopPreviewStream();
     console.log("[Bridge] Disconnecting camera...");
   }
 };
 
-/* MOCK BRIDGE (remains for testing in non-electron environments) */
+/* MOCK BRIDGE */
 const mockCameraBridge = {
   _stream: null,
   _videoEl: null,

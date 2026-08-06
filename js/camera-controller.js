@@ -1,15 +1,13 @@
 /*
  * CAMERA CONTROLLER
  * ----------------------------------------------------
- * Rest of the app talks ONLY to this object. It decides at
- * connect-time whether to use the real bridge or fall back
- * to the mock bridge, and exposes a single stable interface.
+ * Rest of the app talks ONLY to this object.
  */
 
 const cameraController = {
   mode: null,
-  mirrorEnabled: false, // NEW — set by the Mirror toggle in app.js
-  zoomLevel: 1.0,       // Digital zoom only — see setZoom() below
+  mirrorEnabled: false,
+  zoomLevel: 1.0,
   _previewEls: { video: null, img: null },
   status: {
     connected: false,
@@ -35,7 +33,7 @@ const cameraController = {
       return this.status;
     }
 
-    // Fall back to mock bridge (dev/testing only)
+    // Fall back to mock bridge
     try {
       this.mode = "mock";
       const info = await mockCameraBridge.connect();
@@ -74,19 +72,13 @@ const cameraController = {
       imgEl.hidden = true;
     } else if (this.mode === "real") {
       videoEl.hidden = true;
-      imgEl.src = realCameraBridge.getLivePreviewUrl();
       imgEl.hidden = false;
+      realCameraBridge.startPreviewStream(imgEl);
     }
 
     this._applyPreviewTransform();
   },
 
-  /*
-   * DIGITAL ZOOM ONLY — this never touches the DSLR's optical zoom.
-   * It simply scales the on-screen preview (a visual crop/enlarge),
-   * and capturePhoto() below crops the captured frame to match so
-   * the exported photo lines up with what the guest saw on screen.
-   */
   async setZoom(level) {
     if (!this.mode) throw new Error("Camera not connected");
     this.zoomLevel = Math.max(1.0, Math.min(5.0, level));
@@ -116,8 +108,6 @@ const cameraController = {
     return this._cropToZoom(blob, this.zoomLevel);
   },
 
-  /* Crops the captured frame to the same centered region the zoomed
-     preview was showing, then scales it back up to full resolution. */
   async _cropToZoom(blob, zoom) {
     const url = URL.createObjectURL(blob);
     try {
@@ -147,8 +137,6 @@ const cameraController = {
 
   async startVideoRecording() {
     if (this.mode === "real") return realCameraBridge.startVideoRecording();
-    // Pass the current zoom level and mirror state so the mock bridge bakes
-    // the same crop + flip into the recorded pixels that the guest sees on screen.
     if (this.mode === "mock") return mockCameraBridge.startVideoRecording(this.zoomLevel, this.mirrorEnabled);
     throw new Error("Camera not connected");
   },
