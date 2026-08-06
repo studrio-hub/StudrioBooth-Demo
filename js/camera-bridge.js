@@ -87,18 +87,28 @@ const realCameraBridge = {
   },
 
   getLivePreviewUrl() {
-    // In Electron, we might use a custom protocol or a local stream.
-    // For now, we assume the main process provides a preview signal.
-    return "electron://live-preview"; 
+    // This custom protocol is handled in main.js via protocol.handle()
+    // We add a timestamp to bypass any internal browser caching.
+    return `electron://live-preview?t=${Date.now()}`; 
   },
 
   async capturePhoto() {
     const result = await window.electronAPI.capturePhoto();
-    if (!result.success) throw new Error("Capture failed");
+    if (!result.success) throw new Error(result.error || "Capture failed");
     
-    // Fetch the captured file from the local path provided by Electron
-    const res = await fetch(`file://${result.filePath}`);
-    return await res.blob();
+    // If Electron returns a dataUrl, convert it to a Blob
+    if (result.dataUrl) {
+      const res = await fetch(result.dataUrl);
+      return await res.blob();
+    }
+    
+    // Fallback if it returns a filePath (legacy or specific setup)
+    if (result.filePath) {
+      const res = await fetch(`file://${result.filePath}`);
+      return await res.blob();
+    }
+
+    throw new Error("No photo data returned from Electron");
   },
 
   async startVideoRecording() {
