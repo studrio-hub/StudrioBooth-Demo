@@ -489,6 +489,16 @@ button {
 
 /* ================= PAGE 2: FRAME SELECTION ================= */
 
+/*
+ * Give the frame page's page-title just enough top padding so it never
+ * sits under the kiosk timer (6.4vh tall, top:2vh → bottom edge ~9vh).
+ * The quantity panel and frame cards sit below this, so only the title
+ * needs clearance.
+ */
+#page-frame > .page-title {
+  padding-right: calc(6.4vh + 4vw);
+}
+
 .frame-layout {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
@@ -1110,6 +1120,40 @@ button {
   width: 6.4vh;
   height: 6.4vh;
   z-index: 6;
+}
+
+/*
+ * Per-page timer position overrides via data-active-page attribute.
+ * animations.js stamps this attribute on #kioskTimer on every goToPage() call.
+ *
+ * Page 2 (frame): top-right, clear of the two frame cards and quantity panel.
+ * Page 4 (selection): top-right, clear of the 3-column selection grid.
+ * Page 5 (design): top-right, clear of the design swatch picker.
+ * Page 6 (printing): bottom-left, clear of all three content columns.
+ */
+.kiosk-timer[data-active-page="frame"] {
+  top: 2vh;
+  right: 3vw;
+  left: auto;
+  bottom: auto;
+}
+.kiosk-timer[data-active-page="selection"] {
+  top: 2vh;
+  right: 3vw;
+  left: auto;
+  bottom: auto;
+}
+.kiosk-timer[data-active-page="design"] {
+  top: 2vh;
+  right: 3vw;
+  left: auto;
+  bottom: auto;
+}
+.kiosk-timer[data-active-page="printing"] {
+  top: auto;
+  right: auto;
+  bottom: 3vh;
+  left: 3vw;
 }
 .kiosk-timer-ring {
   width: 100%;

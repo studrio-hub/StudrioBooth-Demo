@@ -1,12 +1,18 @@
 /*
- * SELECTION LOGIC — Page 4
- * User must pick exactly 4 of the 8 captured photos.
- * Picking a photo automatically carries its paired video along
- * (they share the same `id`, so no separate video-selection UI
- * is needed — see sessionState.shots pairing from shooting.js).
+ * SELECTION LOGIC — Page 4  (v2)
  *
- * The grid is a 3x3 layout: 8 photo tiles + a 9th "counter" tile
- * that shows "X / 4 selected" and updates live as the guest taps.
+ * Changes from v1:
+ *  - Removed ✓ checkmark span; replaced with .photo-card-order-badge
+ *    that shows the 1-based tap-order number (e.g. first photo tapped → "1").
+ *  - No external animations on selection — badge visibility is CSS-only
+ *    (.visible class toggled here; transition in animations.css).
+ *  - All selection logic (toggleShot, selectionOrder, limit flash,
+ *    autoComplete, strip preview) is preserved exactly.
+ *
+ * Why the badge lives here and not in animations.js:
+ *   renderGrid() clears innerHTML on every toggle, destroying any nodes
+ *   injected externally. The badge must be part of the initial innerHTML
+ *   so it is recreated correctly on every re-render.
  */
 
 const selectionModule = {
@@ -24,7 +30,7 @@ const selectionModule = {
     this.renderGrid();
     this.renderPreview();
   },
-  
+
   renderGrid() {
     this.els.grid.innerHTML = "";
 
@@ -32,14 +38,25 @@ const selectionModule = {
       .slice()
       .sort((a, b) => a.id - b.id)
       .forEach((shot) => {
+        // Determine this shot's 1-based tap order (empty string when not selected)
+        const orderIndex = this.selectionOrder.indexOf(shot.id);
+        const orderNum   = orderIndex === -1 ? "" : String(orderIndex + 1);
+        const isSelected = shot.selected;
+
         const card = document.createElement("div");
-        card.className = "photo-card" + (shot.selected ? " selected" : "");
+        card.className = "photo-card" + (isSelected ? " selected" : "");
         card.dataset.shotId = shot.id;
 
+        /*
+         * .photo-card-order-badge:
+         *   - always rendered in the DOM so CSS transitions work
+         *   - .visible class makes it opaque/scaled-up (see animations.css)
+         *   - textContent is the tap-order number, empty when not selected
+         */
         card.innerHTML = `
           <img src="${shot.imageUrl}" alt="Photo ${shot.id}">
           <span class="photo-card-badge">PHOTO ${shot.id}</span>
-          <span class="photo-card-check">✓</span>
+          <span class="photo-card-order-badge${isSelected ? " visible" : ""}">${orderNum}</span>
         `;
 
         card.addEventListener("click", () => this.toggleShot(shot.id));
@@ -75,6 +92,7 @@ const selectionModule = {
       this.selectionOrder = this.selectionOrder.filter((sid) => sid !== id);
     }
 
+    // Re-render the full grid so order badges update correctly on all cards
     this.renderGrid();
     this.renderPreview();
     this.updateCountAndNav();

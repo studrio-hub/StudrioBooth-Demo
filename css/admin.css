@@ -297,11 +297,11 @@ a { color: inherit; }
   gap: 6px;
 }
 
-/* Thumbnail */
+/* Thumbnail — dark backdrop so portrait strips are centred and never stretched */
 .session-card-thumb {
   width: 100%;
   aspect-ratio: 2 / 3;
-  background: var(--panel-light);
+  background: var(--panel-dark, #16171a);
   border-radius: 6px;
   overflow: hidden;
   display: flex;
@@ -309,8 +309,11 @@ a { color: inherit; }
   justify-content: center;
 }
 .session-card-thumb img {
-  width: 100%;
-  height: 100%;
+  /* contain keeps the full strip visible; dark bg fills the letterbox */
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   display: block;
 }
@@ -328,23 +331,29 @@ a { color: inherit; }
 .session-card-date { font-size: 0.8rem; font-weight: 600; color: var(--text); }
 .session-card-type { font-size: 0.75rem; color: var(--text-dim); }
 
-/* Per-session action buttons — flexible grid to handle 3 buttons */
+/* Per-session action buttons: 4 peers — Print, Save Photo, Save Video, Delete.
+   2×2 grid keeps the card narrow enough for the film-strip layout while
+   giving each button enough tap area on touch screens. */
 .session-card-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 5px;
   padding-top: 4px;
 }
 .session-card-actions .btn-admin {
   width: 100%;
   text-align: center;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   padding: 6px 4px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* Make the Delete button span full width if it's the 3rd item */
-.session-card-actions .btn-admin:nth-child(3) {
-  grid-column: span 2;
+/* Disabled video button — visually muted but keeps its grid slot */
+.btn-admin-disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
 }
 
 /* Checkbox overlay for select mode */
@@ -618,7 +627,11 @@ a { color: inherit; }
   flex-shrink: 0;
   transition: background 0.2s ease;
 }
-.dot-online  { background: var(--ok); box-shadow: 0 0 0 3px rgba(31,174,99,0.2); }
+/* JS sets className = 'printer-agent-dot online' or '...offline' */
+.printer-agent-dot.online  { background: var(--ok);     box-shadow: 0 0 0 3px rgba(31,174,99,0.2); }
+.printer-agent-dot.offline { background: var(--danger);  box-shadow: none; }
+/* Legacy aliases kept for any code that uses the old names */
+.dot-online  { background: var(--ok);    box-shadow: 0 0 0 3px rgba(31,174,99,0.2); }
 .dot-offline { background: var(--danger); }
 
 .printer-agent-label { color: var(--text); font-weight: 600; }
@@ -799,6 +812,7 @@ a { color: inherit; }
   .admin-main         { padding: 20px 16px 60px; }
   .stat-grid          { grid-template-columns: 1fr; }
   .session-grid       { grid-template-columns: 1fr 1fr; }
+  .session-card-actions { grid-template-columns: 1fr 1fr; gap: 4px; }
   .template-grid      { grid-template-columns: 1fr 1fr; }
   .admin-modal-box--wide { max-width: 95vw; }
 }
@@ -838,4 +852,173 @@ a { color: inherit; }
   .hardware-layout {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Hardware Tab: missing classes ──────────────────────────────────────── */
+
+/* Card wrapper used for Camera and Printer columns */
+.printer-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Card heading row — title text + inline status badge */
+.printer-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
+/* Inline status row inside each card header */
+.printer-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  /* override old standalone .printer-status-row that adds its own card-like padding */
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 0;
+}
+
+/* Offline warning strip */
+.printer-offline-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--danger);
+  background: rgba(224,64,63,0.07);
+  border: 1px solid rgba(224,64,63,0.22);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.printer-offline-notice[hidden] { display: none; }
+
+/* Printer selector row: select + Save button side by side */
+.printer-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.printer-select-row select {
+  flex: 1;
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  color: var(--text);
+  appearance: none;
+}
+.printer-select-row select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Row of action buttons at the bottom of the alignment card */
+.printer-actions-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+/* Generic label + control group used throughout the Hardware tab */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.form-group select,
+.form-group input[type="text"] {
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.form-group select:focus,
+.form-group input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Three-column alignment slider grid */
+.alignment-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .alignment-grid { grid-template-columns: 1fr; }
+}
+
+/* Single slider control: heading row + range input + hint */
+.alignment-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.alignment-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-dark);
+  cursor: pointer;
+}
+
+/* Slider label row: name on left, live value on right */
+.alignment-control-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.alignment-control-head label { color: var(--text-dim); }
+.alignment-control-head output {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-dark);
+  min-width: 2.5em;
+  text-align: right;
+}
+
+/* Camera live-preview box in the Hardware tab test panel */
+.admin-camera-preview-box {
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  position: relative;
+}
+
+/* Bulk action bar flex children */
+.bulk-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

@@ -16,7 +16,12 @@ const qrModule = (() => {
     sessionState.galleryUrlPromise = sessionState.uploadPromise;
 
     _run().finally(() => {
-      if (_resolve) { _resolve(); _resolve = null; }
+      // Resolve with the actual gallery URL (set synchronously near the top
+      // of _run(), on both the success and _fallback() paths) — NOT with no
+      // value. printing.js awaits this exact promise to get the qrText it
+      // bakes into the printed strip; resolving empty silently produced a
+      // print with no QR code even though the on-screen QR rendered fine.
+      if (_resolve) { _resolve(sessionState.galleryUrl); _resolve = null; }
     });
   }
 
@@ -52,7 +57,8 @@ const qrModule = (() => {
         sessionState.finalStripVideo = await stripModule.exportVideoStrip({
           frameType: sessionState.frameType,
           selectedShots: sessionState.selectedShots,
-          designId: sessionState.design
+          designId: sessionState.design,
+          durationMs: 8000 // match the guest's actual ~8s per-shot capture
         });
       } catch (videoErr) {
         console.warn("[qr] Video generation failed:", videoErr);

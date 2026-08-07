@@ -14,7 +14,6 @@
 (function () {
   const els = {
     stripContainer: document.getElementById("galleryStripContainer"),
-    muteToggle: document.getElementById("galleryMuteToggle"),
     loading: document.getElementById("galleryLoading"),
     notFound: document.getElementById("galleryNotFound"),
     downloadPhotoBtn: document.getElementById("btnDownloadPhoto"),
@@ -65,19 +64,34 @@
     // const qrUrl    = data.printReadyUrl || null; // Removed from gallery per user request
 
     // ---- Main strip preview ----
+    // Prefer the animated video strip; fall back to the static photo if not available.
+    // Video plays silently (muted) — no mute toggle shown.
+    els.stripContainer.innerHTML = "";
     if (videoUrl) {
-      els.stripContainer.innerHTML = `<video src="${videoUrl}" autoplay loop muted playsinline></video>`;
-      const videoEl = els.stripContainer.querySelector("video");
-      if (els.muteToggle) {
-        els.stripContainer.appendChild(els.muteToggle);
-        els.muteToggle.hidden = false;
-        els.muteToggle.onclick = () => {
-          videoEl.muted = !videoEl.muted;
-          els.muteToggle.textContent = videoEl.muted ? "🔇" : "🔊";
-        };
-      }
+      const videoEl = document.createElement("video");
+      videoEl.src = videoUrl;
+      videoEl.autoplay = true;
+      videoEl.loop = true;
+      videoEl.muted = true;        // must be muted for autoplay to work cross-browser
+      videoEl.playsInline = true;
+      videoEl.setAttribute("playsinline", "");
+      // Explicitly attempt play after the element is in the DOM
+      videoEl.addEventListener("canplay", () => {
+        videoEl.play().catch((e) => console.warn("[gallery] Video autoplay blocked:", e));
+      });
+      videoEl.onerror = () => {
+        // If the video fails to load, fall back to the photo strip
+        console.warn("[gallery] Video load failed, falling back to photo strip.");
+        els.stripContainer.innerHTML = photoUrl
+          ? `<img src="${photoUrl}" alt="Photo strip">`
+          : `<p class="gallery-status">Your strip is still processing — check back in a moment.</p>`;
+      };
+      els.stripContainer.appendChild(videoEl);
     } else if (photoUrl) {
-      els.stripContainer.innerHTML = `<img src="${photoUrl}" alt="Photo strip">`;
+      const img = document.createElement("img");
+      img.src = photoUrl;
+      img.alt = "Photo strip";
+      els.stripContainer.appendChild(img);
     } else {
       els.stripContainer.innerHTML = `<p class="gallery-status">Your strip is still processing — check back in a moment.</p>`;
     }

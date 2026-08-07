@@ -1,15 +1,14 @@
 /*
- * ANIMATIONS.CSS — Studrio Booth animation & palette supplement  (v2)
+ * ANIMATIONS.CSS — Studrio Booth animation & palette supplement  (v3)
  *
- * Changes in v2:
- *  - White background on all pages EXCEPT #page-lock and #page-home
- *  - #kiosk and body use white (not warm gradient)
- *  - Page 6: upload status text forced to black
- *  - Page 6: QR card gets a container card wrapping label + code + caption
- *  - Page 6: printing-qr-col refined to be self-contained card
- *  - Page 4: .photo-card selected state — border animation only, no fill
- *  - Page 4: .photo-card-order-badge styling (injected by animations.js)
- *  - Page 2 (setup): full-width preview, controls bar below — matches Page_2.png
+ * Changes in v3:
+ *  - Page 4: .photo-card-order-badge show/hide via CSS transition on .visible
+ *    (badge is rendered by selection.js in innerHTML; GSAP removed from tap flow)
+ *  - Page 2 (Camera Setup): preview enforced as 4:3 (2974×1984 native ratio)
+ *  - Timer repositioning via [data-active-page] attribute stamped by animations.js:
+ *      setup    → bottom-right, below the controls bar, away from page title
+ *      printing → bottom-left, away from all three content columns
+ *      All other pages → default top-right (from style.css)
  *
  * Load order: <link rel="stylesheet" href="css/animations.css">
  *   AFTER style.css, BEFORE print.css
@@ -23,29 +22,22 @@
   --anim-blush:  #FDE68A;
   --anim-orange: #F07B23;
 
-  /* Remap global accent to warm amber */
   --accent:      var(--anim-amber);
   --accent-dark: #D4880F;
 }
 
 
-/* ── 1. GLOBAL: WHITE BACKGROUND ON ALL PAGES ────────────────────────────── */
-/*
- * The kiosk shell and body are plain white.
- * Only the Login page and Home page get the warm yellow treatment below.
- */
+/* ── 1. GLOBAL: WHITE BACKGROUND ────────────────────────────────────────── */
 #kiosk,
 body {
   background: #ffffff !important;
 }
-
-/* Every .page resets to white so no page bleeds through */
 .page {
   background: #ffffff;
 }
 
 
-/* ── 2. LOGIN PAGE (#page-lock) — warm amber gradient ───────────────────── */
+/* ── 2. LOGIN PAGE — warm amber gradient ─────────────────────────────────── */
 #page-lock {
   background: radial-gradient(
     ellipse at 50% 46%,
@@ -57,20 +49,18 @@ body {
     #ffffff 100%
   ) !important;
 }
-
-/* Frosted card around the form */
 #page-lock .lock-form {
-  background:         rgba(255, 255, 255, 0.82);
-  backdrop-filter:    blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-radius:      20px;
-  padding:            2.8vh 2.4vw;
-  border:             1px solid rgba(245, 166, 35, 0.22);
-  box-shadow:         0 4px 32px rgba(245, 166, 35, 0.14);
+  background:               rgba(255, 255, 255, 0.82);
+  backdrop-filter:          blur(14px);
+  -webkit-backdrop-filter:  blur(14px);
+  border-radius:            20px;
+  padding:                  2.8vh 2.4vw;
+  border:                   1px solid rgba(245, 166, 35, 0.22);
+  box-shadow:               0 4px 32px rgba(245, 166, 35, 0.14);
 }
 
 
-/* ── 3. HOME PAGE (#page-home) — warm radial gradient ───────────────────── */
+/* ── 3. HOME PAGE — warm radial gradient ─────────────────────────────────── */
 #page-home {
   background: radial-gradient(
     ellipse at 48% 44%,
@@ -82,23 +72,19 @@ body {
     #ffffff 100%
   ) !important;
 }
-
-/* Logo warm glow on home screen */
 #page-home .home-logo {
   filter:
     drop-shadow(0 0 28px rgba(245, 166, 35, 0.5))
     drop-shadow(0 2px 10px rgba(0, 0, 0, 0.10));
 }
-
-/* Start button: glass pill */
 .home-start-btn {
-  background:   rgba(255, 255, 255, 0.84) !important;
-  border-color: rgba(245, 166, 35, 0.38)  !important;
+  background:     rgba(255, 255, 255, 0.84) !important;
+  border-color:   rgba(245, 166, 35, 0.38)  !important;
   box-shadow:
     0 2px 24px rgba(245, 166, 35, 0.22),
     0 1px  4px rgba(0,   0,   0,  0.10) !important;
-  font-weight:     700     !important;
-  letter-spacing:  0.04em !important;
+  font-weight:    700     !important;
+  letter-spacing: 0.04em !important;
   transition:
     background 0.2s ease,
     box-shadow 0.2s ease,
@@ -112,15 +98,10 @@ body {
 }
 
 
-/* ── 4. PAGE 2 — CAMERA SETUP: matches Page_2.png layout ────────────────── */
+/* ── 4. PAGE 2 — CAMERA SETUP ────────────────────────────────────────────── */
 /*
- * Page_2.png shows:
- *   • Large 16:9 preview fills the top ~78% of the page (no side panel)
- *   • Below the preview: a single bar with Zoom info + 3 toggle buttons
- *   • ← BACK on far left, NEXT → on far right of that bar
- *
- * We achieve this by restructuring the existing .setup-layout grid into a
- * single-column stacked layout:  preview (flex: 1) → controls bar (auto-height)
+ * Layout: 4:3 preview fills the column, controls bar sits below.
+ * 4:3 = 2974×1984 (Canon DSLR sensor ratio) — width:auto derives from height.
  */
 
 #page-setup {
@@ -129,32 +110,36 @@ body {
   gap:            1.4vh;
   padding:        2.2vh 3vw;
 }
-
-/* Override the 2-column grid — make it a single column stack */
 #page-setup .setup-layout {
   display:        flex;
   flex-direction: column;
   gap:            1.4vh;
   flex:           1;
   min-height:     0;
-  margin-top:     0; /* remove the timer-clearance top margin; handled below */
+  margin-top:     0;
 }
-
-/* Preview panel takes all available vertical space */
 #page-setup .preview-panel {
   flex:       1;
   min-height: 0;
+  display:    flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* Make the camera preview 16:9 like the screenshot, filling full width */
+/*
+ * 4:3 preview frame.
+ * height:100% fills the panel; width:auto lets aspect-ratio constrain it.
+ * max-width:100% prevents overflow on very wide panels.
+ */
 #page-setup .frame-34 {
-  aspect-ratio: unset;   /* override the 3:4 constraint from style.css */
+  aspect-ratio: 4 / 3;
   height:       100%;
-  width:        100%;
-  margin:       0;
+  width:        auto;
+  max-width:    100%;
+  margin:       0 auto;
 }
 
-/* Status panel becomes a horizontal controls bar */
+/* Controls bar: horizontal row */
 #page-setup .status-panel {
   display:        flex;
   flex-direction: row;
@@ -163,77 +148,133 @@ body {
   overflow-y:     visible;
   flex-shrink:    0;
 }
-
-/* How-It-Works box — hidden in bar layout (matches Page_2.png) */
+/* Hide the How-It-Works guide — not in this layout */
 #page-setup .status-box {
   display: none;
 }
-
-/* Zoom controls stretch to fill */
+/* Zoom pill stretches to fill available bar space */
 #page-setup .zoom-controls {
-  flex:       1;
-  background: rgba(255, 255, 255, 0.92);
-  border:     1px solid rgba(245, 166, 35, 0.18);
+  flex:          1;
+  background:    rgba(255, 255, 255, 0.92);
+  border:        1px solid rgba(245, 166, 35, 0.18);
   border-radius: var(--radius);
   backdrop-filter: blur(8px);
-  padding:    1.2vh 1.4vw;
+  padding:       1.2vh 1.4vw;
 }
-
 #page-setup .zoom-label { margin-bottom: 0.7vh; }
-
-/* Nav row sits inline at the right of the bar */
+/* Nav buttons sit at the far right of the controls bar */
 #page-setup .nav-row {
   flex-shrink: 0;
   gap:         0.8vw;
 }
 
 
-/* ── 5. PAGE 4 — PHOTO SELECTION ─────────────────────────────────────────── */
+/* ── 5. KIOSK TIMER REPOSITIONING ────────────────────────────────────────── */
+/*
+ * #kioskTimer is position:absolute inside #kiosk, shared across pages.
+ * Default position (style.css): top:2vh right:3vw — overlaps page title
+ * on the Camera Setup page, and overlaps the QR column on the Printing page.
+ *
+ * animations.js stamps data-active-page="<pageName>" on #kioskTimer
+ * whenever goToPage() is called, letting us reposition per page here.
+ *
+ * Page 2 (setup):
+ *   Move to bottom-right so it clears the camera title and the controls bar.
+ *   bottom:2.6vh keeps it above the viewport edge; right:3vw matches the
+ *   existing horizontal rhythm.
+ *
+ * Page 6 (printing):
+ *   The three columns (status | strip | QR) span the full width.
+ *   Move to bottom-left — the only clear zone — away from all columns.
+ */
 
-/* Selected border: amber only, no background fill */
-.photo-card.selected {
-  border-color: var(--anim-amber)  !important;
-  border-width: 3px                !important;
-  background:   transparent        !important; /* never fills the card */
-  box-shadow:   none               !important;
+/* Page 2 — Camera Setup */
+#kioskTimer[data-active-page="setup"] {
+  top:    auto   !important;
+  bottom: 2.6vh;
+  right:  3vw;
+  left:   auto;
 }
 
-/* The original .photo-card-check is replaced by .photo-card-order-badge
-   (injected in animations.js); hide any remnant check elements */
+/* Page 6 — Printing / All Done */
+#kioskTimer[data-active-page="printing"] {
+  top:    auto   !important;
+  bottom: 2.6vh;
+  right:  auto;
+  left:   3vw;
+}
+
+
+/* ── 6. PAGE 4 — PHOTO SELECTION ─────────────────────────────────────────── */
+
+/*
+ * Selected state: amber border only — no fill, no shadow.
+ * Border width bumped to 3px so it reads clearly without a background change.
+ */
+.photo-card.selected {
+  border-color: var(--anim-amber) !important;
+  border-width: 3px               !important;
+  background:   transparent       !important;
+  box-shadow:   none              !important;
+}
+
+/*
+ * Hide the original checkmark — selection.js no longer renders it,
+ * but this guard handles any stale render.
+ */
 .photo-card-check {
   display: none !important;
 }
 
-/* Order badge — base state (JS controls opacity/scale via GSAP) */
+/*
+ * Order badge — rendered by selection.js inside every .photo-card.
+ *
+ * Default: invisible (opacity:0, scale:0).
+ * When .visible is added by selection.js: springs into view.
+ * When .visible is removed on deselect: reverses automatically.
+ *
+ * No GSAP involved here — pure CSS transition so it survives
+ * selection.js's renderGrid() innerHTML wipe on every tap.
+ */
 .photo-card-order-badge {
-  position:       absolute;
-  top:            0.5vh;
-  right:          0.5vh;
-  width:          2.4vh;
-  height:         2.4vh;
-  border-radius:  50%;
-  background:     var(--anim-amber);
-  color:          #fff;
-  font-size:      1.3vh;
-  font-weight:    800;
-  display:        flex;
-  align-items:    center;
-  justify-content:center;
-  z-index:        3;
-  pointer-events: none;
-  line-height:    1;
-  box-shadow:     0 1px 6px rgba(245, 166, 35, 0.40);
-  /* initial hidden state — GSAP animates to opacity:1 scale:1 on selection */
-  opacity:        0;
-  transform:      scale(0);
+  position:         absolute;
+  top:              0.6vh;
+  right:            0.6vh;
+  width:            2.6vh;
+  height:           2.6vh;
+  border-radius:    50%;
+  background:       var(--anim-amber);
+  color:            #fff;
+  font-size:        1.35vh;
+  font-weight:      800;
+  font-family:      inherit;
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  z-index:          3;
+  pointer-events:   none;
+  line-height:      1;
+  box-shadow:       0 1px 8px rgba(245, 166, 35, 0.45);
+
+  /* Hidden by default */
+  opacity:   0;
+  transform: scale(0);
+  transition:
+    opacity   0.15s ease,
+    transform 0.20s cubic-bezier(0.34, 1.56, 0.64, 1); /* spring pop */
 }
 
+/* .visible toggled by selection.js → badge springs in */
+.photo-card-order-badge.visible {
+  opacity:   1;
+  transform: scale(1);
+}
+/* Deselect: .visible removed → transition reverses automatically */
 
-/* ── 6. PAGE 6 — ALL DONE ────────────────────────────────────────────────── */
 
-/*
- * Upload status text on the left column: forced black
- */
+/* ── 7. PAGE 6 — ALL DONE ────────────────────────────────────────────────── */
+
+/* Upload status text: forced black */
 #uploadProgressLabel,
 .print-status-text,
 .print-qty-note,
@@ -241,29 +282,22 @@ body {
 .upload-progress-hint {
   color: #1c1e21 !important;
 }
-
-/* Complete state overrides — keep green for label/hint, black for the rest */
 .upload-progress-wrap.complete #uploadProgressLabel { color: #1c1e21 !important; }
 .upload-progress-wrap.complete .upload-progress-hint { color: #1c1e21 !important; }
 
 /*
- * QR card — self-contained card wrapping label + QR canvas + caption
- * The .printing-qr-col already exists; we give it a card appearance so
- * the label and caption feel enclosed inside one visual unit.
+ * QR column: self-contained card.
+ * Overrides the style.css padding-top:7vh that pushed content down.
  */
 .printing-qr-col {
-  background:    rgba(255, 255, 255, 0.96);
-  border:        1px solid rgba(245, 166, 35, 0.20);
-  border-radius: var(--radius);
-  box-shadow:    0 2px 20px rgba(245, 166, 35, 0.10);
-  padding:       2vh 1.6vw 2vh !important;
-  padding-top:   2vh !important;
-  gap:           1.2vh;
-  /* Remove the large top padding that pushed QR below label */
-  padding-top:   2vh !important;
+  background:     rgba(255, 255, 255, 0.96);
+  border:         1px solid rgba(245, 166, 35, 0.20);
+  border-radius:  var(--radius);
+  box-shadow:     0 2px 20px rgba(245, 166, 35, 0.10);
+  padding:        2vh 1.6vw !important;
+  gap:            1.2vh;
+  justify-content: center;
 }
-
-/* Label inside the QR card */
 .printing-qr-col .preview-panel-label {
   font-size:      1.3vh;
   font-weight:    700;
@@ -272,8 +306,6 @@ body {
   color:          var(--text-dim);
   text-align:     center;
 }
-
-/* QR code wrap: flush white block */
 .qr-wrap {
   background:    #ffffff;
   border:        1px solid rgba(245, 166, 35, 0.18);
@@ -282,26 +314,22 @@ body {
   width:         100%;
   box-shadow:    none;
 }
-
-/* Caption below QR */
 .qr-caption {
-  font-size:   1.1vh;
-  color:       var(--text-dim);
-  text-align:  center;
+  font-size:  1.1vh;
+  color:      var(--text-dim);
+  text-align: center;
 }
-
-/* Uploading indicator */
 .qr-uploading-dot { background: var(--anim-amber); }
 
 
-/* ── 7. FLASH OVERLAY ────────────────────────────────────────────────────── */
+/* ── 8. FLASH OVERLAY ────────────────────────────────────────────────────── */
 #page-flash-overlay {
   pointer-events: none !important;
   will-change:    opacity;
 }
 
 
-/* ── 8. BUTTON FILL LAYER ────────────────────────────────────────────────── */
+/* ── 9. BUTTON FILL CLIP ─────────────────────────────────────────────────── */
 .btn,
 .home-start-btn,
 .lock-submit-btn,
@@ -311,7 +339,7 @@ body {
 }
 
 
-/* ── 9. PRIMARY BUTTON — amber gradient + glow ───────────────────────────── */
+/* ── 10. PRIMARY BUTTONS ─────────────────────────────────────────────────── */
 .btn-primary:not(:disabled) {
   background: linear-gradient(
     135deg,
@@ -328,7 +356,6 @@ body {
     0 4px 22px rgba(245, 166, 35, 0.44),
     inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
 }
-
 .lock-submit-btn {
   background: linear-gradient(
     135deg,
@@ -339,21 +366,21 @@ body {
 }
 
 
-/* ── 10. TOGGLE BUTTONS ──────────────────────────────────────────────────── */
+/* ── 11. TOGGLE BUTTONS ──────────────────────────────────────────────────── */
 .btn-toggle.active {
   background: linear-gradient(
     135deg,
     var(--anim-amber) 0%,
     var(--anim-gold)  100%
   ) !important;
-  color:        #1a1200         !important;
+  color:        #1a1200           !important;
   border-color: var(--anim-amber) !important;
 }
 
 
-/* ── 11. FRAME CARD ──────────────────────────────────────────────────────── */
+/* ── 12. FRAME CARDS ─────────────────────────────────────────────────────── */
 .frame-card {
-  background:   #ffffff  !important;
+  background:   #ffffff       !important;
   border-color: var(--border) !important;
 }
 .frame-card.selected {
@@ -363,15 +390,15 @@ body {
 }
 
 
-/* ── 12. DESIGN SWATCH ───────────────────────────────────────────────────── */
+/* ── 13. DESIGN SWATCHES ─────────────────────────────────────────────────── */
 .design-swatch.selected {
   border-color: var(--anim-amber) !important;
   box-shadow:   0 0 0 3px color-mix(in srgb, var(--anim-amber) 16%, transparent) !important;
 }
 
 
-/* ── 13. SELECTION COUNTER ───────────────────────────────────────────────── */
-.selection-counter-card { border-color: var(--anim-amber) !important; }
+/* ── 14. SELECTION COUNTER ───────────────────────────────────────────────── */
+.selection-counter-card   { border-color: var(--anim-amber) !important; }
 .selection-counter-number { color: var(--anim-amber) !important; }
 .selection-counter-card.complete {
   background: linear-gradient(
@@ -382,11 +409,11 @@ body {
 }
 
 
-/* ── 14. KIOSK TIMER ─────────────────────────────────────────────────────── */
+/* ── 15. KIOSK TIMER RING COLOUR ─────────────────────────────────────────── */
 .kiosk-timer-progress { stroke: var(--anim-amber) !important; }
 
 
-/* ── 15. UPLOAD PROGRESS BAR ─────────────────────────────────────────────── */
+/* ── 16. UPLOAD PROGRESS BAR ─────────────────────────────────────────────── */
 .upload-progress-bar {
   background: linear-gradient(
     90deg,
@@ -403,7 +430,7 @@ body {
 }
 
 
-/* ── 16. STEP NUMBERS ────────────────────────────────────────────────────── */
+/* ── 17. HOW-IT-WORKS STEP NUMBERS ──────────────────────────────────────── */
 .guide-step-num {
   background:   rgba(245, 166, 35, 0.12) !important;
   border-color: rgba(245, 166, 35, 0.28) !important;
@@ -411,35 +438,29 @@ body {
 }
 
 
-/* ── 17. PRINTER VIDEO FRAME ─────────────────────────────────────────────── */
+/* ── 18. PRINTER VIDEO FRAME ─────────────────────────────────────────────── */
 .printing-video-frame {
-  background:   #f8f8f8 !important;
+  background:   #f8f8f8       !important;
   border-color: var(--border) !important;
-  box-shadow:   none !important;
-}
-
-/* Side columns on Page 6 start hidden; GSAP reveals them after strip feeds */
-#printingStatusCol,
-.printing-qr-col {
-  /* DO NOT set opacity:0 here — GSAP sets it via gsap.set() in animations.js
-     to avoid a FOUC. Adding it here would conflict with the initial render. */
+  box-shadow:   none          !important;
 }
 
 
-/* ── 18. SCROLL BARS ─────────────────────────────────────────────────────── */
+/* ── 19. SCROLL BARS ─────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: #f4f4f4; border-radius: 99px; }
 ::-webkit-scrollbar-thumb { background: rgba(245, 166, 35, 0.30); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(245, 166, 35, 0.55); }
 
 
-/* ── 19. FLOATING HOME OBJECTS ───────────────────────────────────────────── */
+/* ── 20. FLOATING HOME SHARDS ────────────────────────────────────────────── */
 .home-float-shard { will-change: transform, opacity; }
 
 
-/* ── 20. REDUCED MOTION ──────────────────────────────────────────────────── */
+/* ── 21. REDUCED MOTION ──────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .home-float-shard  { animation: none !important; transition: none !important; }
-  #page-flash-overlay{ display: none   !important; }
-  .btn-fill-layer    { display: none   !important; }
+  .home-float-shard       { animation: none !important; transition: none !important; }
+  #page-flash-overlay     { display:   none !important; }
+  .btn-fill-layer         { display:   none !important; }
+  .photo-card-order-badge { transition: none !important; }
 }

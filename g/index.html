@@ -2,54 +2,72 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: electron: https://oismyjlhnlfavrdfvabg.supabase.co; connect-src 'self' https://oismyjlhnlfavrdfvabg.supabase.co;">
-<title>Your Digital Copy — Studrio Booth</title>
-<!-- This file lives at /g/index.html — CSS and JS are one level up. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://oismyjlhnlfavrdfvabg.supabase.co; media-src 'self' blob: https://oismyjlhnlfavrdfvabg.supabase.co; connect-src 'self' https://oismyjlhnlfavrdfvabg.supabase.co;">
+<title>The Gallery — Studrio Booth</title>
+<!-- This file lives at /g/index.html — CSS is one level up. -->
 <link rel="stylesheet" href="../css/gallery.css">
 </head>
 <body>
 
 <div id="galleryPage">
 
-  <header class="gallery-header">
-    <h1>Your Digital Copy</h1>
-    <p class="gallery-sub">Studrio Booth</p>
+  <!-- Top bar: title left, logo right -->
+  <header class="gallery-topbar">
+    <h1 class="gallery-title">The Gallery</h1>
+    <img
+      class="gallery-logo"
+      src="../assets/designs/studrio_logo.png"
+      alt="Studrio Booth"
+      onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+    >
+    <span class="gallery-logo-text" style="display:none;">Studrio</span>
   </header>
 
-  <main class="gallery-main">
+  <main>
 
-    <section class="gallery-block gallery-block-full gallery-preview-block">
-      <div class="gallery-media-frame" id="galleryStripContainer">
-        <button class="gallery-mute-toggle" id="galleryMuteToggle" hidden aria-label="Unmute video">🔇</button>
-      </div>
+    <!-- Strip / video preview -->
+    <div class="gallery-media-frame" id="galleryStripContainer">
+      <!-- video or img injected by gallery.js -->
+    </div>
 
-      <div class="gallery-download-row">
-        <button class="gallery-download-toggle" id="btnDownloadPhoto" hidden>
-          <span class="gallery-download-icon">🖼</span>
-          <span class="gallery-download-labels">
-            <span class="gallery-download-title">Download Photo</span>
-            <span class="gallery-download-subtitle">Save the photo strip</span>
-          </span>
-        </button>
-        <button class="gallery-download-toggle" id="btnDownloadVideo" hidden>
-          <span class="gallery-download-icon">▶</span>
-          <span class="gallery-download-labels">
-            <span class="gallery-download-title">Download Video</span>
-            <span class="gallery-download-subtitle">Save the video strip</span>
-          </span>
-        </button>
-<!-- Download with QR button removed per user request (admin panel only) -->
-      </div>
-    </section>
+    <!-- Expiry note -->
+    <p class="gallery-caption">
+      View and download photos for 72 hours after shooting.
+    </p>
+
+    <!-- Download buttons — always side by side -->
+    <div class="gallery-download-row">
+      <button class="gallery-download-toggle" id="btnDownloadPhoto" hidden>
+        <span class="gallery-download-icon">🖼</span>
+        <span class="gallery-download-labels">
+          <span class="gallery-download-title">Download Photo</span>
+          <span class="gallery-download-subtitle">Save the photo strip</span>
+        </span>
+      </button>
+      <button class="gallery-download-toggle" id="btnDownloadVideo" hidden>
+        <span class="gallery-download-icon">▶</span>
+        <span class="gallery-download-labels">
+          <span class="gallery-download-title">Download Video</span>
+          <span class="gallery-download-subtitle">Save the video strip</span>
+        </span>
+      </button>
+    </div>
 
   </main>
 
-  <p id="galleryLoading" class="gallery-status">Loading your gallery...</p>
-  <p id="galleryNotFound" class="gallery-status" hidden>
-    We couldn't find this gallery. The link may have expired or the session
-    may not have finished uploading yet — try scanning the QR code again.
-  </p>
+  <!-- Loading / error states -->
+  <p id="galleryLoading" class="gallery-status">Loading your gallery…</p>
+
+  <div id="galleryNotFound" class="gallery-not-found" hidden>
+    <span class="gallery-not-found-icon">📷</span>
+    <p class="gallery-not-found-title">Gallery not found</p>
+    <p class="gallery-not-found-body">
+      We couldn't find this gallery. The link may have expired or the session
+      may not have finished uploading yet — try scanning the QR code again.
+    </p>
+  </div>
+
   <p id="galleryToast" class="gallery-toast" hidden></p>
 
   <footer class="gallery-footer">
@@ -58,8 +76,86 @@
 
 </div>
 
+<!-- Supabase + gallery logic -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="../js/cloud-storage.js"></script>
 <script src="../js/gallery.js"></script>
+
+<!-- GSAP for button press animation (CDN, matches kiosk version) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+  /*
+   * Gallery button fill animation — mirrors the kiosk's animateBtnFill()
+   * from animations.js. On pointerdown: a yellow-gradient fill layer
+   * sweeps left-to-right, then fades out. The button scales down slightly
+   * to give tactile feedback, then springs back.
+   *
+   * Runs after DOM is ready; also re-wires after gallery.js shows
+   * the buttons (they start with [hidden] and become visible later).
+   */
+  (function () {
+    if (typeof gsap === 'undefined') return;
+
+    function ensureFillLayer(btn) {
+      if (btn.querySelector('.gallery-btn-fill')) return;
+      const layer = document.createElement('span');
+      layer.className = 'gallery-btn-fill';
+      btn.insertBefore(layer, btn.firstChild);
+    }
+
+    function animateFill(btn) {
+      if (btn.disabled) return;
+      ensureFillLayer(btn);
+      const layer = btn.querySelector('.gallery-btn-fill');
+
+      // Fill sweeps across, then fades
+      gsap.fromTo(layer,
+        { scaleX: 0, opacity: 1 },
+        {
+          scaleX: 1,
+          duration: 0.36,
+          ease: 'power3.out',
+          onComplete: () => {
+            gsap.to(layer, {
+              opacity: 0,
+              duration: 0.22,
+              ease: 'power1.in',
+              onComplete: () => gsap.set(layer, { scaleX: 0, opacity: 1 })
+            });
+          }
+        }
+      );
+
+      // Button micro-squish
+      gsap.fromTo(btn,
+        { scale: 1 },
+        { scale: 0.96, duration: 0.08, yoyo: true, repeat: 1, ease: 'power2.inOut' }
+      );
+    }
+
+    function wireButtons() {
+      document.querySelectorAll('.gallery-download-toggle').forEach(btn => {
+        // Remove any previous listener to avoid duplicates
+        btn.removeEventListener('pointerdown', btn._galleryFillHandler);
+        btn._galleryFillHandler = () => animateFill(btn);
+        btn.addEventListener('pointerdown', btn._galleryFillHandler);
+      });
+    }
+
+    // Wire immediately for any already-visible buttons
+    wireButtons();
+
+    // Re-wire whenever gallery.js un-hides a button (MutationObserver on hidden attr)
+    const row = document.querySelector('.gallery-download-row');
+    if (row) {
+      new MutationObserver(wireButtons).observe(row, {
+        attributes: true,
+        attributeFilter: ['hidden'],
+        subtree: true
+      });
+    }
+  })();
+</script>
+
 </body>
 </html>

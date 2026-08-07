@@ -94,6 +94,53 @@ const stripModule = {
     }));
     console.log(`[stripModule] Loaded ${STRIP_DESIGNS.length} designs from assetSync.`);
     this.preloadDesignOverlays();
+    this._updateFrameAvailability();
+  },
+
+  /*
+   * Hides frame size cards on Page 2 when no uploaded template has an
+   * overlay for that size. If a size has zero templates, its card and
+   * any existing selection are hidden so guests can't choose it.
+   */
+  _updateFrameAvailability() {
+    const has2x6 = STRIP_DESIGNS.some(d => d.overlays && d.overlays["2x6"]);
+    const has4x6 = STRIP_DESIGNS.some(d => d.overlays && d.overlays["4x6"]);
+
+    const card2x6 = document.getElementById("frameCard2x6");
+    const card4x6 = document.getElementById("frameCard4x6");
+
+    if (card2x6) {
+      card2x6.style.display = has2x6 ? "" : "none";
+      // If this frame type was previously selected but is now unavailable, deselect it
+      if (!has2x6 && typeof sessionState !== "undefined" && sessionState.frameType === "2x6") {
+        sessionState.frameType = null;
+        card2x6.classList.remove("selected");
+        const nextBtn = document.getElementById("btnNextFromFrame");
+        if (nextBtn) nextBtn.disabled = true;
+      }
+    }
+
+    if (card4x6) {
+      card4x6.style.display = has4x6 ? "" : "none";
+      if (!has4x6 && typeof sessionState !== "undefined" && sessionState.frameType === "4x6") {
+        sessionState.frameType = null;
+        card4x6.classList.remove("selected");
+        const nextBtn = document.getElementById("btnNextFromFrame");
+        if (nextBtn) nextBtn.disabled = true;
+      }
+    }
+
+    // Auto-select if only one size is available and nothing is selected yet
+    if (typeof sessionState !== "undefined" && !sessionState.frameType) {
+      if (has2x6 && !has4x6 && card2x6) {
+        // Only 2x6 available — auto-select it but don't advance the page
+        console.log("[stripModule] Only 2x6 templates available — auto-selecting.");
+      } else if (has4x6 && !has2x6 && card4x6) {
+        console.log("[stripModule] Only 4x6 templates available — auto-selecting.");
+      }
+    }
+
+    console.log(`[stripModule] Frame availability — 2x6: ${has2x6}, 4x6: ${has4x6}`);
   },
 
   loadImage(src) {
@@ -336,9 +383,14 @@ const stripModule = {
    * COMBINED VIDEO STRIP EXPORT — records the full composited layout
    * (all 4 videos playing in their exact slots + frame overlay on top)
    * into ONE downloadable/shareable .webm file, matching the print
-   * layout exactly but animated. Recording length matches durationMs.
+   * layout exactly but animated. Recording length matches durationMs —
+   * default is 8000ms to match the guest's actual ~8s per-shot countdown
+   * (see shooting.js's countdownSeconds) plus stopVideoRecording's ~600ms
+   * freeze-hold; previously this defaulted to 3000ms and no caller
+   * overrode it, so the digital copy was cut down to a fraction of what
+   * was actually recorded regardless of the real clip length.
    */
-  async exportVideoStrip({ frameType, selectedShots, designId, durationMs = 3000, scale = 0.3 }) {
+  async exportVideoStrip({ frameType, selectedShots, designId, durationMs = 8000, scale = 0.3 }) {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 

@@ -109,6 +109,12 @@
         }
         if (target === "hardware") {
           checkHardware();
+        } else {
+          // Stop camera test if switching away from hardware
+          const btn = document.getElementById('btnTestCamera');
+          if (btn && btn.textContent === 'Stop Test') {
+            btn.click();
+          }
         }
       });
     });
@@ -150,6 +156,106 @@
     document.getElementById('btnRefreshCamera')?.addEventListener('click', () => {
       checkHardware();
       showToast('Refreshing hardware connection...');
+    });
+
+    // Test Camera Toggle
+    let isTestingCamera = false;
+    document.getElementById('btnTestCamera')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btnTestCamera');
+      const wrap = document.getElementById('adminCameraPreviewWrap');
+      const video = document.getElementById('adminTestVideo');
+      const img = document.getElementById('adminTestImg');
+
+      if (!isTestingCamera) {
+        // Start Test
+        try {
+          btn.disabled = true;
+          btn.textContent = 'Starting...';
+
+          // If the camera is already connected (e.g. from the boot sequence or a
+          // previous test), skip the connect() call entirely — calling it again
+          // opens a second getUserMedia stream and may conflict with the first.
+          if (!cameraController.status.connected) {
+            const connectionPromise = cameraController.connect();
+            // getUserMedia requires user permission on first call and can take
+            // a while in Electron's sandboxed environment — allow 30 s before
+            // declaring a timeout so we don't bail out prematurely.
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Connection timed out — check that the camera is plugged in and permissions are granted')), 30000)
+            );
+            await Promise.race([connectionPromise, timeoutPromise]);
+          }
+          
+          wrap.hidden = false;
+          cameraController.attachPreview(video, img);
+          
+          isTestingCamera = true;
+          btn.textContent = 'Stop Test';
+          btn.classList.replace('btn-admin-primary', 'btn-admin-danger');
+          showToast('Camera test started');
+        } catch (e) {
+          console.error('[Admin] Camera test failed:', e);
+          showToast('Failed to start camera: ' + e.message, 'error');
+          btn.textContent = 'Test Camera';
+        } finally {
+          btn.disabled = false;
+        }
+      } else {
+        // Stop Test
+        cameraController.disconnect();
+        wrap.hidden = true;
+        isTestingCamera = false;
+        btn.textContent = 'Test Camera';
+        btn.classList.replace('btn-admin-danger', 'btn-admin-primary');
+        showToast('Camera test stopped');
+      }
+    });
+
+    // Test Print
+    document.getElementById('btnTestPrint')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btnTestPrint');
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Printing...';
+        
+        // Create a test pattern
+        const canvas = document.createElement('canvas');
+        canvas.width = 1200;
+        canvas.height = 1800;
+        const ctx = canvas.getContext('2d');
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 20;
+        ctx.strokeRect(50, 50, canvas.width - 100, canvas.height - 100);
+        
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 80px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('STUDRIO BOOTH', canvas.width / 2, 300);
+        ctx.font = '60px sans-serif';
+        ctx.fillText('TEST PRINT', canvas.width / 2, 400);
+        ctx.fillText(new Date().toLocaleString(), canvas.width / 2, 500);
+        
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(canvas.width, canvas.height);
+        ctx.moveTo(canvas.width, 0); ctx.lineTo(0, canvas.height);
+        ctx.stroke();
+        
+        const testImageUrl = canvas.toDataURL('image/png');
+        const prefs = printAlignment.loadPrefs();
+        
+        await printAlignment.sendPrintJob(testImageUrl, 1, prefs);
+        showToast('Test print sent to printer');
+      } catch (e) {
+        console.error('[Admin] Test print failed:', e);
+        showToast('Print failed: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Print';
+      }
     });
 
     // Alignment Sliders
@@ -327,6 +433,7 @@
       if (state.selectedIds.has(session.id)) card.classList.add("session-card--selected");
       
       const thumbSrc = session.print_ready_url || session.final_strip_url || "";
+      const hasVideo  = !!session.final_strip_video_url;
       card.innerHTML = `
         <div class="session-card-sprockets"></div>
         <div class="session-card-body">
@@ -335,14 +442,19 @@
               <input type="checkbox" class="session-checkbox" ${state.selectedIds.has(session.id) ? 'checked' : ''}>
             </div>
           ` : ''}
-          <div class="session-card-thumb"><img src="${thumbSrc}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\"session-thumb--empty\">No image</div>'"></div>
+          <div class="session-card-thumb">
+            ${thumbSrc
+              ? `<img src="${thumbSrc}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\"session-thumb--empty\">No image</div>'">`
+              : `<div class="session-thumb--empty">No image</div>`}
+          </div>
           <div class="session-card-meta">
             <p class="session-card-date">${formatDate(session.created_at)}</p>
             <p class="session-card-id">#${session.id}</p>
           </div>
           <div class="session-card-actions">
             <button class="btn-admin btn-admin-outline btn-sm" data-action="print">Print</button>
-            <button class="btn-admin btn-admin-outline btn-sm" data-action="download">Save</button>
+            <button class="btn-admin btn-admin-outline btn-sm" data-action="download-photo">Save Photo</button>
+            <button class="btn-admin btn-admin-outline btn-sm${hasVideo ? '' : ' btn-admin-disabled'}" data-action="download-video" ${hasVideo ? '' : 'disabled'}>Save Video</button>
             <button class="btn-admin btn-admin-ghost btn-sm" data-action="delete">Delete</button>
           </div>
         </div>
@@ -359,9 +471,13 @@
         e.stopPropagation();
         handlePrint(session);
       });
-      card.querySelector('[data-action="download"]').addEventListener("click", (e) => {
+      card.querySelector('[data-action="download-photo"]').addEventListener("click", (e) => {
         e.stopPropagation();
-        handleDownload(session);
+        handleDownloadPhoto(session);
+      });
+      card.querySelector('[data-action="download-video"]').addEventListener("click", (e) => {
+        e.stopPropagation();
+        handleDownloadVideo(session);
       });
       card.querySelector('[data-action="delete"]').addEventListener("click", (e) => {
         e.stopPropagation();
@@ -484,9 +600,15 @@
     }
   }
 
-  async function handleDownload(session) {
+  async function handleDownloadPhoto(session) {
     const url = session.print_ready_url || session.final_strip_url;
-    if (!url) { showToast("No file to save.", 'error'); return; }
+    if (!url) { showToast("No photo file to save.", 'error'); return; }
+    window.open(url, '_blank');
+  }
+
+  async function handleDownloadVideo(session) {
+    const url = session.final_strip_video_url;
+    if (!url) { showToast("No video file for this session.", 'error'); return; }
     window.open(url, '_blank');
   }
 
