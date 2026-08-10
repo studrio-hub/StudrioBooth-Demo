@@ -589,6 +589,267 @@ const templateManager = (() => {
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // FILTER MANAGER
+  // Handles .lut and .cube filter uploads, preview, opacity, and persistence.
+  // Filters are stored in localStorage (client-side only, no Supabase table).
+  // ════════════════════════════════════════════════════════════════════════════
+
+  const FILTERS_LS_KEY = "studrio_filters";
+
+  let _filters = []; // Array of { id, name, fileData (base64), format, opacity }
+
+  function loadFilters() {
+    try {
+      _filters = JSON.parse(localStorage.getItem(FILTERS_LS_KEY) || "[]");
+    } catch (e) {
+      _filters = [];
+    }
+  }
+
+  function saveFilters() {
+    try {
+      localStorage.setItem(FILTERS_LS_KEY, JSON.stringify(_filters));
+    } catch (e) {
+      console.warn("[templateManager] Could not save filters:", e);
+    }
+  }
+
+  function renderFilterList() {
+    const grid = document.getElementById("filterGrid");
+    const status = document.getElementById("filterStatus");
+    if (!grid) return;
+
+    grid.innerHTML = "";
+    if (!_filters.length) {
+      if (status) { status.hidden = false; status.textContent = 'No filters yet. Click "Upload Filter" to add one.'; }
+      return;
+    }
+    if (status) status.hidden = true;
+
+    _filters.forEach((filter, index) => {
+      const card = document.createElement("div");
+      card.className = "filter-admin-card";
+      card.dataset.id = filter.id;
+
+      card.innerHTML = `
+        <div class="filter-admin-header">
+          <span class="filter-admin-name">${escapeHtml(filter.name)}</span>
+          <span class="filter-admin-format">.${filter.format}</span>
+        </div>
+        <div class="filter-admin-preview-wrap">
+          <canvas class="filter-admin-canvas" width="160" height="120" data-filter-id="${filter.id}"></canvas>
+          <p class="filter-admin-preview-hint">Upload a preview image below</p>
+        </div>
+        <div class="filter-admin-controls">
+          <label class="filter-admin-opacity-label">
+            Opacity: <strong class="filter-opacity-val">${Math.round((filter.opacity ?? 1) * 100)}%</strong>
+          </label>
+          <input type="range" class="filter-opacity-slider" min="0" max="100" step="1"
+                 value="${Math.round((filter.opacity ?? 1) * 100)}" data-filter-id="${filter.id}">
+        </div>
+        <div class="filter-admin-preview-upload">
+          <label class="filter-preview-upload-label">Preview image (optional)</label>
+          <input type="file" class="filter-preview-file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" data-filter-id="${filter.id}">
+        </div>
+        <div class="filter-admin-actions">
+          <button class="btn-admin btn-admin-outline btn-sm" data-action="preview-filter">Preview</button>
+          <button class="btn-admin btn-admin-ghost btn-sm" data-action="delete-filter">Delete</button>
+        </div>
+      `;
+
+      // Opacity slider
+      const slider = card.querySelector(".filter-opacity-slider");
+      const valEl  = card.querySelector(".filter-opacity-val");
+      slider.addEventListener("input", () => {
+        const pct = parseInt(slider.value, 10);
+        valEl.textContent = `${pct}%`;
+        filter.opacity = pct / 100;
+        saveFilters();
+        // Dispatch event so kiosk filter engine can pick this up
+        document.dispatchEvent(new CustomEvent("studrio:filterOpacityChanged", { detail: { id: filter.id, opacity: filter.opacity } }));
+      });
+
+      // Preview image upload — draws on the canvas with simulated filter effect
+      const previewFileInput = card.querySelector(".filter-preview-file");
+      const previewCanvas    = card.querySelector(".filter-admin-canvas");
+      const previewHint      = card.querySelector(".filter-admin-preview-hint");
+
+      if (filter.previewDataUrl) {
+        _drawFilterPreviewOnCanvas(previewCanvas, filter.previewDataUrl, filter.opacity ?? 1, filter);
+        if (previewHint) previewHint.style.display = "none";
+      }
+
+      previewFileInput.addEventListener("change", () => {
+        const file = previewFileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          filter.previewDataUrl = e.target.result;
+          saveFilters();
+          _drawFilterPreviewOnCanvas(previewCanvas, e.target.result, filter.opacity ?? 1, filter);
+          if (previewHint) previewHint.style.display = "none";
+        };
+        reader.readAsDataURL(file);
+      });
+
+      // Preview button — opens a full-size preview modal
+      card.querySelector('[data-action="preview-filter"]').addEventListener("click", () => {
+        showFilterPreviewModal(filter);
+      });
+
+      // Delete button
+      card.querySelector('[data-action="delete-filter"]').addEventListener("click", () => {
+        if (!confirm(`Delete filter "${filter.name}"?`)) return;
+        _filters.splice(index, 1);
+        saveFilters();
+        renderFilterList();
+        showToast(`Filter "${filter.name}" deleted.`);
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  /*
+   * Draws a preview image onto the canvas with a simple opacity-based
+   * brightness shift to simulate a filter effect (real LUT parsing is complex;
+   * this is a representative admin preview only).
+   */
+  function _drawFilterPreviewOnCanvas(canvas, dataUrl, opacity, filter) {
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // Apply a simple desaturation effect as a visual indicator of the filter
+      // (full LUT application requires GPU or complex CPU parsing)
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      const strength = opacity;
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114;
+        data[i]   = data[i]   * (1 - strength) + gray * strength;
+        data[i+1] = data[i+1] * (1 - strength) + gray * strength;
+        data[i+2] = data[i+2] * (1 - strength) + gray * strength;
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      // Label the filter name on the preview
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(0, canvas.height - 22, canvas.width, 22);
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText(filter.name, 6, canvas.height - 7);
+    };
+    img.src = dataUrl;
+  }
+
+  function showFilterPreviewModal(filter) {
+    const modal = document.getElementById("filterPreviewModal");
+    if (!modal) return;
+    const title = modal.querySelector(".filter-preview-modal-title");
+    const canvas = modal.querySelector(".filter-preview-modal-canvas");
+    if (title) title.textContent = `Preview: ${filter.name}`;
+    if (canvas && filter.previewDataUrl) {
+      canvas.width  = 480;
+      canvas.height = 360;
+      _drawFilterPreviewOnCanvas(canvas, filter.previewDataUrl, filter.opacity ?? 1, filter);
+    } else if (canvas) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#f4f5f7";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#888";
+      ctx.font = "16px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("No preview image uploaded", canvas.width / 2, canvas.height / 2);
+    }
+    modal.hidden = false;
+  }
+
+  function wireFilterSection() {
+    // Upload filter button
+    const openBtn   = document.getElementById("btnUploadFilter");
+    const modal     = document.getElementById("filterUploadModal");
+    const cancelBtn = document.getElementById("btnFilterUploadCancel");
+    const submitBtn = document.getElementById("btnFilterUploadSubmit");
+
+    if (!openBtn || !modal || !cancelBtn || !submitBtn) {
+      console.warn("[templateManager] wireFilterSection: missing filter upload elements");
+      return;
+    }
+
+    openBtn.addEventListener("click", () => {
+      const nameEl = document.getElementById("filterName");
+      const fileEl = document.getElementById("filterFile");
+      if (nameEl) nameEl.value = "";
+      if (fileEl) fileEl.value = "";
+      modal.hidden = false;
+    });
+
+    cancelBtn.addEventListener("click", () => { modal.hidden = true; });
+
+    submitBtn.addEventListener("click", () => {
+      const nameEl = document.getElementById("filterName");
+      const fileEl = document.getElementById("filterFile");
+      const name = nameEl ? nameEl.value.trim() : "";
+      const file = fileEl ? fileEl.files[0] : null;
+
+      if (!name) { showToast("Please enter a filter name."); return; }
+      if (!file) { showToast("Please select a .lut or .cube file."); return; }
+
+      const format = file.name.split(".").pop().toLowerCase();
+      if (!["lut", "cube"].includes(format)) {
+        showToast("Only .lut and .cube files are supported.");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Reading…";
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const filter = {
+          id: `filter_${Date.now()}`,
+          name,
+          format,
+          fileData: e.target.result, // base64 data URL of the LUT file
+          opacity: 1,
+          previewDataUrl: null
+        };
+        _filters.push(filter);
+        saveFilters();
+        modal.hidden = true;
+        nameEl.value = "";
+        fileEl.value = "";
+        renderFilterList();
+        showToast(`Filter "${name}" uploaded.`);
+        // Notify kiosk filter engine
+        document.dispatchEvent(new CustomEvent("studrio:filtersUpdated", { detail: { filters: _filters } }));
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Upload";
+      };
+      reader.onerror = () => {
+        showToast("Could not read filter file.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Upload";
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Filter preview modal close
+    const previewModal = document.getElementById("filterPreviewModal");
+    const previewClose = document.getElementById("btnFilterPreviewClose");
+    if (previewClose && previewModal) {
+      previewClose.addEventListener("click", () => { previewModal.hidden = true; });
+    }
+  }
+
+  // Public accessor so asset-sync / kiosk can read filters
+  function getFilters() { return _filters; }
+
   // ── HTML injection (injects the tab HTML into dashboard.html) ───────────────
 
   function injectHTML() {
@@ -656,7 +917,7 @@ const templateManager = (() => {
                 <span class="edit-current-label" id="editCurrent2x6"></span>
               </label>
               <input type="file" id="editTemplateFile2x6" accept=".png,image/png">
-              <p class="form-hint">Leave blank to keep the existing 2×6 overlay. Full-size PNG at 2400×3600px, 600dpi.</p>
+              <p class="form-hint">Leave blank to keep the existing 2×6 overlay. Upload a <strong>single strip</strong> at 1200×3600px, 600dpi — the kiosk mirrors it into a two-strip print layout automatically.</p>
             </div>
 
             <div class="form-field">
@@ -717,7 +978,7 @@ const templateManager = (() => {
             <div class="form-field">
               <label for="templateFile2x6">Frame PNG — 2×6 (Long Frame)</label>
               <input type="file" id="templateFile2x6" accept=".png,image/png">
-              <p class="form-hint">Full-size overlay PNG at 2400×3600px, 600dpi. Leave blank if this design is 4×6 only.</p>
+              <p class="form-hint">Upload a <strong>single strip</strong> at 1200×3600px, 600dpi. The kiosk automatically mirrors it into a two-strip print layout. Leave blank if this design is 4×6 only.</p>
             </div>
 
             <div class="form-field">
@@ -738,6 +999,59 @@ const templateManager = (() => {
           <div class="admin-modal-actions">
             <button class="btn-admin btn-admin-outline" id="btnTemplateUploadCancel" type="button">Cancel</button>
             <button class="btn-admin btn-admin-primary" id="btnTemplateUploadSubmit" type="button">Upload</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- ── Filter Manager ────────────────────────────────────────────── -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div class="filter-manager-section">
+        <div class="gallery-section-head" style="margin-top: 2rem;">
+          <div class="gallery-section-head-left">
+            <h2>Filters</h2>
+            <p class="gallery-count" id="filterCount"></p>
+          </div>
+          <button class="btn-admin btn-admin-primary btn-sm" id="btnUploadFilter" type="button">+ Upload Filter</button>
+        </div>
+        <p class="form-hint" style="margin-bottom:1rem;">Upload <code>.lut</code> or <code>.cube</code> colour-grading files. Adjust each filter's strength with the opacity slider. The kiosk applies filters to the guest's photos on the Frame Design page.</p>
+        <p class="admin-status" id="filterStatus">No filters yet.</p>
+        <div class="filter-admin-grid" id="filterGrid"></div>
+      </div>
+
+      <!-- ── Filter upload modal ─────────────────────────────────────────── -->
+      <div class="admin-modal-overlay" id="filterUploadModal" hidden>
+        <div class="admin-modal-box admin-modal-box--wide">
+          <h3 class="admin-modal-title">Upload Filter</h3>
+          <div class="template-upload-form">
+            <div class="form-field">
+              <label for="filterName">Filter name</label>
+              <input type="text" id="filterName" placeholder="e.g. Warm Sunset" maxlength="60">
+            </div>
+            <div class="form-field">
+              <label for="filterFile">Filter file (.lut or .cube)</label>
+              <input type="file" id="filterFile" accept=".lut,.cube">
+              <p class="form-hint">Supports standard 1D/3D LUT files in .lut or .cube format.</p>
+            </div>
+          </div>
+          <div class="admin-modal-actions">
+            <button class="btn-admin btn-admin-outline" id="btnFilterUploadCancel" type="button">Cancel</button>
+            <button class="btn-admin btn-admin-primary" id="btnFilterUploadSubmit" type="button">Upload</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Filter preview modal ────────────────────────────────────────── -->
+      <div class="admin-modal-overlay" id="filterPreviewModal" hidden>
+        <div class="admin-modal-box admin-modal-box--wide">
+          <h3 class="admin-modal-title filter-preview-modal-title">Preview Filter</h3>
+          <div style="display:flex;align-items:center;justify-content:center;padding:1rem 0;">
+            <canvas class="filter-preview-modal-canvas" width="480" height="360"
+                    style="border-radius:10px;border:1px solid #ddd;max-width:100%;"></canvas>
+          </div>
+          <p class="form-hint" style="text-align:center;">Simulated preview — actual output depends on the LUT data.</p>
+          <div class="admin-modal-actions">
+            <button class="btn-admin btn-admin-primary" id="btnFilterPreviewClose" type="button">Close</button>
           </div>
         </div>
       </div>
@@ -771,10 +1085,27 @@ const templateManager = (() => {
       wireDeleteModal();
       wireSyncButton();
       await loadTemplates();
+
+      // Filter manager
+      loadFilters();
+      renderFilterList();
+      wireFilterSection();
+
+      // Update filter count label
+      const filterCountEl = document.getElementById("filterCount");
+      if (filterCountEl) {
+        filterCountEl.textContent = _filters.length
+          ? `${_filters.length} filter${_filters.length !== 1 ? "s" : ""}`
+          : "";
+      }
     },
 
     async refresh() {
       await loadTemplates();
-    }
+      renderFilterList();
+    },
+
+    // Public: returns current filter list for the kiosk
+    getFilters
   };
 })();

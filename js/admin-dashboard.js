@@ -431,9 +431,19 @@
       const card = document.createElement("div");
       card.className = "session-card";
       if (state.selectedIds.has(session.id)) card.classList.add("session-card--selected");
-      
+
       const thumbSrc = session.print_ready_url || session.final_strip_url || "";
       const hasVideo  = !!session.final_strip_video_url;
+      // copies_printed comes from the sessions table (joined or denormalized);
+      // fall back to "—" if the column isn't present yet.
+      const copies = session.copies_printed != null ? session.copies_printed : "—";
+
+      // Build thumb HTML without inline onerror to avoid the stray `">` text
+      // that appears when the browser mis-parses the attribute's embedded quotes.
+      const thumbHtml = thumbSrc
+        ? `<img class="session-thumb-img" src="${thumbSrc}" loading="lazy" alt="Strip preview">`
+        : `<div class="session-thumb--empty">No image</div>`;
+
       card.innerHTML = `
         <div class="session-card-sprockets"></div>
         <div class="session-card-body">
@@ -443,11 +453,10 @@
             </div>
           ` : ''}
           <div class="session-card-thumb">
-            ${thumbSrc
-              ? `<img src="${thumbSrc}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\"session-thumb--empty\">No image</div>'">`
-              : `<div class="session-thumb--empty">No image</div>`}
+            ${thumbHtml}
           </div>
           <div class="session-card-meta">
+            <p class="session-card-copies">🖨 ${copies} ${copies === 1 ? 'copy' : 'copies'} printed</p>
             <p class="session-card-date">${formatDate(session.created_at)}</p>
             <p class="session-card-id">#${session.id}</p>
           </div>
@@ -460,6 +469,15 @@
         </div>
         <div class="session-card-sprockets"></div>
       `;
+
+      // Wire up broken-image fallback via JS (avoids the inline onerror `">` parse bug)
+      const thumbImg = card.querySelector('.session-thumb-img');
+      if (thumbImg) {
+        thumbImg.addEventListener('error', () => {
+          const thumbEl = card.querySelector('.session-card-thumb');
+          if (thumbEl) thumbEl.innerHTML = '<div class="session-thumb--empty">No image</div>';
+        });
+      }
 
       card.addEventListener("click", (e) => {
         if (state.selectMode) {

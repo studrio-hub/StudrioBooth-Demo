@@ -88,16 +88,53 @@
     }
   }
 
-  /* ── 5. Show the lock screen ─────────────────────────────────────────────── */
+  /* ── 5. Play boot animation, then show the lock screen ─────────────────── */
   addStatus("System ready.");
-  setTimeout(() => {
-    if (typeof authLock !== "undefined") {
-      authLock.init();
-    } else {
-      console.warn("[boot] authLock not found — skipping lock screen.");
-      goToPage("home");
-    }
-  }, 1000);
+
+  async function playBootAnimation() {
+    const overlay = document.getElementById("bootAnimOverlay");
+    const video   = document.getElementById("bootAnimVideo");
+
+    if (!overlay || !video) return;
+
+    // Show the overlay (covers the boot status screen)
+    overlay.hidden = false;
+
+    // Play the video and wait for it to end (or error/timeout)
+    await new Promise((resolve) => {
+      function done() { resolve(); }
+
+      video.addEventListener("ended",  done, { once: true });
+      video.addEventListener("error",  done, { once: true });
+
+      // Safety timeout: if video doesn't end in 30 s, proceed anyway
+      const safetyTimer = setTimeout(done, 30000);
+
+      video.play().catch(() => {
+        clearTimeout(safetyTimer);
+        resolve(); // video failed to play — skip gracefully
+      });
+
+      // Override: clear safety timer once the "ended" event fires
+      video.addEventListener("ended", () => clearTimeout(safetyTimer), { once: true });
+    });
+
+    // Fade out the overlay
+    overlay.classList.add("fading");
+    await new Promise((resolve) => setTimeout(resolve, 520)); // match CSS transition
+    overlay.hidden = true;
+    overlay.classList.remove("fading");
+  }
+
+  await playBootAnimation();
+
+  // Now show the lock screen
+  if (typeof authLock !== "undefined") {
+    authLock.init();
+  } else {
+    console.warn("[boot] authLock not found — skipping lock screen.");
+    goToPage("home");
+  }
 
   // Retry logic
   document.getElementById("btnBootRetry")?.addEventListener("click", () => {

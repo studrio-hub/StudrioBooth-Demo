@@ -183,8 +183,27 @@ const stripModule = {
    * PNG export, so preview and export are guaranteed to match.
    *
    * Layer order: photos (exact coords) → frame design overlay ON TOP.
+   *
+   * singleStrip (default false) — when true and frameType is "2x6",
+   * the returned canvas is cropped to the first strip's width only
+   * (half of canvasWidth). Used by the digital gallery exports so
+   * guests download a single clean strip, not the two-up print layout.
+   * Print exports always pass singleStrip:false.
    */
-  async compositeLayout({ frameType, selectedShots, designId }) {
+  /*
+   * _isSingleStripOverlay — detects whether a 2×6 overlay PNG was uploaded
+   * as a single strip (1200×3600 or any image whose width ≤ half the full
+   * sheet width). Single-strip uploads are mirrored side-by-side at print time.
+   */
+  _isSingleStripOverlay(overlayImg, frameType) {
+    if (frameType !== "2x6") return false;
+    // Full sheet for 2×6 is 2400px wide; a single strip is ~1200px wide.
+    // We treat the overlay as single-strip when its naturalWidth is less
+    // than 75% of the full sheet width (2400 * 0.75 = 1800px).
+    return overlayImg && overlayImg.naturalWidth > 0 && overlayImg.naturalWidth < 1800;
+  },
+
+  async compositeLayout({ frameType, selectedShots, designId, singleStrip = false }) {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
@@ -219,11 +238,35 @@ const stripModule = {
       if (overlayPath) {
         const overlayImg = await this.loadImage(overlayPath);
         if (overlayImg) {
-          ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+          if (this._isSingleStripOverlay(overlayImg, frameType)) {
+            // Single-strip upload (new format): tile it twice side-by-side
+            // to fill the full 2400×3600 print sheet.
+            const stripW = config.canvasWidth / 2;
+            ctx.drawImage(overlayImg, 0, 0, stripW, config.canvasHeight);
+            ctx.drawImage(overlayImg, stripW, 0, stripW, config.canvasHeight);
+          } else {
+            // Full double-strip overlay (legacy format): draw at full width
+            ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+          }
         } else {
           console.warn(`[stripModule] Overlay not found: ${overlayPath}`);
         }
       }
+    }
+
+    // If the caller only wants one strip (digital gallery download), crop
+    // the 2x6 two-up canvas down to the left half after compositing.
+    // The full-width overlay PNG was already drawn above at full width so
+    // it renders correctly; we then blit the left strip portion onto a new
+    // half-width canvas and return that instead.
+    if (singleStrip && frameType === "2x6") {
+      const copies = 2;
+      const stripW = Math.round(canvas.width / copies);
+      const cropped = document.createElement("canvas");
+      cropped.width  = stripW;
+      cropped.height = canvas.height;
+      cropped.getContext("2d").drawImage(canvas, 0, 0, stripW, canvas.height, 0, 0, stripW, canvas.height);
+      return cropped;
     }
 
     return canvas;
@@ -281,26 +324,96 @@ const stripModule = {
       const overlayPath = design.overlays && design.overlays[frameType];
       if (overlayPath) {
         const overlayImg = await this.loadImage(overlayPath);
-        if (overlayImg) ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+        if (overlayImg) {
+          if (this._isSingleStripOverlay(overlayImg, frameType)) {
+            // Single-strip upload: tile twice for the scaled preview
+            const stripW = canvas.width / 2;
+            ctx.drawImage(overlayImg, 0, 0, stripW, canvas.height);
+            ctx.drawImage(overlayImg, stripW, 0, stripW, canvas.height);
+          } else {
+            ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+          }
+        }
       }
     }
 
     return canvas;
   },
 
-  /* Renders into a container div as a single canvas, CSS-scaled for kiosk display. */
+  /*
+   * Renders into a container div as a single canvas, CSS-scaled for kiosk display.
+   *
+   * For the selection (Page 4) and design (Page 5) preview containers, wraps
+   * the canvas in a .single-strip-clip div that clips the 2×6 two-up canvas
+   * down to one strip width. This is purely visual — the canvas itself is the
+   * full-resolution composite and is never modified.
+   */
+  /*
+   * _getOriginalDesign — returns the "Original" template (first enabled design,
+   * preferring one named "Original"). Used as the default overlay on the
+   * selection preview (Page 4) when no specific design has been chosen yet.
+   */
+  _getOriginalDesign() {
+    // First look for an explicitly-named "Original" template
+    const named = STRIP_DESIGNS.find(d => d.label && d.label.toLowerCase() === "original");
+    if (named) return named;
+    // Fall back to the first available design
+    return STRIP_DESIGNS[0] || null;
+  },
+
   async render(containerEl, opts) {
-    const canvas = await this.compositeLayout(opts);
+    // For the selection preview (Page 4), always apply the Original overlay
+    // even when sessionState.design is not yet set.
+    let renderOpts = opts;
+    if (containerEl.id === "stripPreviewContainer" && !opts.designId) {
+      const orig = this._getOriginalDesign();
+      if (orig) renderOpts = { ...opts, designId: orig.id };
+    }
+
+    const canvas = await this.compositeLayout(renderOpts);
     containerEl.innerHTML = "";
     canvas.classList.add("layout-canvas");
-    containerEl.appendChild(canvas);
+
+    // Determine if this container is a preview column (selection or design page)
+    const isPreviewCol =
+      containerEl.id === "stripPreviewContainer" ||
+      containerEl.id === "designPreviewContainer";
+
+    if (isPreviewCol && opts.frameType === "2x6") {
+      // Clip to single strip: wrap canvas in a container that is 50% of canvas width
+      const clip = document.createElement("div");
+      clip.className = "single-strip-clip";
+      clip.dataset.frame = "2x6";
+      clip.appendChild(canvas);
+      containerEl.appendChild(clip);
+    } else if (isPreviewCol) {
+      // 4x6 — use clip wrapper too so CSS rules apply uniformly
+      const clip = document.createElement("div");
+      clip.className = "single-strip-clip";
+      clip.dataset.frame = opts.frameType || "4x6";
+      clip.appendChild(canvas);
+      containerEl.appendChild(clip);
+    } else {
+      containerEl.appendChild(canvas);
+    }
+
     return canvas;
   },
 
   /*
-   * LIVE VIDEO STRIP — used only on the digital gallery page as a
-   * DOM-based fallback (real <video> elements positioned over slots).
-   * Falls back to the still photo if a slot has no video.
+   * LIVE VIDEO STRIP — renders one strip of live <video> / <img> elements
+   * into containerEl, used on Page 6 (printing) and the digital gallery.
+   *
+   * For 2×6 layouts the print sheet has two identical strips side-by-side,
+   * but we only render ONE here (the first copy / slots 0–3). Showing both
+   * would shrink each strip to half-width and look cramped inside the narrow
+   * center column. The overlay PNG slice covers the first strip only.
+   *
+   * All video elements are synchronised: once every <video> can play, they
+   * are all seeked to 0 and started together in the same microtask so they
+   * stay in lockstep. Each is individually looped, so they stay together for
+   * the lifetime of the session (loop durations are identical because every
+   * video was recorded from the same shooting session).
    */
   renderLive(containerEl, { frameType, selectedShots, designId }) {
     const config = LAYOUT_CONFIGS[frameType];
@@ -308,74 +421,106 @@ const stripModule = {
 
     const design = this.getDesign(designId);
     const overlayPath = design && design.overlays && design.overlays[frameType];
+
+    // Always render exactly ONE strip regardless of frame type.
+    // For 2×6 the sheet has two identical strips, but on-screen we only
+    // show the first one (slots 0 through slotsPerCopy-1).
     const copies = frameType === "2x6" ? 2 : 1;
     const slotsPerCopy = config.photoSlots.length / copies;
 
     containerEl.innerHTML = "";
     containerEl.classList.add("live-strip-row");
 
-    for (let c = 0; c < copies; c++) {
-      const wrap = document.createElement("div");
-      wrap.className = "live-strip-wrap";
-      wrap.style.aspectRatio = `${config.canvasWidth / copies} / ${config.canvasHeight}`;
+    const wrap = document.createElement("div");
+    wrap.className = "live-strip-wrap";
+    // Aspect ratio is that of one single strip, not the full sheet
+    wrap.style.aspectRatio = `${config.canvasWidth / copies} / ${config.canvasHeight}`;
 
-      for (let i = 0; i < slotsPerCopy; i++) {
-        const slotIndex = c * slotsPerCopy + i;
-        const slot = config.photoSlots[slotIndex];
-        const shot = selectedShots[config.slotToPhotoIndex[slotIndex]];
+    const videoEls = [];
 
-        // Convert absolute px coords into % relative to this single strip's own width
-        const stripWidth = config.canvasWidth / copies;
-        const localX = slot.x - c * stripWidth;
-        const leftPct = (localX / stripWidth) * 100;
-        const topPct = (slot.y / config.canvasHeight) * 100;
-        const widthPct = (slot.w / stripWidth) * 100;
-        const heightPct = (slot.h / config.canvasHeight) * 100;
+    for (let i = 0; i < slotsPerCopy; i++) {
+      // Always read from copy 0 (slot indices 0–slotsPerCopy-1)
+      const slotIndex = i;
+      const slot = config.photoSlots[slotIndex];
+      const shot = selectedShots[config.slotToPhotoIndex[slotIndex]];
 
-        const media = document.createElement(shot && shot.videoUrl ? "video" : "img");
-        media.className = "live-strip-media";
-        media.style.left = `${leftPct}%`;
-        media.style.top = `${topPct}%`;
-        media.style.width = `${widthPct}%`;
-        media.style.height = `${heightPct}%`;
-        media.style.borderRadius = `${config.slotCornerRadiusPct || 0}%`;
+      // Convert absolute px coords into % relative to one strip's own width
+      const stripWidth = config.canvasWidth / copies;
+      const leftPct   = (slot.x / stripWidth) * 100;
+      const topPct    = (slot.y / config.canvasHeight) * 100;
+      const widthPct  = (slot.w / stripWidth) * 100;
+      const heightPct = (slot.h / config.canvasHeight) * 100;
 
-        if (shot && shot.videoUrl) {
-          media.src = shot.videoUrl;
-          media.muted = true;
-          media.autoplay = true;
-          media.loop = true;
-          media.playsInline = true;
-        } else if (shot && shot.imageUrl) {
-          media.src = shot.imageUrl;
-          media.alt = "Selected photo";
-        }
+      const isVideo = shot && shot.videoUrl;
+      const media = document.createElement(isVideo ? "video" : "img");
+      media.className = "live-strip-media";
+      media.style.left   = `${leftPct}%`;
+      media.style.top    = `${topPct}%`;
+      media.style.width  = `${widthPct}%`;
+      media.style.height = `${heightPct}%`;
+      media.style.borderRadius = `${config.slotCornerRadiusPct || 0}%`;
 
-        wrap.appendChild(media);
+      if (isVideo) {
+        media.src = shot.videoUrl;
+        media.muted      = true;
+        media.loop       = true;
+        media.playsInline = true;
+        media.preload    = "auto";
+        // Do NOT autoplay yet — we start all videos together below
+        videoEls.push(media);
+      } else if (shot && shot.imageUrl) {
+        media.src = shot.imageUrl;
+        media.alt = "Selected photo";
       }
 
-      if (overlayPath) {
-        const overlayImg = document.createElement("img");
-        overlayImg.className = "live-strip-overlay";
-        overlayImg.src = overlayPath;
-        overlayImg.alt = "Frame design";
+      wrap.appendChild(media);
+    }
 
-        if (copies > 1) {
-          // The overlay PNG spans the full sheet (both strips side-by-side).
-          // Each strip wrap is only 1/copies wide, so we must size the overlay
-          // to the full sheet width and offset it so this copy shows only its
-          // own slice — otherwise the full overlay gets squished into each half,
-          // making it appear duplicated/distorted.
-          overlayImg.style.width = `${copies * 100}%`;
-          overlayImg.style.left = `${c * -100}%`;
+    if (overlayPath) {
+      const overlayImg = document.createElement("img");
+      overlayImg.className = "live-strip-overlay";
+      overlayImg.src = overlayPath;
+      overlayImg.alt = "Frame design";
+
+      // For single-strip uploads the image is already one-strip wide,
+      // so it maps 1:1 to the rendered strip (no CSS width trick needed).
+      // For legacy double-strip overlays, slice the left half by making
+      // the img 200% wide (copies=2 for 2×6) so only copy 0 is visible.
+      overlayImg.addEventListener("load", () => {
+        const isSingle = this._isSingleStripOverlay(overlayImg, frameType);
+        if (!isSingle && copies > 1) {
+          overlayImg.style.width  = `${copies * 100}%`;
+          overlayImg.style.left   = "0%";
           overlayImg.style.height = "100%";
-          overlayImg.style.top = "0";
+          overlayImg.style.top    = "0";
         }
+        // Single-strip: default 100% width / height is already correct
+      }, { once: true });
 
-        wrap.appendChild(overlayImg);
-      }
+      wrap.appendChild(overlayImg);
+    }
 
-      containerEl.appendChild(wrap);
+    containerEl.appendChild(wrap);
+
+    // Synchronised playback: wait for every video to be ready, then start
+    // them all at currentTime=0 in the same microtask. This prevents the
+    // visible stagger where earlier-loaded clips start playing while later
+    // ones are still buffering.
+    if (videoEls.length > 0) {
+      const readyPromises = videoEls.map(
+        (v) =>
+          new Promise((resolve) => {
+            if (v.readyState >= 3) { resolve(); return; }
+            v.addEventListener("canplay", resolve, { once: true });
+            v.addEventListener("error",   resolve, { once: true }); // don't hang on error
+          })
+      );
+
+      Promise.all(readyPromises).then(() => {
+        // Seek and play all videos atomically
+        videoEls.forEach((v) => { v.currentTime = 0; });
+        videoEls.forEach((v) => { v.play().catch(() => {}); });
+      });
     }
   },
 
@@ -389,20 +534,36 @@ const stripModule = {
    * freeze-hold; previously this defaulted to 3000ms and no caller
    * overrode it, so the digital copy was cut down to a fraction of what
    * was actually recorded regardless of the real clip length.
+   *
+   * singleStrip (default false) — when true and frameType is "2x6",
+   * only the first copy's slots are rendered onto a half-width canvas.
+   * Used by the digital gallery export so guests download one clean strip.
+   * Print-preview (Page 6 inline playback) is unaffected.
    */
-  async exportVideoStrip({ frameType, selectedShots, designId, durationMs = 8000, scale = 0.3 }) {
+  async exportVideoStrip({ frameType, selectedShots, designId, durationMs = 8000, scale = 0.3, singleStrip = false }) {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
+    // For 2x6 singleStrip mode, work with one copy's worth of slots only.
+    const copies = (frameType === "2x6" && singleStrip) ? 1 : (frameType === "2x6" ? 2 : 1);
+    const totalCopies = frameType === "2x6" ? 2 : 1;
+    const slotsPerCopy = Math.round(config.photoSlots.length / totalCopies);
+    // Slots to draw: first copy only in singleStrip mode, all slots otherwise.
+    const slotsToRender = singleStrip ? config.photoSlots.slice(0, slotsPerCopy) : config.photoSlots;
+    // Canvas is half-width for singleStrip 2x6, full width otherwise.
+    const canvasW = Math.round((config.canvasWidth / totalCopies) * copies * scale);
+    const canvasH = Math.round(config.canvasHeight * scale);
+
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(config.canvasWidth * scale);
-    canvas.height = Math.round(config.canvasHeight * scale);
+    canvas.width  = canvasW;
+    canvas.height = canvasH;
     const ctx = canvas.getContext("2d");
 
     // Preload hidden <video> elements for every slot that has a video,
     // and <img> fallbacks for slots that don't.
+    // In singleStrip mode we only load the first copy's slots.
     const mediaEls = await Promise.all(
-      config.photoSlots.map((slot, i) => {
+      slotsToRender.map((slot, i) => {
         const shot = selectedShots[config.slotToPhotoIndex[i]];
         return new Promise((resolve) => {
           if (shot && shot.videoUrl) {
@@ -445,14 +606,36 @@ const stripModule = {
 
     const drawFrame = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      config.photoSlots.forEach((slot, i) => {
+      slotsToRender.forEach((slot, i) => {
         const media = mediaEls[i];
         if (media) {
+          // slot.x is relative to the full sheet; copy 0 starts at x=0,
+          // so no offset adjustment is needed for the first strip.
           drawMediaCropFill(media, slot.x * scale, slot.y * scale, slot.w * scale, slot.h * scale);
         }
       });
       if (overlayImg) {
-        ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+        if (singleStrip && frameType === "2x6") {
+          // The overlay PNG spans the full two-strip sheet at its natural
+          // resolution (e.g. 2400 × 3600px). We need to source only the
+          // left half (copy 0) of that image.
+          //
+          // IMPORTANT: drawImage source coordinates are always in the image's
+          // own natural pixel dimensions — NOT in scaled canvas units. Using
+          // canvasW/canvasH as the source rect samples only a tiny sliver of
+          // the overlay (because canvasW ≈ 360px but the image is 2400px wide),
+          // then stretches it to fill the canvas, producing the oversized/
+          // misaligned overlay visible in the screenshot.
+          const srcW = Math.round(overlayImg.naturalWidth  / 2); // left strip only
+          const srcH = overlayImg.naturalHeight;                  // full height
+          ctx.drawImage(
+            overlayImg,
+            0, 0, srcW, srcH,         // source: left-half of the full-sheet overlay (natural px)
+            0, 0, canvasW, canvasH    // dest: fill the entire half-width canvas
+          );
+        } else {
+          ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+        }
       }
     };
 

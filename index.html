@@ -3,11 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: electron: https://oismyjlhnlfavrdfvabg.supabase.co; media-src 'self' blob:; connect-src 'self' https://oismyjlhnlfavrdfvabg.supabase.co;">
-<title>Photobooth Kiosk</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: electron: https://oismyjlhnlfavrdfvabg.supabase.co; media-src 'self' blob:; connect-src 'self' https://oismyjlhnlfavrdfvabg.supabase.co;">
+<title>Studrio Booth</title>
+<!-- Pretendard + Hibana are loaded via @font-face in style.css from assets/fonts/ -->
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/animations.css">
 <link rel="stylesheet" href="css/print.css" media="print">
@@ -16,6 +14,29 @@
 <body>
 
 <div id="kiosk">
+
+  <!-- Progress bar elements kept hidden for JS compatibility (animations.js references them) -->
+  <div id="kiosk-progress" data-active-page="" style="display:none!important;opacity:0!important;pointer-events:none!important;">
+    <div class="kp-inner">
+      <div class="kp-step" data-step="setup"><span class="kp-dot"></span><div class="kp-bar"><div class="kp-bar-fill" id="kpFill-setup"></div></div></div>
+      <div class="kp-step" data-step="frame"><span class="kp-dot"></span><div class="kp-bar"><div class="kp-bar-fill" id="kpFill-frame"></div></div></div>
+      <div class="kp-step" data-step="shooting"><span class="kp-dot"></span><div class="kp-bar"><div class="kp-bar-fill" id="kpFill-shooting"></div></div></div>
+      <div class="kp-step" data-step="selection"><span class="kp-dot"></span><div class="kp-bar"><div class="kp-bar-fill" id="kpFill-selection"></div></div></div>
+      <div class="kp-step" data-step="design"><span class="kp-dot"></span><div class="kp-bar"><div class="kp-bar-fill" id="kpFill-design"></div></div></div>
+      <div class="kp-step" data-step="printing"><span class="kp-dot"></span><div class="kp-bar"><div class="kp-bar-fill" id="kpFill-printing"></div></div></div>
+    </div>
+  </div>
+
+  <!-- Boot animation overlay — shown after startup sequence, before lock screen -->
+  <div class="boot-anim-overlay" id="bootAnimOverlay" hidden>
+    <video
+      class="boot-anim-video"
+      id="bootAnimVideo"
+      src="assets/designs/animation/Boot Animation.mp4"
+      playsinline
+      disablepictureinpicture
+    ></video>
+  </div>
 
   <!-- ===================== PAGE LOCK: STAFF AUTHENTICATION ===================== -->
   <section class="page active" id="page-lock" data-page="lock">
@@ -55,68 +76,19 @@
     </div>
   </section>
 
-  <!-- ===================== PAGE HOME: COLLAGE LANDING ===================== -->
-  <section class="page" id="page-home" data-page="home">
+  <!-- ===================== PAGE 1: FRAME SIZE + QUANTITY ===================== -->
+  <section class="page grid-bg" id="page-frame" data-page="frame">
 
-
-
-    <!-- Centered logo + CTA — always on top of collage -->
-    <div class="home-center">
-      <img class="home-logo" src="assets/designs/studrio_logo.png" alt="Studrio Booth">
-      <button class="home-start-btn" id="btnStartSession">Start</button>
-    </div>
-
-  </section>
-
-  <!-- ===================== PAGE 1: DSLR CAMERA SETUP ===================== -->
-  <section class="page" id="page-setup" data-page="setup">
-    <div class="setup-header">
-      <h1 class="page-title">Camera Setup</h1>
-    </div>
-
-    <div class="setup-layout">
-
-      <div class="preview-panel">
-        <div class="preview-frame frame-34">
-          <video id="livePreviewVideo" autoplay playsinline muted></video>
-          <img id="livePreviewImg" alt="Live preview" hidden>
-          <div id="previewPlaceholder" class="preview-placeholder"></div>
+    <!-- Page header: title only -->
+    <div class="sb-page-header">
+      <div class="sb-page-title-group">
+        <img class="sb-page-icon" src="assets/designs/icons/camera-mode.png" alt="" onerror="this.style.display='none'">
+        <div>
+          <div class="sb-page-title">Choose Your Frame</div>
+          <div class="sb-page-subtitle">Select a frame size and quantity</div>
         </div>
       </div>
-
-      <div class="status-panel">
-        <div class="status-box" id="statusBox">
-          <p class="status-heading">HOW IT WORKS</p>
-          <ol class="guide-list">
-            <li><span class="guide-step-num">1</span> Choose your frame size and quantity.</li>
-            <li><span class="guide-step-num">2</span> Take your photos.</li>
-            <li><span class="guide-step-num">3</span> Select your favorite photos.</li>
-            <li><span class="guide-step-num">4</span> Choose a strip design.</li>
-            <li><span class="guide-step-num">5</span> Print your photos.</li>
-          </ol>
-        </div>
-
-        <div class="zoom-controls">
-          <p class="zoom-label">Zoom: <span id="zoomLevelLabel">1.0x</span> <span id="zoomTypeLabel" class="zoom-type">(—)</span></p>
-          <div class="zoom-buttons">
-            <button class="btn btn-toggle active" id="btnZoomWide" data-zoom="1.0">1.0x WIDE</button>
-            <button class="btn btn-toggle" id="btnZoomNormal" data-zoom="2.0">2.0x NORMAL</button>
-            <button class="btn btn-toggle" id="btnMirrorToggle">MIRROR</button>
-          </div>
-        </div>
-
-        <div class="nav-row">
-          <button class="btn btn-outline" id="btnBackFromSetup">← BACK</button>
-          <button class="btn btn-primary btn-large" id="btnNextFromSetup" disabled>NEXT →</button>
-        </div>
-      </div>
-
     </div>
-  </section>
-
-  <!-- ===================== PAGE 2: FRAME SIZE + QUANTITY ===================== -->
-  <section class="page" id="page-frame" data-page="frame">
-    <h1 class="page-title">Choose Your Frame</h1>
 
     <div class="frame-layout">
 
@@ -139,7 +111,7 @@
         </button>
       </div>
 
-      <!-- Right: quantity selector (reference design) -->
+      <!-- Right: quantity selector -->
       <div class="quantity-panel">
 
         <div class="qty-selector-wrap">
@@ -156,25 +128,114 @@
         <!-- Pill: price -->
         <div class="qty-pill qty-price-pill" id="qtyPricePill">—</div>
 
-        <div class="nav-row">
-          <button class="btn btn-outline" id="btnBackFromFrame">← BACK</button>
-          <button class="btn btn-primary btn-large" id="btnNextFromFrame" disabled>NEXT →</button>
-        </div>
+        <!-- Hidden BACK button kept for JS compatibility -->
+        <button class="btn btn-outline" id="btnBackFromFrame" style="display:none">← BACK</button>
 
       </div>
 
     </div>
+
+    <!-- Bottom-right NEXT button -->
+    <div class="sb-next-corner">
+      <div class="sb-next-action-row">
+        <div class="sb-next-label-row">
+          <img class="sb-next-icon" src="assets/designs/icons/camera-mode.png" alt="" onerror="this.style.display='none'">
+          <span class="sb-next-label">Camera Mode</span>
+        </div>
+        <button class="btn btn-primary btn-large sb-btn-next" id="btnNextFromFrame" disabled>Next ›</button>
+      </div>
+    </div>
+
   </section>
 
-  <!-- ===================== PAGE 3: DSLR PHOTO SHOOTING ===================== -->
-<section class="page" id="page-shooting" data-page="shooting">
-  <div class="shooting-layout-solo">
+  <!-- ===================== PAGE 2: CAMERA MODE (redesigned) ===================== -->
+  <section class="page grid-bg" id="page-setup" data-page="setup">
 
+    <!-- Page header: icon+title only -->
+    <div class="sb-page-header">
+      <div class="sb-page-title-group">
+        <img class="sb-page-icon" src="assets/designs/icons/camera-mode.png" alt="" onerror="this.style.display='none'">
+        <div>
+          <div class="sb-page-title">Select Camera Mode</div>
+          <div class="sb-page-subtitle">Choose Camera Settings</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom-right NEXT button -->
+    <div class="sb-next-corner">
+      <div class="sb-next-action-row">
+        <div class="sb-next-label-row">
+          <img class="sb-next-icon" src="assets/designs/icons/camera.png" alt="" onerror="this.style.display='none'">
+          <span class="sb-next-label">Photo Taking</span>
+        </div>
+        <button class="btn sb-btn-next" id="btnNextFromSetup" disabled>Next ›</button>
+      </div>
+    </div>
+
+    <!-- Main content: live view left, controls right -->
+    <div class="setup-main-layout">
+
+      <div class="setup-preview-col">
+        <div class="preview-frame frame-43">
+          <video id="livePreviewVideo" autoplay playsinline muted></video>
+          <img id="livePreviewImg" alt="Live preview" hidden>
+          <div id="previewPlaceholder" class="preview-placeholder"></div>
+        </div>
+      </div>
+
+      <div class="setup-controls-col">
+        <!-- Camera status (kept for JS compatibility) -->
+        <div class="status-box" id="statusBox" style="display:none"></div>
+        <!-- Hidden zoom labels kept for JS compatibility -->
+        <span id="zoomLevelLabel" style="display:none">1.0x</span>
+        <span id="zoomTypeLabel" style="display:none">(—)</span>
+
+        <button class="btn sb-control-btn active" id="btnZoomWide" data-zoom="1.0">
+          <img src="assets/designs/icons/zoom-in.png" alt="" onerror="this.style.display='none'">
+          <span>Zoom In</span>
+        </button>
+        <button class="btn sb-control-btn" id="btnZoomNormal" data-zoom="2.0">
+          <img src="assets/designs/icons/zoom-out.png" alt="" onerror="this.style.display='none'">
+          <span>Zoom Out</span>
+        </button>
+        <button class="btn sb-control-btn" id="btnMirrorToggle">
+          <img src="assets/designs/icons/mirror.png" alt="" onerror="this.style.display='none'">
+          <span>Mirror</span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Hidden BACK button kept for JS compatibility -->
+    <button id="btnBackFromSetup" style="display:none">BACK</button>
+
+  </section>
+
+  <!-- ===================== PAGE 3: PHOTO TAKING (redesigned) ===================== -->
+<section class="page grid-bg" id="page-shooting" data-page="shooting">
+
+  <!-- Top bar: Photo Taking title centered -->
+  <div class="shooting-topbar shooting-topbar-spaced">
+    <div class="shooting-topbar-title">
+      <img class="sb-page-icon-xs" src="assets/designs/icons/camera-mode.png" alt="" onerror="this.style.display='none'">
+      <span class="shooting-title-text">Photo Taking</span>
+    </div>
+  </div>
+
+  <!-- Full-width shooting area -->
+  <div class="shooting-fullscreen-layout">
+
+    <!-- Side panel left (decorative dark panel matching Figma) -->
+    <div class="shooting-side-panel shooting-side-left"></div>
+
+    <!-- Live view center -->
     <div class="shooting-preview-frame" id="shootingPreviewFrame">
       <video id="shootingVideo" autoplay playsinline muted></video>
       <img id="shootingImg" alt="Live preview" hidden>
 
-      <div class="shot-counter" id="shotCounter">PHOTO 1 OF 8</div>
+      <!-- Shot counter (hidden — we use the right-side counter instead) -->
+      <div class="shot-counter" id="shotCounter" style="display:none">PHOTO 1 OF 8</div>
 
       <div class="heads-up-overlay" id="headsUpOverlay">
         <span class="heads-up-text" id="headsUpText">3</span>
@@ -192,106 +253,195 @@
         </div>
       </div>
 
-      <div class="recording-badge" id="recordingBadge" hidden>
-        <span class="rec-dot"></span> RECORDING
+      <!-- recording-badge kept for JS compatibility; text hidden via CSS -->
+      <div class="recording-badge recording-badge-hidden" id="recordingBadge" hidden>
+        <span class="rec-dot"></span>
       </div>
 
       <div class="captured-flash" id="capturedFlash"></div>
 
-      <!-- Frame size indicator — bottom-left, always visible during shooting -->
-      <div class="shooting-frame-indicator" id="shootingFrameIndicator">
+      <!-- Pose overlay for 4×6 — preview-only, never captured -->
+      <div class="pose-overlay-4x6" id="poseOverlay4x6" style="display:none"></div>
+
+      <!-- Frame size indicator kept for JS compatibility -->
+      <div class="shooting-frame-indicator" id="shootingFrameIndicator" style="display:none">
         <span id="shootingFrameIndicatorText">—</span>
       </div>
     </div>
+
+    <!-- Side panel right -->
+    <div class="shooting-side-panel shooting-side-right">
+      <!-- Photos taken counter -->
+      <div class="shooting-photos-taken">
+        <div class="photos-taken-label">Photos Taken</div>
+        <div class="photos-taken-count" id="photosTakenCount">0<span class="photos-taken-slash">/</span><span class="photos-taken-total">8</span></div>
+      </div>
+    </div>
+
   </div>
+
+  <!-- Bottom instruction text -->
+  <div class="shooting-look-text">Look at the camera.</div>
+
 </section>
 
-  <!-- ===================== PAGE 4: PHOTO SELECTION ===================== -->
-  <section class="page" id="page-selection" data-page="selection">
-    <h1 class="page-title">Choose 4 Photos</h1>
+  <!-- ===================== PAGE 4: PHOTO SELECTION (redesigned) ===================== -->
+  <section class="page grid-bg" id="page-selection" data-page="selection">
 
-    <div class="selection-layout">
+    <!-- Page header: title only -->
+    <div class="sb-page-header">
+      <div class="sb-page-title-group">
+        <img class="sb-page-icon" src="assets/designs/icons/photo-select.png" alt="" onerror="this.style.display='none'">
+        <div>
+          <div class="sb-page-title">Select Photos</div>
+          <div class="sb-page-subtitle">Choose your best photo</div>
+        </div>
+      </div>
+    </div>
 
-      <div class="selection-grid" id="selectionGrid">
-        <!-- 8 photo cards + 1 selection-counter tile injected by selection.js -->
+    <!-- Bottom-right NEXT button -->
+    <div class="sb-next-corner">
+      <div class="sb-next-action-row">
+        <div class="sb-next-label-row">
+          <img class="sb-next-icon" src="assets/designs/icons/design.png" alt="" onerror="this.style.display='none'">
+          <span class="sb-next-label">Frame Design</span>
+        </div>
+        <button class="btn sb-btn-next" id="btnNextFromSelection" disabled>Next ›</button>
+      </div>
+    </div>
+
+    <div class="selection-main-layout">
+
+      <!-- Left: photo grid -->
+      <div class="selection-grid-col">
+        <div class="selection-grid" id="selectionGrid">
+          <!-- 8 photo cards + 1 selection-counter tile injected by selection.js -->
+        </div>
       </div>
 
-      <div class="selection-preview-panel">
-        <p class="preview-panel-label">Strip Preview</p>
-        <div class="strip-preview-wrap">
+      <!-- Right: strip preview -->
+      <div class="selection-preview-col">
+        <div class="strip-preview-wrap" style="position:relative;">
           <div class="strip-preview-container" id="stripPreviewContainer">
             <!-- built dynamically by strip.js -->
           </div>
-        </div>
-
-        <div class="nav-row">
-          <button class="btn btn-primary btn-large" id="btnNextFromSelection" disabled>NEXT →</button>
         </div>
       </div>
 
     </div>
   </section>
 
-  <!-- ===================== PAGE 5: STRIP DESIGN SELECTION ===================== -->
-  <section class="page" id="page-design" data-page="design">
-    <h1 class="page-title">Choose a Strip Design</h1>
+  <!-- ===================== PAGE 5: FRAME DESIGN (redesigned) ===================== -->
+  <section class="page grid-bg" id="page-design" data-page="design">
 
-    <div class="design-layout">
+    <!-- Page header: title only -->
+    <div class="sb-page-header">
+      <div class="sb-page-title-group">
+        <img class="sb-page-icon" src="assets/designs/icons/design.png" alt="" onerror="this.style.display='none'">
+        <div>
+          <div class="sb-page-title">Select Frame Design</div>
+          <div class="sb-page-subtitle">Choose your favorite frame design</div>
+        </div>
+      </div>
+    </div>
 
-      <div class="design-options" id="designOptions">
-        <!-- design swatches injected by strip.js -->
+    <!-- Bottom-right NEXT button -->
+    <div class="sb-next-corner">
+      <div class="sb-next-action-row">
+        <div class="sb-next-label-row">
+          <img class="sb-next-icon" src="assets/designs/icons/print.png" alt="" onerror="this.style.display='none'">
+          <span class="sb-next-label">Print &amp; QR</span>
+        </div>
+        <button class="btn sb-btn-next" id="btnNextFromDesign" disabled>Next ›</button>
+      </div>
+    </div>
+
+    <div class="design-main-layout">
+
+      <!-- Left: template carousel -->
+      <div class="design-carousel-col design-templates-col">
+        <div class="carousel-label">Templates</div>
+        <div class="design-carousel" id="designOptions">
+          <!-- design swatches injected by strip.js -->
+        </div>
       </div>
 
-      <div class="design-preview-panel">
-        <p class="preview-panel-label">Live Preview</p>
+      <!-- Center: strip preview -->
+      <div class="design-preview-col">
         <div class="strip-preview-wrap">
           <div class="strip-preview-container" id="designPreviewContainer">
             <!-- built dynamically by strip.js -->
           </div>
         </div>
+      </div>
 
-        <div class="nav-row">
-          <button class="btn btn-outline" id="btnBackFromDesign">← BACK</button>
-          <button class="btn btn-primary btn-large" id="btnNextFromDesign" disabled>NEXT →</button>
+      <!-- Right: filter carousel -->
+      <div class="design-carousel-col design-filters-col">
+        <div class="carousel-label">Filter</div>
+        <div class="design-carousel design-filter-carousel" id="filterCarousel">
+          <!-- filter cards injected dynamically -->
         </div>
       </div>
 
     </div>
   </section>
 
-  <!-- ===================== PAGE 6: ALL DONE ===================== -->
-  <section class="page" id="page-printing" data-page="printing">
-    <h1 class="page-title">All Done!</h1>
-    <div class="printing-layout">
-      <!-- Left: print status + upload progress + Done -->
-      <div class="printing-status-col" id="printingStatusCol">
-        <div class="print-status-badge" id="printStatusBadge">
-          <span class="print-status-icon" id="printStatusIcon">🖨</span>
-          <span class="print-status-text" id="printStatusText">Printing…</span>
+  <!-- ===================== PAGE 6: PRINT & QR (redesigned) ===================== -->
+  <section class="page grid-bg printing-page-redesign" id="page-printing" data-page="printing">
+
+    <!-- Hidden elements kept for JS compatibility — printing.js / qr.js reference these -->
+    <span id="printStatusIcon"  style="display:none"></span>
+    <span id="printStatusText"  style="display:none"></span>
+    <p    id="printQtyNote"     style="display:none"></p>
+    <div  id="uploadProgressWrap" style="display:none" hidden>
+      <span id="uploadProgressLabel"></span>
+      <span id="uploadProgressPct"></span>
+      <div><div id="uploadProgressBar" style="width:0%"></div></div>
+      <p   id="uploadProgressHint"></p>
+    </div>
+    <div  id="printStatusBadge" style="display:none"></div>
+    <div  id="printingStatusCol" style="display:none"></div>
+
+    <!-- Page header: title only -->
+    <div class="sb-page-header sb-page-header-printing">
+      <div class="sb-page-title-group">
+        <img class="sb-page-icon" src="assets/designs/icons/print.png" alt="" onerror="this.style.display='none'">
+        <div>
+          <div class="sb-page-title">Print &amp; QR</div>
+          <div class="sb-page-subtitle" id="printingStatusSubtitle">Your photo is now printing at the counter.</div>
         </div>
-        <p class="print-qty-note" id="printQtyNote">—</p>
-        <!-- —— Upload progress bar (new) —— -->
-        <div class="upload-progress-wrap" id="uploadProgressWrap" hidden>
-          <div class="upload-progress-label">
-            <span id="uploadProgressLabel">Uploading your photos…</span>
-            <span class="upload-progress-pct" id="uploadProgressPct">0%</span>
-          </div>
-          <div class="upload-progress-track">
-            <div class="upload-progress-bar" id="uploadProgressBar" style="width:0%"></div>
-          </div>
-          <p class="upload-progress-hint" id="uploadProgressHint">Your digital copy will be ready soon</p>
-        </div>
-        <button class="btn printing-done-btn" id="btnPrintingDone" disabled>Done</button>
       </div>
+    </div>
+
+    <!-- Bottom-right DONE button -->
+    <div class="sb-next-corner">
+      <div class="sb-next-action-row">
+        <div class="sb-next-label-row">
+          <img class="sb-next-icon" src="assets/designs/icons/print.png" alt="" onerror="this.style.display='none'">
+          <span class="sb-next-label">Print &amp; QR</span>
+        </div>
+        <!-- Done button — disabled until printing starts -->
+        <button class="btn sb-btn-next printing-done-btn" id="btnPrintingDone" disabled>
+          <span class="done-btn-label">Done ›</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Yellow tide overlay (appears when printing begins) -->
+    <div class="printing-tide-overlay" id="printingTideOverlay" style="display:none"></div>
+
+    <div class="printing-main-layout">
+
       <!-- Center: looping video strip -->
       <div class="printing-video-col">
         <div class="printing-video-frame" id="printingVideoFrame">
-          <!-- video or canvas injected by printing.js -->
+          <!-- video strip injected by printing.js -->
         </div>
       </div>
-      <!-- Right: QR code -->
-      <div class="printing-qr-col">
-        <p class="preview-panel-label">Your Digital Copy</p>
+
+      <!-- Right: QR card -->
+      <div class="printing-qr-col" id="printingQrCol">
+        <p class="preview-panel-label">The Gallery</p>
         <div class="qr-wrap" id="qrWrap">
           <div id="qrCodeCanvas"></div>
         </div>
@@ -300,7 +450,12 @@
           <span class="qr-uploading-dot"></span> Uploading…
         </div>
       </div>
+
     </div>
+
+    <!-- Props reminder bottom center -->
+    <p class="printing-props-note">Don't forget to put back the props you used.</p>
+
   </section>
 
   <!-- Print-only layout, hidden on screen, shown only by print.css -->

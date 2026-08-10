@@ -45,20 +45,26 @@ const qrModule = (() => {
       }
 
       // 1. Generate Photo Strip (milestone 30%)
+      // singleStrip:true — for 2x6 sessions the print layout has two identical
+      // strips side by side, but the gallery download should be a single clean
+      // strip. The print export (exportPrintPNG below) still uses the full layout.
       sessionState.finalStripPng = await stripModule.exportPNG({
         frameType: sessionState.frameType,
         selectedShots: sessionState.selectedShots,
-        designId: sessionState.design
+        designId: sessionState.design,
+        singleStrip: true
       });
       if (typeof uploadProgress !== "undefined") uploadProgress.set(0.30);
 
       // 2. Generate Video Strip (milestone 50%)
+      // singleStrip:true — same reasoning as above; one strip for the gallery.
       try {
         sessionState.finalStripVideo = await stripModule.exportVideoStrip({
           frameType: sessionState.frameType,
           selectedShots: sessionState.selectedShots,
           designId: sessionState.design,
-          durationMs: 8000 // match the guest's actual ~8s per-shot capture
+          durationMs: 8000, // match the guest's actual ~8s per-shot capture
+          singleStrip: true
         });
       } catch (videoErr) {
         console.warn("[qr] Video generation failed:", videoErr);

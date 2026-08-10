@@ -83,11 +83,26 @@ const printingModule = {
         this._onQrReady();
       }
     }, 25000);
+
+    // Done-button failsafe: uploadProgress.complete() / .error() in qr.js
+    // are the primary gatekeepers that enable Done only after the upload
+    // result is known. This safety net fires if neither callback has run
+    // within 30s (e.g. cloud storage is disabled or qr.js threw very early
+    // before reaching those calls), so the guest is never permanently stuck.
+    setTimeout(() => {
+      const doneBtn = document.getElementById("btnPrintingDone");
+      if (doneBtn && doneBtn.disabled) {
+        console.warn("[printing] Done button still disabled after 30s — enabling as last-resort fallback.");
+        doneBtn.disabled = false;
+      }
+    }, 30000);
   },
 
   /* Render the looping video strip in the center column.
      Uses strip.js renderLive() for an animated DOM strip (real <video>
-     elements in slots) — no mute/pause controls, plays silently. */
+     elements in slots) — renderLive() handles synchronised playback start
+     internally, so we don't call play() here (doing so would race against
+     the canplay barrier and unsync the clips). */
   _renderVideoLoop() {
     this.els.videoFrame.innerHTML = "";
     stripModule.renderLive(this.els.videoFrame, {
@@ -95,33 +110,26 @@ const printingModule = {
       selectedShots: sessionState.selectedShots,
       designId: sessionState.design
     });
-
-    // Ensure all videos in the strip are muted and autoplay with no controls
-    this.els.videoFrame.querySelectorAll("video").forEach((v) => {
-      v.muted = true;
-      v.autoplay = true;
-      v.loop = true;
-      v.controls = false;
-      v.playsInline = true;
-      v.play().catch(() => {}); // ignore NotAllowedError on some browsers
-    });
   },
 
   /* Called once the gallery upload resolves (success or failure), or by
-     the failsafe timer if it never does. Enables the Done button — the
-     guest can now end their session. Guarded so it only ever runs once
-     per session (the .then/.catch pair above and the failsafe timer can
-     both fire; the second call must be a no-op). */
+     the failsafe timer if it never does. Shows the QR panel and starts
+     the 60-second countdown. Guarded so it only ever runs once per session
+     (the .then/.catch pair above and the failsafe timer can both fire;
+     the second call must be a no-op).
+     
+     NOTE: the Done button is NOT enabled here. uploadProgress.complete()
+     owns that responsibility so Done is only enabled after the upload is
+     confirmed successful. uploadProgress.error() enables Done as a fallback
+     so the guest is never stuck if the upload fails. The failsafe timer
+     below additionally ensures the guest is never stuck if the progress
+     callbacks themselves don't fire. */
   _onQrReady() {
     if (this._qrReadyCalled) return;
     this._qrReadyCalled = true;
 
     this.els.qrUploading.style.display = "none";
     this.els.qrWrap.style.display = "";
-
-    // Enable Done button now that the upload is confirmed (or failed gracefully)
-    const doneBtn = document.getElementById("btnPrintingDone");
-    if (doneBtn) doneBtn.disabled = false;
 
     kioskTimer.start(60, () => this.endSessionOnTimeout());
   },

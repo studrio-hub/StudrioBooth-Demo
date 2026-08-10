@@ -1,3 +1,18 @@
+/* ── PRETENDARD FONT FAMILY ─────────────────────────────────────────────── */
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Thin.otf') format('opentype'); font-weight: 100; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-ExtraLight.otf') format('opentype'); font-weight: 200; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Light.otf') format('opentype'); font-weight: 300; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Regular.otf') format('opentype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Medium.otf') format('opentype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-SemiBold.otf') format('opentype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Bold.otf') format('opentype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-ExtraBold.otf') format('opentype'); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Black.otf') format('opentype'); font-weight: 900; font-display: swap; }
+@font-face { font-family: 'PretendardVariable'; src: url('assets/fonts/PretendardVariable.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+
+/* ── HIBANA — large numerals, counters, countdowns ──────────────────────── */
+@font-face { font-family: 'Hibana'; src: url('assets/fonts/Hibana-SubMedium.otf') format('opentype'); font-weight: 500; font-display: swap; }
+
 :root {
   --bg: #f4f5f7;
   --panel: #ffffff;
@@ -10,6 +25,164 @@
   --off: #e0403f;
   --border: #d9dce1;
   --radius: 14px;
+
+  /* ── Redesign tokens (Pages 2–6) ────────────────────── */
+  --grid-color: rgba(0,0,0,0.055);
+  --grid-size: 48px;
+  --sb-next-radius: 25px 0px 25px 0px;
+  --sb-next-grad-start: #fffbee;
+  --sb-next-grad-end: #ffdd66;
+  --sb-header-h: 10.35vh; /* +15% from 9.0vh per redesign spec */
+
+  /* ── Font stack ─────────────────────────────────────── */
+  --font-ui:     'Pretendard', 'PretendardVariable', system-ui, -apple-system, sans-serif;
+  --font-number: 'Hibana', 'Pretendard', system-ui, sans-serif;
+}
+
+/* ── SQUARE GRID BACKGROUND (Pages 2–6) ─────────────────────────────────── */
+.grid-bg {
+  background-color: #ffffff !important;
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px) !important;
+  background-size: var(--grid-size) var(--grid-size) !important;
+}
+
+/* ── SHARED PAGE HEADER (Pages 2–6) ─────────────────────────────────────── */
+.sb-page-header {
+  display: flex;
+  align-items: center;
+  /* NEXT button is now in .sb-next-corner — no space-between needed */
+  justify-content: flex-start;
+  height: var(--sb-header-h);
+  flex-shrink: 0;
+  /* ~10% more top padding for breathing room */
+  padding: 1.2vh 3vw 0 3vw;
+  position: relative;
+  z-index: 2;
+}
+
+/* ── BOTTOM-RIGHT NEXT / DONE ANCHOR ────────────────────────────────────── */
+/*
+ * Replaces the old .sb-page-next-group that sat inside the page header.
+ * Each workflow page (2–6) contains one .sb-next-corner div, positioned
+ * absolutely in the bottom-right corner so it is consistent across all pages.
+ */
+.sb-next-corner {
+  position: absolute;
+  bottom: 2.8vh;
+  right: 3vw;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5vh;
+  z-index: 10;
+}
+
+/* Label on the left, button on the right — inline row */
+.sb-next-action-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1.4vw;
+}
+
+/* ── sb-next-label-row: positioned at top-left of sb-next-corner ── */
+.sb-next-corner .sb-next-label-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.sb-page-title-group {
+  display: flex;
+  align-items: center;
+  gap: 1.2vw;
+}
+
+.sb-page-icon {
+  width: 5.2vh;
+  height: auto;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.sb-page-icon-sm {
+  width: 3vh;
+  height: auto;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.sb-page-title {
+  font-size: 3.4vh;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.sb-page-subtitle {
+  font-size: 1.8vh;
+  font-weight: 500;
+  color: var(--text-dim);
+  line-height: 1.2;
+}
+
+/* NEXT button group (top-right of every page header) */
+.sb-page-next-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5vh;
+}
+
+.sb-next-label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4vw;
+}
+
+.sb-next-icon {
+  width: 1.8vh;
+  height: 1.8vh;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.sb-next-label {
+  font-size: 1.4vh;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+/* ── NEXT / PRIMARY ACTION BUTTON (Studrio gradient style) ──────────────── */
+.sb-btn-next {
+  background: linear-gradient(90deg, var(--sb-next-grad-start) 0%, var(--sb-next-grad-start) 30%, var(--sb-next-grad-end) 100%) !important;
+  border: none !important;
+  border-radius: var(--sb-next-radius) !important;
+  color: var(--text) !important;
+  font-size: 1.6vh !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  padding: 1.2vh 2.4vw !important;
+  min-width: 13vw !important;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(240, 194, 49, 0.28) !important;
+  transition: opacity 0.15s ease, transform 0.1s ease !important;
+  overflow: hidden;
+  position: relative;
+}
+.sb-btn-next:not(:disabled):hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+.sb-btn-next:not(:disabled):active { transform: scale(0.97); }
+.sb-btn-next:disabled {
+  background: linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 100%) !important;
+  color: var(--text-dim) !important;
+  cursor: not-allowed;
+  box-shadow: none !important;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,7 +192,7 @@ html, body {
   height: 100%;
   background: var(--bg);  
   overflow: hidden;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui);
   color: var(--text);
 }
 
@@ -70,6 +243,158 @@ html, body {
   color: var(--text);
 }
 
+/* ================= 6-STEP PROGRESS BAR (shared, top of kiosk) ================= */
+/*
+ * Reference design: one rounded capsule pill containing 6 columns.
+ * Each column = label (top) + dot (middle) + bar segment (bottom).
+ * Bars are full-width within their column and touch edge-to-edge.
+ * Done steps: bar 100% yellow. Active step: bar animates 0→100%.
+ * Future steps: bar grey.
+ *
+ * Shown on ALL workflow pages including shooting.
+ * Hidden only on: lock, boot, home.
+ */
+
+#kiosk-progress {
+  position: absolute;
+  top: 2.2vh;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Must sit ABOVE the flash overlay (z-index:60) so it stays visible
+     and continuous during all page transitions. */
+  z-index: 65;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  /* size: compact, never wider than 68% of kiosk */
+  width: 68%;
+  max-width: 68%;
+}
+
+/* The visible pill capsule */
+.kp-inner {
+  display: flex;
+  align-items: flex-start;
+  background: var(--panel);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 1px 8px rgba(0,0,0,0.07);
+  padding: 1vh 2vw;
+  gap: 0.6vw;
+  overflow: hidden;
+}
+
+/* Each step column */
+.kp-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35vh;
+  min-width: 0;
+}
+
+/* Step label */
+.kp-label {
+  font-size: 1.1vh;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Small dot between label and bar */
+.kp-dot {
+  width: 0.5vh;
+  height: 0.5vh;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.25s ease;
+}
+
+/* The bar track — full width of column, no gap between columns */
+.kp-bar {
+  width: 100%;
+  height: 0.55vh;
+  background: var(--panel-light);
+  border-radius: 0;          /* flush, no gap between steps */
+  overflow: hidden;
+  position: relative;
+}
+
+/* Round all bar ends — each segment is now visually separated by the gap */
+.kp-bar { border-radius: 999px; }
+
+/* The yellow fill inside each bar.
+ * A 0.35s ease transition gives a smooth sweep when a step transitions
+ * done→future (reset) or future→done (advance). The active step's fill
+ * is driven frame-by-frame by JS RAF, so the CSS transition is irrelevant
+ * for that step — JS overwrites transform directly. */
+.kp-bar-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.35s ease;
+  border-radius: inherit;
+}
+
+/* ── Step states ──────────────────────────────────────────────────────── */
+
+/* Done: bar fully filled, dot yellow, label at full colour */
+.kp-step.done .kp-bar-fill   { transform: scaleX(1); }
+.kp-step.done .kp-dot        { background: var(--accent); }
+.kp-step.done .kp-label      { color: var(--text); }
+
+/* Active: dot yellow, label bold black — fill driven by JS (timer or shots) */
+.kp-step.active .kp-dot      { background: var(--accent); }
+.kp-step.active .kp-label    { font-weight: 700; color: var(--text); }
+
+/* Future: dim label, neutral dot */
+.kp-step.future .kp-label    { color: var(--text-dim); font-weight: 500; }
+.kp-step.future .kp-dot      { background: var(--border); }
+
+/* Shared transition for the label colour and dot colour changes */
+.kp-label {
+  transition: color 0.30s ease, font-weight 0.20s ease;
+}
+.kp-dot {
+  transition: background 0.30s ease;
+}
+
+/* ── Visibility rules ─────────────────────────────────────────────────── */
+
+/* Hidden on non-workflow pages and on the final printing page */
+#kiosk-progress[data-active-page="lock"],
+#kiosk-progress[data-active-page="boot"],
+#kiosk-progress[data-active-page="printing"],
+#kiosk-progress[data-active-page=""] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Page padding: redesigned pages (frame, setup, shooting, 4, 5, 6) use zero top-padding */
+#page-frame,
+#page-setup,
+#page-shooting,
+#page-selection,
+#page-design,
+#page-printing {
+  padding: 0 !important;
+}
+
+/* Hide legacy page titles on redesigned pages */
+#page-setup .page-title,
+#page-frame .page-title,
+#page-selection .page-title,
+#page-design .page-title,
+#page-printing .page-title {
+  display: none;
+}
+
 button {
   font-family: inherit;
   cursor: pointer;
@@ -88,11 +413,11 @@ button {
 .btn:active { transform: scale(0.97); }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary { background: #F0C231; color: #1a1200; }
 .btn-primary:not(:disabled):hover { background: var(--accent-dark); }
 
 .btn-secondary { background: var(--panel-light); color: var(--text); border: 1px solid var(--border); }
-.btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-outline { background: #F0C231; color: #1a1200; border: 1px solid #d4a800; }
 .btn-square { background: var(--panel-light); color: var(--text); border: 1px solid var(--border); min-width: 8vw; }
 
 .btn-large { padding: 1.6vh 2.4vw; font-size: 1.8vh; }
@@ -196,70 +521,227 @@ button {
 .lock-status-msg.error   { color: var(--off); }
 .lock-status-msg.success { color: var(--ok); }
 
-/* ================= PAGE HOME: LANDING ================= */
+/* ================= PAGE HOME: 3-CARD COLLAGE LANDING ================= */
 
 #page-home {
-  padding: 0;
+  padding: 2vw;
   overflow: hidden;
-  /* Soft warm glow — bright golden-yellow center fading out to a light
-     cream/off-white edge. Built from the existing --accent (#f0c231)
-     family so it stays visually consistent with the rest of the kiosk. */
   background: radial-gradient(
-    circle at 50% 48%,
+    ellipse at 60% 40%,
     #fde68a 0%,
-    #fef3c7 28%,
-    #fffbeb 55%,
-    #fffdf7 80%,
+    #fef3c7 30%,
+    #fffbeb 60%,
     #ffffff 100%
   );
-}
-
-/* ── Center overlay — logo + Start button ──────────────────────────────── */
-.home-center {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 3vh;
-  z-index: 20;
-  pointer-events: auto;
+  gap: 0;
 }
 
-.home-logo {
-  height: 16vh;
-  width: auto;
-  max-width: 36vw;
-  object-fit: contain;
-  /* Subtle drop shadow so it lifts off the gradient background */
-  filter: drop-shadow(0 2px 16px rgba(255,255,255,0.9));
+/* .home-logo removed — logo element no longer in home page HTML */
+
+/* 3-card grid: Original (wide) | Video (portrait) + Tutorial stacked right */
+.home-cards {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /*
+   * Two columns: Original (wider) | right column for video+tutorial.
+   * Gap tightened so the three cards sit as a cohesive collage.
+   * Right column width is constrained by the 9:16 video so both right
+   * cards are the same width — tutorial card can't be wider than video.
+   */
+  grid-template-columns: 1.4fr 0.72fr;
+  grid-template-rows: 1fr auto;
+  gap: 1vw;
+  align-items: stretch;
+  justify-content: center;
+  align-content: center;
+  /* Home page uses uniform 2vw padding on #page-home; cards fill the rest */
+  height: 100%;
 }
 
-.home-start-btn {
-  font-family: inherit;
-  font-size: 2.2vh;
-  font-weight: 600;
-  color: var(--text);
-  background: rgba(255,255,255,0.92);
-  border: 2px solid rgba(0,0,0,0.12);
-  border-radius: 100px;
-  padding: 1.2vh 5vw;
+/* ── Base card style ──────────────────────────────────────────────────────── */
+.home-card {
+  background: #ffffff;
+  border-radius: 20px;
+  border: none;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04);
+  overflow: hidden;
   cursor: pointer;
-  letter-spacing: 0.02em;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 2px 20px rgba(0,0,0,0.10);
-  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.1s ease;
-  min-width: 18vw;
+  font-family: inherit;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
 }
-.home-start-btn:hover {
-  background: #fff;
-  box-shadow: 0 4px 28px rgba(0,0,0,0.15);
+.home-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px rgba(0,0,0,0.11), 0 2px 8px rgba(0,0,0,0.06);
 }
-.home-start-btn:active {
-  transform: scale(0.96);
+.home-card:active { transform: scale(0.985); }
+
+/* ── Card 1: Original ──────────────────────────────────────────────────────── */
+.home-card-original {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  text-align: left;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.home-card-inner {
+  display: flex;
+  flex-direction: column;
+  padding: 2.4vh 2.2vw;
+  gap: 1.2vh;
+  width: 100%;
+}
+
+.home-card-title {
+  font-size: 2.8vh;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+/* Fan of photo strips — decorative */
+.home-card-strip-preview {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Clip strips to the preview box — prevents overflow into rest of card */
+  overflow: hidden;
+}
+
+/* Shared strip base — position absolute inside the preview area */
+.home-strip {
+  position: absolute;
+  background: transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.16);
+}
+
+/* Thumbnail images: fill the aspect-ratio container exactly — no letterbox gap */
+.home-strip-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;   /* PNG already has correct ratio from aspect-ratio on parent */
+  border-radius: inherit;
+}
+
+/* Back strip: 2×6 portrait thumbnail (1:3 ratio) — rotated left, behind front */
+.home-strip-back {
+  width:     18%;
+  aspect-ratio: 1 / 3;   /* 2×6 strip is 2 inches wide × 6 inches tall */
+  height:    auto;
+  transform: rotate(-7deg) translate(-130%, -10%);
+  z-index:   1;
+}
+
+/* Front strip: 4×6 landscape thumbnail (2:3 ratio) — slight right tilt, in front */
+.home-strip-front {
+  width:     40%;
+  aspect-ratio: 2 / 3;   /* 4×6 sheet is 4 inches wide × 6 inches tall */
+  height:    auto;
+  transform: rotate(3deg) translate(12%, -2%);
+  z-index:   2;
+}
+
+.home-card-tagline {
+  font-size: 1.3vh;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+.home-card-desc {
+  font-size: 1.15vh;
+  line-height: 1.55;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* ── Card 2: Video loop ────────────────────────────────────────────────────── */
+.home-card-video {
+  grid-column: 2;
+  grid-row: 1;
+  /* Fills the right column — column width already set for a good 9:16 size */
+  width: 100%;
+  align-self: stretch;
+  padding: 0;
+  overflow: hidden;
+  cursor: default;
+  background: #000;
+  /* No hover lift on video card */
+  transform: none !important;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04) !important;
+}
+.home-card-video-el {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Card 3: Tutorial ─────────────────────────────────────────────────────── */
+.home-card-tutorial {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Same horizontal padding as video card so widths visually match */
+  padding: 1.8vh 1.4vw;
+  background: #ffffff;
+  /* Height consistent with a reasonable button row */
+  min-height: 7.5vh;
+  max-height: 7.5vh;
+}
+.home-card-tutorial-label {
+  font-size: 2vh;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+.home-card-tutorial:hover .home-card-tutorial-label {
+  color: var(--accent-dark);
+}
+
+/* ── Tutorial modal ───────────────────────────────────────────────────────── */
+.modal-box-tutorial {
+  width: min(72vw, 900px);
+  min-height: 40vh;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+}
+.tutorial-close-btn {
+  position: absolute;
+  top: 1.2vh;
+  right: 1.2vw;
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 3.2vh;
+  height: 3.2vh;
+  font-size: 2vh;
+  font-weight: 700;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.15s ease, color 0.15s ease;
+  font-family: inherit;
+}
+.tutorial-close-btn:hover {
+  background: var(--border);
+  color: var(--text);
 }
 
 /* ================= 3:4 CAMERA PREVIEW (Setup + Shooting) ================= */
@@ -277,36 +759,154 @@ button {
 .btn-toggle.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 /* ================= FRAME CARD PNG PREVIEW ================= */
-.frame-thumb-img { width: 100%; height: 100%; object-fit: contain; }
+.frame-thumb-img { width: 100%; height: 100%; object-fit: cover; }
+/* 2x6 is a tall strip — contain keeps its full shape visible */
+.frame-visual-2x6 .frame-thumb-img { object-fit: contain; }
 
-/* ================= PAGE 3: SHOOTING (single large 3:4 preview) ================= */
+/* ================= PAGE 3: PHOTO TAKING (redesigned) ================= */
+
+/* ── Extra-small page icon (Page 3 topbar) ───────────────────────────────── */
+.sb-page-icon-xs {
+  width: 2.2vh;
+  height: auto;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+/* Top bar — title + red dot centered */
+.shooting-topbar {
+  height: 5.5vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+}
+
+/* Extra top margin variant for shooting topbar */
+.shooting-topbar-spaced {
+  margin-top: 1.5vh;
+}
+
+.shooting-topbar-title {
+  display: flex;
+  align-items: center;
+  gap: 0.8vw;
+  font-size: 2vh;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.shooting-title-text {
+  font-size: 2vh;
+  font-weight: 700;
+}
+
+/* Blinking red recording dot */
+.shooting-rec-dot {
+  width: 1vh;
+  height: 1vh;
+  border-radius: 50%;
+  background: #ff3b30;
+  animation: recBlink 1.1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes recBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* Full-width layout: side-panel | live view | side-panel */
+.shooting-fullscreen-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.shooting-side-panel {
+  width: 12vw;
+  flex-shrink: 0;
+  background: rgba(80, 80, 80, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shooting-side-right {
+  flex-direction: column;
+  padding: 3vh 2vw;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Photos taken counter (right side panel) */
+.shooting-photos-taken {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3vh;
+}
+
+.photos-taken-label {
+  font-size: 1.4vh;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  letter-spacing: 0.05em;
+}
+
+.photos-taken-count {
+  font-size: 6vh;
+  font-weight: 800;
+  font-family: var(--font-number);
+  color: #ffffff;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.photos-taken-slash { font-size: 4.5vh; font-weight: 400; margin: 0 0.1em; }
+.photos-taken-total { font-size: 4.5vh; font-weight: 800; }
+
+/* Live preview frame — fills the middle, fully rectangular, no border-radius */
+.shooting-preview-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  overflow: hidden;
+  border-radius: 0 !important;
+}
+#shootingVideo, #shootingImg { width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s ease; }
+
+/* "Look at the camera." bottom text */
+.shooting-look-text {
+  height: 5vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8vh;
+  font-weight: 500;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+/* Pose overlay for 4×6 mode — preview only, never in captures */
+.pose-overlay-4x6 {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  border: 4px dashed rgba(255,255,255,0.35);
+  border-radius: 6px;
+}
+
+/* ================= PAGE 3: SHOOTING — legacy layout kept for JS compat ================= */
 .shooting-layout-solo {
   display: flex;
   flex-direction: column;
   align-items: center;
   height: 100%;
   gap: 1.4vh;
-  padding: 2.2vh 3vw;
+  padding: 0 3vw 2.2vh 3vw;
 }
-
-/* Large, centered 3:4 box — fills all the height freed up by removing
-   the side thumbnail column, without ever distorting the preview. */
-.shooting-preview-frame {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  aspect-ratio: 4 / 3;
-  width: 100%;
-  height: auto;
-  max-width: 100%;
-  max-height: 100%;
-  margin: 0 auto;
-  background: #000;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-#shootingVideo, #shootingImg { width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s ease; }
 
 /* ================= HEADS-UP COUNTDOWN (before the first shot) ================= */
 .heads-up-overlay {
@@ -363,7 +963,81 @@ button {
 }
 .interval-countdown-bottom .interval-number { font-size: 2vh; font-weight: 800; }
 
-/* ================= PAGE 1: SETUP ================= */
+/* ================= PAGE 2: CAMERA MODE (redesigned) ================= */
+
+.setup-main-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 2vw;
+  padding: 1.4vh 3vw 2vh 3vw;
+}
+
+.setup-preview-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 4:3 preview (Canon DSLR ratio) */
+.frame-43 {
+  aspect-ratio: 4 / 3;
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.frame-43 video, .frame-43 img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.frame-43 video.mirrored, .frame-43 img.mirrored { transform: scaleX(-1); }
+
+.setup-controls-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.4vh;
+  width: 17vw;
+  flex-shrink: 0;
+}
+
+/* Control buttons: label left + icon right, gradient fill like NEXT */
+.sb-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1vw;
+  padding: 1.4vh 1.6vw !important;
+  background: #ffffff !important;
+  border: 1.5px solid var(--border) !important;
+  border-radius: 10px !important;
+  color: var(--text) !important;
+  font-size: 1.6vh !important;
+  font-weight: 600 !important;
+  transition: border-color 0.15s ease, background 0.15s ease !important;
+  cursor: pointer;
+}
+.sb-control-btn img {
+  width: 2.4vh;
+  height: 2.4vh;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.sb-control-btn.active,
+.sb-control-btn:hover {
+  border-color: var(--accent) !important;
+  background: linear-gradient(135deg, var(--sb-next-grad-start) 0%, var(--sb-next-grad-end) 100%) !important;
+}
+
+/* ================= (old) PAGE 1: SETUP — legacy class kept for backwards compat */
 .setup-header {
   display: flex;
   align-items: center;
@@ -378,12 +1052,7 @@ button {
   gap: 2vw;
   flex: 1;
   min-height: 0;
-  /* The shared kiosk timer (top:2vh, ~6.4vh tall, top-right of the whole
-     kiosk) otherwise overlaps the "How It Works" box here — Camera Setup
-     is the only page whose content starts this close to the top of the
-     page. Extra top margin gives it clearance without touching the
-     timer's own position, which is shared with Pages 2, 4, 5, 6. */
-  margin-top: 2.5vh;
+  /* progress bar provides top clearance via page padding-top override */
 }
 
 .preview-panel { display: flex; min-height: 0; }
@@ -489,15 +1158,7 @@ button {
 
 /* ================= PAGE 2: FRAME SELECTION ================= */
 
-/*
- * Give the frame page's page-title just enough top padding so it never
- * sits under the kiosk timer (6.4vh tall, top:2vh → bottom edge ~9vh).
- * The quantity panel and frame cards sit below this, so only the title
- * needs clearance.
- */
-#page-frame > .page-title {
-  padding-right: calc(6.4vh + 4vw);
-}
+/* (page-frame title is hidden; padding-right override no longer needed) */
 
 .frame-layout {
   display: grid;
@@ -505,6 +1166,7 @@ button {
   gap: 2vw;
   flex: 1;
   min-height: 0;
+  padding: 1.4vh 3vw 2vh 3vw;
 }
 
 .frame-options {
@@ -525,7 +1187,8 @@ button {
   justify-content: center;
   gap: 1vh;
   padding: 2vh 1vw;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.06);
 }
 .frame-card:hover { border-color: var(--text-dim); }
 .frame-card.selected { border-color: var(--accent); background: var(--panel-light); }
@@ -541,7 +1204,7 @@ button {
   border-radius: 4px;
 }
 .frame-visual-2x6 { width: 30%; aspect-ratio: 2 / 6; }
-.frame-visual-4x6 { width: 55%; aspect-ratio: 4 / 6; }
+.frame-visual-4x6 { width: 65%; aspect-ratio: 4 / 3; }
 
 .frame-card-title { font-size: 1.6vh; font-weight: 700; }
 .frame-card-sub { font-size: 1.2vh; color: var(--text-dim); }
@@ -598,6 +1261,7 @@ button {
 .qty-number {
   font-size: 7vh;
   font-weight: 800;
+  font-family: var(--font-number);
   color: var(--text);
   line-height: 1;
 }
@@ -644,9 +1308,9 @@ button {
   flex: 1;
   min-height: 0;
   background: #000;
-  border-radius: var(--radius);
+  border-radius: 0 !important;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: none;
 }
 #shootingVideo, #shootingImg { width: 100%; height: 100%; object-fit: cover; }
 
@@ -677,6 +1341,7 @@ button {
 #countdownNumber {
   font-size: 14vh;
   font-weight: 800;
+  font-family: var(--font-number);
   color: #fff;
   opacity: 0.6;
   text-shadow: 0 0 30px rgba(0,0,0,0.8);
@@ -695,6 +1360,15 @@ button {
   display: flex;
   align-items: center;
   gap: 0.5vw;
+}
+/* Hide the recording text — only the animated dot is shown */
+.recording-badge-hidden {
+  /* Collapse to just the dot size */
+  padding: 0.5vh 0.5vh;
+  border-radius: 50%;
+  gap: 0;
+  font-size: 0;
+  color: transparent;
 }
 .rec-dot { width: 1vh; height: 1vh; border-radius: 50%; background: #ff5c5c; animation: pulse 1s infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
@@ -730,25 +1404,57 @@ button {
 .shooting-controls { display: flex; flex-direction: column; align-items: center; gap: 0.6vh; }
 .shooting-hint { font-size: 1.2vh; color: var(--text-dim); }
 
-/* ================= PAGE 4: PHOTO SELECTION ================= */
+/* ================= PAGE 4: PHOTO SELECTION (redesigned) ================= */
 .selection-count { font-size: 1.3vh; color: var(--text-dim); font-weight: 500; text-transform: none; letter-spacing: 0; }
 
+/* Main 2-column layout: photo grid | strip preview */
+.selection-main-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 2vw;
+  padding: 1.4vh 3vw 2vh 3vw;
+}
+
+.selection-grid-col {
+  flex: 1.4;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.selection-preview-col {
+  flex: 0.7;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Tight zero-gap grid for selection photos — 3 cols × 3 rows, equal cells */
+.selection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+/* ── legacy ── */
 .selection-layout {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
   gap: 2vw;
   flex: 1;
   min-height: 0;
-}
-
-.selection-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: auto;
-  align-content: start;
-  gap: 1vw;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 /* ---- 9th tile: live selection counter, updates as photos are picked ---- */
@@ -765,8 +1471,9 @@ button {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .selection-counter-number {
-  font-size: 3.4vh;
+  font-size: 5.1vh; /* +50% from 3.4vh */
   font-weight: 800;
+  font-family: var(--font-number);
   color: var(--accent);
   line-height: 1;
 }
@@ -780,7 +1487,7 @@ button {
 .selection-counter-card.complete { background: var(--accent); border-color: var(--accent); }
 .selection-counter-card.complete .selection-counter-number,
 .selection-counter-card.complete .selection-counter-total,
-.selection-counter-card.complete .selection-counter-label { color: #fff; }
+.selection-counter-card.complete .selection-counter-label { color: #fff !important; }
 .selection-counter-card.flash { animation: counterFlash 0.3s ease; }
 @keyframes counterFlash {
   0% { box-shadow: 0 0 0 4px rgba(224,64,63,0.45); }
@@ -789,28 +1496,42 @@ button {
 
 .photo-card {
   position: relative;
-  aspect-ratio: 4 / 3;
+  /* No fixed aspect-ratio — grid rows control equal height */
   background: #000;
-  border: 2px solid var(--border);
-  border-radius: 10px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s ease, transform 0.1s ease;
+  /* Fill the grid cell fully */
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
+/* Remove right/bottom border from last-in-row and last row */
+.photo-card:nth-child(3n) { border-right: 0; }
+.photo-card:nth-last-child(-n+3) { border-bottom: 0; }
+
 .photo-card:active { transform: scale(0.97); }
 .photo-card.selected { border-color: var(--accent); }
-.photo-card img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.photo-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Darkening overlay when selected */
+.photo-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.38);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.photo-card.selected::after { opacity: 1; }
 
 .photo-card-badge {
-  position: absolute;
-  top: 0.5vh;
-  left: 0.5vh;
-  background: rgba(0,0,0,0.6);
-  color: #fff;
-  font-size: 1.1vh;
-  font-weight: 700;
-  padding: 0.3vh 0.7vh;
-  border-radius: 5px;
+  display: none !important; /* Photo number labels removed per spec */
 }
 
 .photo-card-check {
@@ -839,6 +1560,23 @@ button {
   flex-direction: column;
   gap: 1.2vh;
   min-height: 0;
+  padding-top: 1vh;
+}
+
+/* In redesigned pages, strip wrap fills its column directly */
+.selection-preview-col .strip-preview-wrap,
+.design-preview-col    .strip-preview-wrap {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+/* Legacy: push the strip wrap on old layouts */
+.selection-preview-panel .strip-preview-wrap,
+.design-preview-panel    .strip-preview-wrap {
+  margin-top: 2.8vh;
 }
 
 .preview-panel-label {
@@ -864,20 +1602,80 @@ button {
 /* The actual strip render — capped so it can NEVER overflow the 16:9 kiosk area */
 .strip-preview-container {
   max-width: 100%;
-  max-height: 65vh;
+  max-height: 72vh;
   display: flex;
   gap: 0.8vw;
   align-items: center;
   justify-content: center;
 }
 
+/*
+ * Page 4 & 5 — 2×6 mode: show only ONE strip in the preview.
+ * compositeLayout() renders a single canvas at the full sheet width (both strips).
+ * We clip it to the left half by using overflow:hidden on a container that is
+ * exactly 50% of the canvas's natural width, keeping the aspect ratio of one strip.
+ * This is purely visual — the canvas itself and all print output are untouched.
+ */
+#page-selection .strip-preview-wrap,
+#page-design .strip-preview-wrap {
+  overflow: hidden;
+}
+
+/* Wrapper that clips the canvas to single-strip width — injected by strip.js hook */
+.single-strip-clip {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Height matches the canvas; width = 50% of canvas = one strip */
+  width: 50%;
+  height: 100%;
+}
+
+/* When 4x6, clip wrapper fills full width */
+.single-strip-clip[data-frame="4x6"] {
+  width: 100%;
+}
+
+/* The canvas inside the clip: shifted left so only the first strip shows */
+.single-strip-clip .layout-canvas {
+  /* The canvas is 2× wider than the clip div — left-align it */
+  position: relative;
+  left: 0;
+  max-width: none !important;
+  height: 100% !important;
+  width: auto !important;
+}
+.single-strip-clip[data-frame="4x6"] .layout-canvas {
+  width: 100% !important;
+  height: auto !important;
+  max-height: 72vh !important;
+}
+
 .layout-canvas {
   max-width: 100%;
-  max-height: 65vh;
+  max-height: 72vh;
   width: auto;
   height: auto;
   display: block;
   border-radius: 4px;
+}
+
+/* ---- Page 4: Original design overlay on strip preview ---- */
+/*
+ * Sits absolutely on top of the strip preview container.
+ * Sized to match the strip canvas using max-width/max-height so it scales
+ * exactly with whatever size strip.js renders.
+ */
+.selection-original-overlay {
+  display: none !important;
+}
+
+/* .strip-original-overlay is injected by app.js into .strip-preview-wrap;
+   also suppressed here so both overlay sources are hidden. */
+.strip-original-overlay {
+  display: none !important;
 }
 
 /* ---- Design themes applied to .strip-single ---- */
@@ -887,7 +1685,57 @@ button {
 .theme-pastel { background: linear-gradient(160deg, #ffd6e8, #d6e8ff); color: #444; }
 
 
-/* ================= PAGE 5: STRIP DESIGN ================= */
+/* ================= PAGE 5: FRAME DESIGN (redesigned) ================= */
+
+/* 3-column layout: templates | preview | filters */
+.design-main-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 2vw;
+  padding: 1.4vh 3vw 2vh 3vw;
+  align-items: stretch;
+}
+
+/* Left/right: carousel columns */
+.design-carousel-col {
+  flex: 0 0 20vw;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2vh;
+  min-height: 0;
+}
+
+.carousel-label {
+  font-size: 2vh;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+/* Horizontal carousel scroll area */
+.design-carousel {
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-right: 0.4vw;
+  scrollbar-width: thin;
+}
+
+/* Center: preview column */
+.design-preview-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Legacy layout kept for backwards compat */
 .design-layout {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
@@ -903,24 +1751,29 @@ button {
   gap: 1vw;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 0.4vw; /* keeps content clear of the scrollbar */
+  padding-right: 0.4vw;
 }
 
+/* Design swatches — vertical card style in carousel */
 .design-swatch {
   position: relative;
   border: 2px solid var(--border);
   border-radius: 10px;
   padding: 1vh;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 0.6vh;
+  gap: 1vw;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.1s ease;
+  transition: border-color 0.15s ease, transform 0.1s ease, background 0.15s ease;
+  background: #ffffff;
+  flex-shrink: 0;
 }
 .design-swatch:active { transform: scale(0.97); }
-.design-swatch.selected { border-color: var(--accent); }
+.design-swatch.selected {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--sb-next-grad-start) 0%, #fff8e0 100%);
+}
 
 .design-swatch-preview {
   width: 60%;
@@ -934,75 +1787,184 @@ button {
   color: var(--text);
 }
 
-/* ================= PAGE 6: ALL DONE (auto-print + video + QR) ================= */
-
-/* Three-column layout: status | video | QR */
-.printing-layout {
-  display: grid;
-  grid-template-columns: 0.6fr 1fr 0.8fr;
-  gap: 2vw;
-  flex: 1;
-  min-height: 0;
-  align-items: center;
-}
-
-/* Left: print status badge */
-.printing-status-col {
+/* ── Filter cards in the right carousel ─────────────────────────────── */
+.filter-card {
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+  background: #ffffff;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 1.4vh;
-  height: 100%;
+  gap: 0.5vh;
+  padding-bottom: 0.8vh;
 }
-.print-status-badge {
+.filter-card:active { transform: scale(0.97); }
+.filter-card.selected { border-color: var(--accent); }
+.filter-card-img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  display: block;
+}
+.filter-card-name {
+  font-size: 1.2vh;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+}
+
+/* ================= PAGE 6: PRINT & QR (redesigned) ================= */
+
+/*
+ * Printing page keeps the white grid background always — no yellow wave.
+ * Yellow tide effect has been removed per spec.
+ */
+.printing-page-redesign {
+  background: transparent;
+}
+
+/* Tide overlay disabled — hidden at all times */
+.printing-tide-overlay {
+  display: none !important;
+}
+
+/* Layout: strip center | QR right — mirrors the design page layout */
+.printing-main-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 2vw;
+  padding: 1.4vh 3vw 0 3vw;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+/* Props note at the bottom */
+#page-printing .printing-props-note {
+  text-align: center;
+  font-size: 1.4vh;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  padding: 1.2vh 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Legacy heading — hidden on redesigned page */
+.printing-heading {
+  display: none;
+}
+
+/* Legacy printing-layout kept for any code that writes to it */
+.printing-layout,
+.printing-layout-v2 {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 2.4vw;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Left status col — hidden; kept in HTML for JS compatibility */
+.printing-status-col {
+  display: none;
+}
+/* Keep the upload progress and print-status elements invisible but
+   functional so app.js / qr.js can still write to them without errors. */
+.print-status-badge,
+.print-qty-note,
+.upload-progress-wrap:not(#uploadProgressWrap) {
+  display: none;
+}
+
+/* Center: video strip column — same flex proportion as design page preview col */
+.printing-video-col {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1.2vh;
-  background: var(--panel);
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  padding: 3vh 2vw;
-  width: 100%;
-}
-.print-status-icon { font-size: 4vh; line-height: 1; }
-.print-status-text { font-size: 1.6vh; font-weight: 700; color: var(--text); text-align: center; }
-.print-qty-note { font-size: 1.3vh; color: var(--text-dim); text-align: center; }
-
-/* Center: looping video strip, no controls */
-.printing-video-col {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   height: 100%;
   min-height: 0;
+  position: relative;
 }
+
+.printing-props-note {
+  font-size: 1.2vh;
+  color: var(--text-dim);
+  text-align: center;
+  font-style: normal;
+  flex-shrink: 0;
+}
+
+/*
+ * Video strip frame — sized to match the design page strip preview.
+ * Aspect ratio is set dynamically by JS based on frame type:
+ *   2×6 Long Frame → aspect-ratio: 2 / 6  (one strip)
+ *   4×6 Wide Frame → aspect-ratio: 4 / 6
+ * The strip is centered; height is the constraint (fills available column height).
+ */
 .printing-video-frame {
-  height: 100%;
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   border-radius: var(--radius);
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.85);
+  border: 1px solid rgba(240,194,49,0.25);
+  box-shadow: 0 4px 24px rgba(240,194,49,0.12);
+  max-height: 82%;
+  width: auto;
+  /* Default aspect ratio — overridden by JS */
+  aspect-ratio: 2 / 6;
+  position: relative;
 }
+
+/* 2×6 long frame — tall portrait strip */
+.printing-video-frame[data-frame="2x6"] {
+  aspect-ratio: 2 / 6;
+}
+/* 4×6 wide frame */
+.printing-video-frame[data-frame="4x6"] {
+  aspect-ratio: 4 / 6;
+}
+
+/* Photo overlay layer removed — video strip shows directly, no photo fade */
+.printing-strip-photo-layer {
+  display: none !important;
+}
+
+.printing-strip-video-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
 .printing-video-frame .live-strip-row {
   height: 100%;
   max-height: 100%;
+  width: 100%;
 }
 .printing-video-frame .live-strip-wrap {
   height: 100%;
   max-height: 100%;
-  width: auto;
+  width: 100%;
 }
 .printing-video-frame video { pointer-events: none; }
 .printing-video-frame video::-webkit-media-controls { display: none !important; }
 
-/* Right: QR code */
+/* Right: QR code — same width as design page carousel columns */
 .printing-qr-col {
   display: flex;
   flex-direction: column;
@@ -1010,20 +1972,48 @@ button {
   justify-content: center;
   gap: 1.4vh;
   height: 100%;
-  padding-top: 7vh;
+  flex: 0 0 20vw;
+  padding-top: 0;
 }
-.printing-qr-col .preview-panel-label { text-align: center; }
+.printing-qr-col .preview-panel-label {
+  text-align: center;
+  font-size: 2vh;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
 
+/* QR card — rounded card wrapping label + QR + caption */
 .qr-wrap {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
   justify-content: center;
-  padding: 1.4vh;
+  padding: 1.6vh 1.4vw;
   background: #fff;
-  border-radius: 12px;
-  border: 1px solid var(--border);
+  border-radius: 14px;
+  border: 1px solid rgba(240,194,49,0.22);
+  box-shadow: 0 4px 20px rgba(240,194,49,0.15), 0 2px 8px rgba(0,0,0,0.06);
   width: 100%;
 }
-#qrCodeCanvas img, #qrCodeCanvas canvas { display: block; margin: 0 auto; }
+#qrCodeCanvas img, #qrCodeCanvas canvas {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Page 6 header has no BACK-style secondary action — just the DONE gradient */
+.sb-page-header-printing {
+  background: transparent;
+}
+
+/* Page 6 DONE button styling: same gradient as NEXT but with timer fill */
+#page-printing .sb-btn-next {
+  /* inherits sb-btn-next gradient — printing-done-btn overrides handle state */
+}
 
 .qr-caption { font-size: 1.1vh; color: var(--text-dim); text-align: center; }
 .qr-url { font-size: 1vh; color: var(--text-dim); text-align: center; word-break: break-all; }
@@ -1044,23 +2034,62 @@ button {
   animation: pulse 1s infinite;
 }
 
-/* ---- Page 6: Done button (inside .printing-status-col) ---- */
+/* ---- Page 6: Done button with built-in 60s timer fill ---- */
 .printing-done-btn {
-  padding: 1.4vh 2.4vw;
-  border-radius: 50px;
-  background: var(--text);
-  color: #fff;
-  font-size: 1.6vh;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  border: none;
-  cursor: pointer;
-  width: 100%;
-  transition: background 0.15s ease, opacity 0.2s ease, transform 0.1s ease;
+  position: relative;
+  overflow: hidden;
+  /* Uses sb-btn-next gradient style when in the header */
+  z-index: 0;
+  transition: border-color 0.3s ease, color 0.3s ease, opacity 0.15s ease;
 }
-.printing-done-btn:hover:not(:disabled) { background: #333; }
-.printing-done-btn:active:not(:disabled) { transform: scale(0.97); }
-.printing-done-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* timer fill layer — expands from left over 60s when printing starts */
+.printing-done-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255,221,102,0.55) 0%, rgba(255,221,102,0.85) 100%);
+  transform: scaleX(0);
+  transform-origin: left;
+  z-index: -1;
+  border-radius: inherit;
+  transition: none;
+}
+
+/* Start the 60-second fill animation */
+.printing-done-btn.timer-running::after {
+  animation: doneBtnFill 60s linear forwards;
+}
+
+@keyframes doneBtnFill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* When timer is done — full fill */
+.printing-done-btn.timer-done::after {
+  transform: scaleX(1);
+  transition: none;
+}
+
+/* Disabled state: gray gradient */
+.printing-done-btn:disabled,
+.printing-done-btn:not(.ready) {
+  background: linear-gradient(90deg, #f0f0f0 0%, #e0e0e0 100%) !important;
+  color: var(--text-dim) !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+
+/* Ready state: normal gradient */
+.printing-done-btn.ready {
+  background: linear-gradient(90deg, var(--sb-next-grad-start) 0%, var(--sb-next-grad-start) 30%, var(--sb-next-grad-end) 100%) !important;
+  color: var(--text) !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 12px rgba(240, 194, 49, 0.28) !important;
+}
+
+.printing-done-btn:active.ready { transform: scale(0.97); }
 
 .print-only { display: none; }
 .recording-badge[hidden] { display: none !important; }
@@ -1112,48 +2141,74 @@ button {
   flex-shrink: 0;
 }
 
-/* ================= 60-SECOND KIOSK TIMER (Pages 2, 4, 5, 6) ================= */
-.kiosk-timer {
+
+/* ================= BOOT ANIMATION OVERLAY ================= */
+/*
+ * Full-screen overlay shown after the startup sequence completes.
+ * The boot animation video plays to completion, then the overlay
+ * fades out before the lock screen is shown.
+ */
+.boot-anim-overlay {
   position: absolute;
-  top: 2vh;
-  right: 3vw;
-  width: 6.4vh;
-  height: 6.4vh;
-  z-index: 6;
+  inset: 0;
+  z-index: 50;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+.boot-anim-overlay.fading {
+  opacity: 0;
+  pointer-events: none;
+}
+.boot-anim-overlay[hidden] {
+  display: none !important;
+}
+.boot-anim-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
+/* ================= 60-SECOND KIOSK TIMER (Pages 2, 4, 5) ================= */
 /*
- * Per-page timer position overrides via data-active-page attribute.
- * animations.js stamps this attribute on #kioskTimer on every goToPage() call.
- *
- * Page 2 (frame): top-right, clear of the two frame cards and quantity panel.
- * Page 4 (selection): top-right, clear of the 3-column selection grid.
- * Page 5 (design): top-right, clear of the design swatch picker.
- * Page 6 (printing): bottom-left, clear of all three content columns.
+ * Per the redesign spec: timer is centered at the top of each page (within
+ * the page header area, visually between the title and the NEXT button).
+ * The timer is an SVG circle ring — we position it absolutely in the center
+ * of the #kiosk so it always appears at the correct spot.
  */
-.kiosk-timer[data-active-page="frame"] {
-  top: 2vh;
-  right: 3vw;
-  left: auto;
-  bottom: auto;
+.kiosk-timer {
+  position: absolute;
+  top: 1.725vh; /* +15% from 1.5vh */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7.2vh;
+  height: 7.2vh;
+  z-index: 66;
 }
-.kiosk-timer[data-active-page="selection"] {
-  top: 2vh;
-  right: 3vw;
-  left: auto;
-  bottom: auto;
-}
+
+/* Workflow pages with timers: centered top */
+.kiosk-timer[data-active-page="setup"],
+.kiosk-timer[data-active-page="selection"],
 .kiosk-timer[data-active-page="design"] {
-  top: 2vh;
-  right: 3vw;
-  left: auto;
+  top:    1.725vh; /* +15% from 1.5vh */
+  left:   50%;
+  transform: translateX(-50%);
+  right:  auto;
   bottom: auto;
 }
+
+/* Page 1 (frame): no timer on the start screen */
+.kiosk-timer[data-active-page="frame"] {
+  display: none;
+}
+
+/* Page 6: hidden — Done button is the CTA */
 .kiosk-timer[data-active-page="printing"] {
-  top: auto;
-  right: auto;
-  bottom: 3vh;
-  left: 3vw;
+  display: none;
 }
 .kiosk-timer-ring {
   width: 100%;
@@ -1167,7 +2222,7 @@ button {
 }
 .kiosk-timer-progress {
   fill: none;
-  stroke: var(--accent);
+  stroke: #F0C231;
   stroke-width: 8;
   stroke-linecap: round;
   transition: stroke-dashoffset 1s linear;
@@ -1180,6 +2235,7 @@ button {
   justify-content: center;
   font-size: 2vh;
   font-weight: 800;
+  font-family: var(--font-number);
   color: var(--text);
 }
 

@@ -19,8 +19,13 @@ const sessionState = {
 
 /* ---------------- Navigation ---------------- */
 function goToPage(pageName) {
+  // Page-home has been removed. auth-lock.js calls goToPage("home") on success
+  // and boot.js falls back to it — redirect both to "frame" (Page 1).
+  if (pageName === "home") pageName = "frame";
+
   document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
-  document.querySelector(`.page[data-page="${pageName}"]`).classList.add("active");
+  const target = document.querySelector(`.page[data-page="${pageName}"]`);
+  if (target) target.classList.add("active");
 }
 
 /* ---------------- PAGE 1: SETUP ---------------- */
@@ -98,28 +103,32 @@ async function updateZoom(level) {
   }
 }
 
-/* ---------------- PAGE HOME: LANDING ------------------- */
-document.getElementById("btnStartSession").addEventListener("click", () => {
-  goToPage("setup");
-  // Update UI with current camera status
-  renderCameraStatus(cameraController.status);
-  kioskTimer.start(60, _proceedFromSetup);
-});
+/* ---------------- PAGE HOME: removed — frame page is now the start screen ------------------- */
 
 function _proceedFromSetup() {
+  // Timer expired on setup page — auto-advance to shooting
   kioskTimer.hide();
-  goToPage("home");
+  _updatePoseOverlay();
+  const ptEl = document.getElementById("photosTakenCount");
+  if (ptEl) ptEl.innerHTML = '0<span class="photos-taken-slash">/</span><span class="photos-taken-total">8</span>';
+  goToPage("shooting");
+  shootingModule.startSession();
 }
 
 document.getElementById("btnBackFromSetup").addEventListener("click", () => {
+  // Setup is now after frame (Page 1) — back goes to frame, no timer on Page 1
   kioskTimer.hide();
-  goToPage("home");
+  goToPage("frame");
 });
 
 setupEls.nextBtn.addEventListener("click", () => {
+  // Frame/qty already chosen on previous page — go directly to shooting
   kioskTimer.hide();
-  goToPage("frame");
-  kioskTimer.start(60, proceedFromFrame);
+  _updatePoseOverlay();
+  const ptEl = document.getElementById("photosTakenCount");
+  if (ptEl) ptEl.innerHTML = '0<span class="photos-taken-slash">/</span><span class="photos-taken-total">8</span>';
+  goToPage("shooting");
+  shootingModule.startSession();
 });
 
 /* ---------------- PAGE 2: FRAME + QUANTITY ---------------- */
@@ -186,9 +195,8 @@ function updateFramePricing() {
 }
 
 frameEls.backBtn.addEventListener("click", () => {
+  // Frame page is the start screen — back button is hidden but kept for JS compat
   kioskTimer.hide();
-  goToPage("setup");
-  kioskTimer.start(60, _proceedFromSetup);
 });
 
 frameEls.nextBtn.addEventListener("click", () => {
@@ -201,42 +209,80 @@ frameEls.nextBtn.addEventListener("click", () => {
     indicatorText.textContent = `${name} · ${size}`;
   }
 
-  goToPage("shooting");
-  shootingModule.startSession();
+  // Navigate to camera setup (Page 2)
+  goToPage("setup");
+  renderCameraStatus(cameraController.status);
+  kioskTimer.start(60, _proceedFromSetup);
 });
 
 function proceedFromFrame() {
+  // Frame page has no timer — this function kept for compat but should not be called
   kioskTimer.hide();
   goToPage("setup");
+  renderCameraStatus(cameraController.status);
   kioskTimer.start(60, _proceedFromSetup);
 }
 
-/* ---------------- PAGE 6: ALL DONE + UPLOAD PROGRESS ---------------- */
+/* ---------------- PAGE 6: ALL DONE + DONE-BUTTON TIMER ---------------- */
 
 /*
- * uploadProgress — public API for qr.js to drive the progress bar.
+ * uploadProgress — public API for qr.js / printing.js.
  *
- * Usage:
- *   uploadProgress.start()           — show indeterminate bar
- *   uploadProgress.set(0.45)         — set 0–1 fraction (adds .has-progress)
- *   uploadProgress.complete()        — fill to 100%, mark done, enable Done btn
- *   uploadProgress.error(msg)        — show error state
+ * The visible upload progress bar has been removed from the UI.
+ * These methods still update the hidden #uploadProgressWrap elements so
+ * qr.js can call them without errors, and they drive the Done button state:
+ *
+ *   uploadProgress.start()      — called when printing begins (no-op for UI)
+ *   uploadProgress.set(0–1)     — tracks upload fraction (no-op for UI)
+ *   uploadProgress.complete()   — printing started → enable Done + start timer
+ *   uploadProgress.error(msg)   — upload failed → still enable Done
+ *
+ * The Done button has three CSS states:
+ *   default           — disabled, dim, cursor:not-allowed
+ *   .ready            — amber border, clickable
+ *   .ready.timer-running — amber fill sweeps left→right over 60s (CSS ::before)
+ *   .timer-done       — fill complete, session auto-resets
  */
 const uploadProgress = (() => {
+  // Hidden elements — kept for qr.js compatibility
   const wrap  = document.getElementById("uploadProgressWrap");
   const bar   = document.getElementById("uploadProgressBar");
   const pct   = document.getElementById("uploadProgressPct");
   const label = document.getElementById("uploadProgressLabel");
   const hint  = document.getElementById("uploadProgressHint");
+
   const doneBtn = document.getElementById("btnPrintingDone");
 
-  function show() {
-    if (wrap) wrap.removeAttribute("hidden");
+  // 60-second auto-advance timer handle
+  let _doneTimer = null;
+
+  function _enableDone() {
+    if (!doneBtn || doneBtn.classList.contains("ready")) return; // already enabled
+
+    // 1. Unlock the button
+    doneBtn.disabled = false;
+    doneBtn.classList.add("ready");
+
+    // 2. Start the CSS fill animation
+    // Force a reflow so the animation restarts cleanly if re-used
+    doneBtn.classList.remove("timer-running", "timer-done");
+    void doneBtn.offsetWidth; // reflow
+    doneBtn.classList.add("timer-running");
+
+    // 3. Auto-advance after 60 s
+    if (_doneTimer) clearTimeout(_doneTimer);
+    _doneTimer = setTimeout(() => {
+      if (doneBtn.classList.contains("timer-running")) {
+        doneBtn.classList.remove("timer-running");
+        doneBtn.classList.add("timer-done");
+        resetSessionAndRestart();
+      }
+    }, 60000);
   }
 
   return {
     start() {
-      show();
+      // Update hidden elements for qr.js
       if (wrap)  { wrap.classList.remove("complete", "error", "has-progress"); }
       if (bar)   { bar.style.width = "0%"; }
       if (pct)   { pct.textContent = "0%"; }
@@ -245,32 +291,37 @@ const uploadProgress = (() => {
     },
 
     set(fraction) {
-      show();
       const pctVal = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
-      if (wrap)  { wrap.classList.add("has-progress"); }
-      if (bar)   { bar.style.width = `${pctVal}%`; }
-      if (pct)   { pct.textContent = `${pctVal}%`; }
+      if (wrap) { wrap.classList.add("has-progress"); }
+      if (bar)  { bar.style.width = `${pctVal}%`; }
+      if (pct)  { pct.textContent = `${pctVal}%`; }
     },
 
     complete() {
-      show();
       if (wrap)  { wrap.classList.add("complete", "has-progress"); wrap.classList.remove("error"); }
       if (bar)   { bar.style.width = "100%"; }
       if (pct)   { pct.textContent = "100%"; }
       if (label) { label.textContent = "Upload complete!"; }
       if (hint)  { hint.textContent = "Scan the QR code to access your digital copy"; }
-      // Enable Done button now that QR is ready
-      if (doneBtn) { doneBtn.disabled = false; }
+      _enableDone();
     },
 
     error(msg) {
-      show();
       if (wrap)  { wrap.classList.add("error"); wrap.classList.remove("complete"); }
       if (pct)   { pct.textContent = "—"; }
       if (label) { label.textContent = msg || "Upload failed"; }
       if (hint)  { hint.textContent = "Your photos were printed. Contact staff for the digital copy."; }
       // Still enable Done so the session isn't stuck
-      if (doneBtn) { doneBtn.disabled = false; }
+      _enableDone();
+    },
+
+    // Called by resetSessionAndRestart() to cancel the auto-timer
+    cancelTimer() {
+      if (_doneTimer) { clearTimeout(_doneTimer); _doneTimer = null; }
+      if (doneBtn) {
+        doneBtn.classList.remove("timer-running", "timer-done", "ready");
+        doneBtn.disabled = true;
+      }
     }
   };
 })();
@@ -282,13 +333,34 @@ _origDesignNext.addEventListener("click", async () => {
   uploadProgress.start();
   // Fire QR generation (assigns sessionState.galleryUrlPromise synchronously)
   qrModule.generateAndRender();
+  // Set the video frame's aspect ratio based on frame type before init
+  _setPrintingFrameAspectRatio();
   // Ensure the printing module has the latest design selection
   await printingModule.init();
+  // Photo→video overlay transition removed — video strip shows directly
 });
 
-/* Done button */
+/*
+ * Sets the data-frame attribute on #printingVideoFrame so CSS applies the
+ * correct aspect ratio (2:6 for Long Frame, 4:6 for Wide Frame).
+ */
+function _setPrintingFrameAspectRatio() {
+  const videoFrame = document.getElementById("printingVideoFrame");
+  if (!videoFrame) return;
+  const frameType = sessionState.frameType || "2x6";
+  videoFrame.dataset.frame = frameType;
+}
+
+/* _startPhotoToVideoTransition removed — photo overlay on Print & QR page
+   has been removed per spec. Video strip shows directly without overlay. */
+
+/* Done button — opens confirm modal. Timer keeps running behind the modal.
+   If guest picks "Back", the timer simply continues from where it is.
+   Only "Proceed" (end session) cancels the timer. */
 document.getElementById("btnPrintingDone").addEventListener("click", () => {
-  kioskTimer.hide();
+  const btn = document.getElementById("btnPrintingDone");
+  if (btn.disabled || !btn.classList.contains("ready")) return;
+  // Do NOT cancel the timer — let it keep running behind the modal
   document.getElementById("confirmModal").hidden = false;
   document.getElementById("confirmModal").classList.add("show");
 });
@@ -297,13 +369,14 @@ document.getElementById("btnConfirmBack").addEventListener("click", () => {
   const m = document.getElementById("confirmModal");
   m.classList.remove("show");
   m.hidden = true;
-  kioskTimer.start(60, () => printingModule.endSessionOnTimeout());
+  // Timer is already running — nothing to restart
 });
 
 document.getElementById("btnConfirmProceed").addEventListener("click", () => {
   const m = document.getElementById("confirmModal");
   m.classList.remove("show");
   m.hidden = true;
+  uploadProgress.cancelTimer();
   resetSessionAndRestart();
 });
 
@@ -344,8 +417,8 @@ async function resetSessionAndRestart() {
   sessionState.galleryUrlPromise = null;
   sessionState.uploadPromise     = null;
 
-  // Reset Page 6 Done button + upload progress
-  document.getElementById("btnPrintingDone").disabled = true;
+  // Reset Page 6 Done button (cancels timer + removes .ready / .timer-running / .timer-done)
+  uploadProgress.cancelTimer();
   const wrap = document.getElementById("uploadProgressWrap");
   if (wrap) {
     wrap.setAttribute("hidden", "");
@@ -354,13 +427,16 @@ async function resetSessionAndRestart() {
   const bar = document.getElementById("uploadProgressBar");
   if (bar) bar.style.width = "0%";
 
-  // Reset Page 2 UI
+  // Reset Frame Selection UI (now the first workflow page)
   document.getElementById("frameCard2x6").classList.remove("selected");
   document.getElementById("frameCard4x6").classList.remove("selected");
   document.getElementById("btnNextFromFrame").disabled = true;
   document.getElementById("qtyValue").textContent = "1";
   document.getElementById("qtyLabelPill").textContent = "Select a frame";
   document.getElementById("qtyPricePill").textContent = "—";
+  sessionState.quantity = 1;
+
+  // Printing page always keeps white grid-bg — no yellow wave to reset
 
   // Reset QR wrap state
   const qrUploading = document.getElementById("qrUploading");
@@ -369,9 +445,73 @@ async function resetSessionAndRestart() {
   if (qrCodeCanvas) qrCodeCanvas.innerHTML = "";
 
   cameraController.attachPreview(setupEls.video, setupEls.img);
-  goToPage("home");
+  goToPage("frame");
 }
 
 /* Frame thumbnails — paths relative to /kiosk/ */
 document.getElementById("frameThumb2x6").src = "assets/designs/2x6_Strip_Thumbnail.png";
 document.getElementById("frameThumb4x6").src = "assets/designs/4x6_Strip_Thumbnail.png";
+
+/* Page 4 overlay removed — overlay not used in this design. */
+
+/* Strip overlay removed — not used in this design. */
+
+/* ── Page 3: Photos Taken counter ──────────────────────────────────────── */
+/*
+ * shooting.js updates .shot-counter (now hidden). We hook into the same
+ * session state to keep the right-panel counter in sync.
+ * shooting.js exposes window.kioskShooting.getShotCount() — if that isn't
+ * available yet, we watch for the global shotsTaken variable instead.
+ *
+ * The simplest approach: patch the shot-counter's textContent setter so
+ * any write to the hidden element also updates the visible counter.
+ */
+(function patchShotCounter() {
+  const shotCounterEl = document.getElementById("shotCounter");
+  const photosTakenEl = document.getElementById("photosTakenCount");
+  if (!shotCounterEl || !photosTakenEl) return;
+
+  const _origSet = Object.getOwnPropertyDescriptor(Node.prototype, "textContent").set;
+  Object.defineProperty(shotCounterEl, "textContent", {
+    set(val) {
+      _origSet.call(this, val);
+      // Parse "PHOTO X OF Y" — update the side counter
+      const m = String(val).match(/(\d+)\s*OF\s*(\d+)/i);
+      if (m) {
+        const taken = parseInt(m[1], 10) - 1; // current shot hasn't been taken yet
+        const total = parseInt(m[2], 10);
+        photosTakenEl.innerHTML =
+          `${taken}<span class="photos-taken-slash">/</span><span class="photos-taken-total">${total}</span>`;
+      }
+    },
+    get() { return shotCounterEl.innerText; }
+  });
+})();
+
+/* ── Page 3: Show pose overlay for 4×6 only ────────────────────────────── */
+function _updatePoseOverlay() {
+  const overlay = document.getElementById("poseOverlay4x6");
+  if (!overlay) return;
+  overlay.style.display = sessionState.frameType === "4x6" ? "block" : "none";
+}
+
+/* ── Page 6: Printing status subtitle update ────────────────────────────── */
+/*
+ * Patch uploadProgress.start() to update the subtitle to show uploading state,
+ * and uploadProgress.complete() to update to printing state.
+ */
+const _origUploadStart = uploadProgress.start.bind(uploadProgress);
+uploadProgress.start = function(...args) {
+  _origUploadStart(...args);
+  const sub = document.getElementById("printingStatusSubtitle");
+  if (sub) sub.textContent = "Uploading your photos & video…";
+  // Always keep white grid-bg — no yellow wave effect
+};
+
+const _origUploadComplete = uploadProgress.complete.bind(uploadProgress);
+uploadProgress.complete = function(...args) {
+  _origUploadComplete(...args);
+  const sub = document.getElementById("printingStatusSubtitle");
+  if (sub) sub.textContent = "Your photo is now printing at the counter.";
+  // No yellow wave — white grid-bg is maintained throughout
+};

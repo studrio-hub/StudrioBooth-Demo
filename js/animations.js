@@ -81,17 +81,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     document.querySelectorAll(
-      ".btn, .home-start-btn, .lock-submit-btn, .qty-btn, .frame-card"
+      ".btn, .home-start-btn, .home-card-original, .home-card-tutorial, .lock-submit-btn, .qty-btn, .frame-card"
     ).forEach((btn) => btn.addEventListener("pointerdown", () => animateBtnFill(btn)));
 
 
     /* ───────────────────────────────────────────────────────────────────────
-     * 2. PAGE TRANSITION — white flash + data-active-page for timer position
+     * 2. PAGE TRANSITION — white flash + timer reposition + progress bar
      *
      * On every goToPage() call we:
-     *   a) Run the white flash transition (unchanged from v2)
-     *   b) Stamp data-active-page="<pageName>" on #kioskTimer so CSS can
-     *      reposition it per page without any JS layout calculation.
+     *   a) Run the white flash transition
+     *   b) Stamp data-active-page on #kioskTimer for CSS repositioning
+     *   c) Update #kiosk-progress step states + start bar fill animation
+     *
+     * Progress bar behaviour:
+     *   - Visible on ALL 6 workflow pages including shooting
+     *   - Hidden only on lock / boot / home
+     *   - Done steps: bar instantly at 100%
+     *   - Active step on timer-pages (setup/frame/selection/design/printing):
+     *     bar animates from 0→100% over 60 s (CSS transition driven by JS RAF)
+     *   - Active step on shooting page:
+     *     bar = (shotsTaken / totalShots); updated via window.kioskProgress.setShots()
      * ─────────────────────────────────────────────────────────────────────── */
 
     // Full-screen flash overlay
@@ -114,9 +123,145 @@ document.addEventListener("DOMContentLoaded", () => {
       if (kioskTimerEl) kioskTimerEl.dataset.activePage = pageName;
     }
 
-    // Stamp on first load with whatever page is currently active
-    const initialPage = document.querySelector(".page.active");
-    if (initialPage) _stampTimerPage(initialPage.dataset.page || "");
+    // ── Progress bar state ──────────────────────────────────────────────────
+    const PROGRESS_STEPS = ["setup", "frame", "shooting", "selection", "design", "printing"];
+    const WORKFLOW_PAGES  = new Set(PROGRESS_STEPS); // all 6 show the bar
+    const TIMER_PAGES     = new Set(["setup", "frame", "selection", "design", "printing"]);
+
+    const progressEl = document.getElementById("kiosk-progress");
+
+    // Fill animation RAF handle + state
+    let _fillRaf   = null;
+    let _fillStart = null;
+    const FILL_DURATION_MS = 60000; // 60 seconds
+
+    function _stopFillAnimation() {
+      if (_fillRaf) { cancelAnimationFrame(_fillRaf); _fillRaf = null; }
+      _fillStart = null;
+    }
+
+    function _setFill(stepName, fraction, skipTransition) {
+      const fill = document.getElementById(`kpFill-${stepName}`);
+      if (!fill) return;
+      // skipTransition: true when called from the RAF loop (frame-by-frame)
+      // so the CSS 0.35s ease doesn't fight the per-frame updates.
+      if (skipTransition) fill.style.transition = "none";
+      else fill.style.transition = "";
+      fill.style.transform = `scaleX(${Math.min(1, Math.max(0, fraction))})`;
+    }
+
+    function _startTimerFill(stepName) {
+      _stopFillAnimation();
+      _fillStart = null;
+      function tick(ts) {
+        if (!_fillStart) _fillStart = ts;
+        const elapsed  = ts - _fillStart;
+        const fraction = Math.min(1, elapsed / FILL_DURATION_MS);
+        _setFill(stepName, fraction, true); // skipTransition during RAF
+        if (fraction < 1) _fillRaf = requestAnimationFrame(tick);
+        else {
+          // RAF done — restore transition for any future class-driven changes
+          const fill = document.getElementById(`kpFill-${stepName}`);
+          if (fill) fill.style.transition = "";
+        }
+      }
+      _fillRaf = requestAnimationFrame(tick);
+    }
+
+    function _updateProgressBar(pageName) {
+      if (!progressEl) return;
+
+      // Always stamp for CSS visibility rule
+      progressEl.dataset.activePage = pageName;
+
+      if (!WORKFLOW_PAGES.has(pageName)) {
+        _stopFillAnimation();
+        return;
+      }
+
+      const activeIdx = PROGRESS_STEPS.indexOf(pageName);
+
+      // Update step class states
+      progressEl.querySelectorAll(".kp-step").forEach((step) => {
+        const stepName = step.dataset.step;
+        const stepIdx  = PROGRESS_STEPS.indexOf(stepName);
+        step.classList.remove("done", "active", "future");
+        if (stepIdx < activeIdx)       step.classList.add("done");
+        else if (stepIdx === activeIdx) step.classList.add("active");
+        else                           step.classList.add("future");
+      });
+
+      // Snap done steps to 100%, reset future steps to 0%
+      PROGRESS_STEPS.forEach((name, idx) => {
+        if (idx < activeIdx)       _setFill(name, 1);
+        else if (idx > activeIdx)  _setFill(name, 0);
+        // active step handled below
+      });
+
+      // Active step fill
+      _stopFillAnimation();
+      if (TIMER_PAGES.has(pageName)) {
+        // Timer pages: animate 0→100% over 60s
+        _setFill(pageName, 0);
+        _startTimerFill(pageName);
+      } else {
+        // Shooting page: fill controlled externally by window.kioskProgress.setShots()
+        // Also read the current shot counter value immediately on page entry
+        const sc = document.getElementById("shotCounter");
+        if (sc) {
+          const m = (sc.textContent || "").match(/(\d+)\s+OF\s+(\d+)/i);
+          if (m) {
+            const completed = Math.max(0, parseInt(m[1], 10) - 1);
+            const total = parseInt(m[2], 10);
+            _setFill("shooting", total > 0 ? completed / total : 0, true);
+          } else {
+            _setFill(pageName, 0);
+          }
+        } else {
+          _setFill(pageName, 0); // reset; shooting.js will push updates
+        }
+      }
+    }
+
+    // ── Public API for shooting.js ──────────────────────────────────────────
+    /*
+     * shooting.js calls window.kioskProgress.setShots(taken, total)
+     * whenever a photo is captured. This updates the "Photo Taking" bar.
+     *
+     * Fallback: if shooting.js doesn't call the API, a MutationObserver
+     * watches #shotCounter text (e.g. "PHOTO 3 OF 8") and derives the
+     * fraction automatically so the bar always stays in sync.
+     */
+    window.kioskProgress = {
+      setShots(taken, total) {
+        if (progressEl && progressEl.dataset.activePage === "shooting") {
+          _setFill("shooting", total > 0 ? taken / total : 0, true);
+        }
+      }
+    };
+
+    // DOM fallback — parse "PHOTO N OF T" from #shotCounter
+    const shotCounterEl = document.getElementById("shotCounter");
+    if (shotCounterEl) {
+      new MutationObserver(() => {
+        if (!progressEl || progressEl.dataset.activePage !== "shooting") return;
+        const text = shotCounterEl.textContent || "";
+        const m = text.match(/(\d+)\s+OF\s+(\d+)/i);
+        if (m) {
+          const taken = parseInt(m[1], 10);
+          const total = parseInt(m[2], 10);
+          // taken is the current photo number (1-based); show completed fraction
+          const completed = Math.max(0, taken - 1); // shots already done
+          _setFill("shooting", total > 0 ? completed / total : 0, true);
+        }
+      }).observe(shotCounterEl, { childList: true, characterData: true, subtree: true });
+    }
+
+    // Stamp on first load
+    const initialPage     = document.querySelector(".page.active");
+    const initialPageName = initialPage ? (initialPage.dataset.page || "") : "";
+    if (initialPage) _stampTimerPage(initialPageName);
+    _updateProgressBar(initialPageName);
 
     requestAnimationFrame(() => {
       if (typeof goToPage !== "function") return;
@@ -128,18 +273,79 @@ document.addEventListener("DOMContentLoaded", () => {
         const nextPage    = document.querySelector(`.page[data-page="${pageName}"]`);
         if (!nextPage) { _originalGoToPage(pageName); return; }
 
-        // Always update the timer position attribute immediately
+        // Stamp timer page immediately (CSS repositioning)
         _stampTimerPage(pageName);
+
+        // Progress bar: hide immediately on non-workflow pages;
+        // for workflow pages, delay the visual update until the flash
+        // clears so the bar and page content appear together.
+        const isWorkflow = WORKFLOW_PAGES.has(pageName);
+        if (!isWorkflow) {
+          // Hide bar right away (home, lock, boot)
+          _updateProgressBar(pageName);
+        }
+        // For workflow pages, _updateProgressBar is called after flash clears (see below)
 
         if (reducedMotion) { _originalGoToPage(pageName); return; }
 
-        const isHome = pageName === "home";
+        const isHome    = pageName === "home";
+        const fromHome  = currentPage && currentPage.dataset.page === "home";
+        const isSetup   = pageName === "setup";
+        // Simple 1-second white transition for home↔setup (both directions)
+        const useSimpleWhite = isHome || fromHome || isSetup;
 
-        flashOverlay.style.background = isHome
-          ? "linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)"
-          : "#ffffff";
+        if (useSimpleWhite) {
+          // Plain white overlay fade: 0.4s in, hold briefly, 0.6s out
+          flashOverlay.style.background = "#ffffff";
+          const tl = gsap.timeline();
 
+          // Hide the kiosk timer during the transition so it doesn't
+          // visually jump / reposition while the flash is active.
+          if (kioskTimerEl) gsap.set(kioskTimerEl, { opacity: 0 });
+
+          // Fade out current page quickly
+          if (currentPage && currentPage !== nextPage) {
+            tl.to(currentPage, {
+              opacity: 0, duration: 0.22, ease: "power2.in",
+              onComplete: () => {
+                currentPage.classList.remove("active");
+                gsap.set(currentPage, { opacity: 0, y: 0 });
+              },
+            });
+          }
+
+          // White flash rises
+          tl.to(flashOverlay, { opacity: 1, duration: 0.28, ease: "power1.in" }, "-=0.08");
+
+          // Switch page underneath; update progress bar here so it's
+          // hidden under the flash until the reveal below
+          tl.add(() => {
+            if (isWorkflow) _updateProgressBar(pageName);
+            nextPage.classList.add("active");
+            gsap.set(nextPage, { opacity: 0 });
+            nextPage.style.pointerEvents = "auto";
+          });
+
+          // White fades out over ~0.7s — total transition ≈ 1 s
+          tl.to(flashOverlay, { opacity: 0, duration: 0.70, ease: "power2.out" }, "+=0.02");
+          tl.to(nextPage,     { opacity: 1, duration: 0.55, ease: "power1.out" }, "<+=0.08");
+
+          // Reveal the timer together with the page content
+          tl.to(kioskTimerEl, { opacity: 1, duration: 0.25, ease: "power1.out" }, "<+=0.10");
+
+          // Home entrance sequence
+          if (isHome) {
+            tl.add(() => _animateHomeEntrance(), "-=0.30");
+          }
+          return;
+        }
+
+        // All other pages: original fast flash transition
+        flashOverlay.style.background = "#ffffff";
         const tl = gsap.timeline();
+
+        // Hide timer during flash so it doesn't pop in early
+        if (kioskTimerEl) gsap.set(kioskTimerEl, { opacity: 0 });
 
         // 1) Fade out current page
         if (currentPage && currentPage !== nextPage) {
@@ -155,129 +361,49 @@ document.addEventListener("DOMContentLoaded", () => {
         // 2) Flash up
         tl.to(flashOverlay, { opacity: 1, duration: 0.15, ease: "power1.in" }, "-=0.05");
 
-        // 3) Switch page under the flash
+        // 3) Switch page under the flash; update progress bar here too
         tl.add(() => {
+          if (isWorkflow) _updateProgressBar(pageName);
           nextPage.classList.add("active");
           gsap.set(nextPage, { opacity: 0 });
           nextPage.style.pointerEvents = "auto";
         });
 
-        // 4) Flash drops, next page reveals
+        // 4) Flash drops, next page reveals — timer fades in with the page
         tl.to(flashOverlay, { opacity: 0, duration: 0.32, ease: "power2.out" }, "+=0.04");
         tl.to(nextPage,     { opacity: 1, duration: 0.28, ease: "power1.out" }, "<+=0.06");
-
-        // 5) Home entrance sequence
-        if (isHome) {
-          tl.add(() => _animateHomeEntrance(), "-=0.18");
-        }
+        tl.to(kioskTimerEl, { opacity: 1, duration: 0.20, ease: "power1.out" }, "<+=0.06");
       };
     });
 
 
     /* ───────────────────────────────────────────────────────────────────────
-     * 3. HOME SCREEN — floating objects + staged logo then button entrance
+     * 3. HOME SCREEN — 3-card collage entrance animation
      * ─────────────────────────────────────────────────────────────────────── */
 
-    const homePage   = document.getElementById("page-home");
-    const homeCenter = homePage.querySelector(".home-center");
+    const homePage = document.getElementById("page-home");
 
-    // ── 3a. Floating sprite shards ──────────────────────────────────────────
-    const OBJECT_SPRITES = [
-      { x: 6,  y: 8,  s: "9vmin",  o: 0.55, r: -12, color: "#f5a623" },
-      { x: 82, y: 6,  s: "8vmin",  o: 0.45, r: 8,   color: "#e63f3f" },
-      { x: 20, y: 78, s: "11vmin", o: 0.42, r: 6,   color: "#f0c231" },
-      { x: 75, y: 72, s: "13vmin", o: 0.38, r: -5,  color: "#ec4899" },
-      { x: 48, y: 85, s: "7vmin",  o: 0.50, r: 15,  color: "#f5a623" },
-      { x: 88, y: 38, s: "10vmin", o: 0.35, r: -8,  color: "#ec4899" },
-      { x: 10, y: 50, s: "12vmin", o: 0.38, r: 4,   color: "#3b82f6" },
-      { x: 60, y: 10, s: "9vmin",  o: 0.44, r: -4,  color: "#ec4899" },
-    ];
-
-    const floatLayer = document.createElement("div");
-    floatLayer.id    = "home-float-layer";
-    Object.assign(floatLayer.style, {
-      position:      "absolute",
-      inset:         "0",
-      zIndex:        "5",
-      pointerEvents: "none",
-      overflow:      "hidden",
-    });
-    homePage.insertBefore(floatLayer, homeCenter);
-
-    const floatShards = [];
-    OBJECT_SPRITES.forEach((sp, i) => {
-      const el = document.createElement("div");
-      el.className = "home-float-shard";
-      Object.assign(el.style, {
-        position:      "absolute",
-        left:          `${sp.x}%`,
-        top:           `${sp.y}%`,
-        width:         sp.s,
-        height:        sp.s,
-        borderRadius:  "50%",
-        opacity:       "0",
-        transform:     `rotate(${sp.r}deg)`,
-        mixBlendMode:  "multiply",
-        willChange:    "transform, opacity",
-        background:    `radial-gradient(circle, ${sp.color}cc 0%, ${sp.color}44 100%)`,
-      });
-      el.style.backgroundImage = "url('assets/designs/objects.jpg')";
-      el.style.backgroundSize  = "500% 500%";
-      el.style.backgroundPositionX = `${(i % 4) * 33}%`;
-      el.style.backgroundPositionY = `${Math.floor(i / 4) * 50}%`;
-      floatLayer.appendChild(el);
-      floatShards.push(el);
-    });
-
-    // ── 3b. Continuous float loop ───────────────────────────────────────────
-    function _startFloating() {
-      if (reducedMotion) return;
-      floatShards.forEach((el, i) => {
-        gsap.to(el, {
-          y: `+=${6 + (i % 4) * 3}`,
-          x: `+=${4 + (i % 3) * 2}`,
-          rotation: `+=${(i % 2 === 0 ? 1 : -1) * 4}`,
-          duration: 3.5 + i * 0.4,
-          delay: i * 0.3,
-          ease: "sine.inOut",
-          repeat: -1,
-          yoyo: true,
-        });
-      });
-    }
-
-    // ── 3c. Home entrance — logo first, button after ────────────────────────
+    // ── 3a. Home entrance — logo then cards staggered in ───────────────────
     function _animateHomeEntrance() {
       if (reducedMotion) return;
       const tl = gsap.timeline();
 
-      tl.fromTo(floatShards,
-        { opacity: 0, scale: 0.7 },
+      // 3 cards stagger in from below
+      tl.fromTo(".home-card",
+        { opacity: 0, y: 22, scale: 0.96 },
         {
-          opacity: (i) => OBJECT_SPRITES[i]?.o ?? 0.4,
-          scale:   1,
-          stagger: 0.06,
-          duration: 0.65,
-          ease:    "expo.out",
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          stagger: 0.10,
+          duration: 0.50,
+          ease: "expo.out",
         },
-        0
-      );
-
-      tl.fromTo(".home-logo",
-        { opacity: 0, y: 16, scale: 0.96 },
-        { opacity: 1, y: 0,  scale: 1, duration: 0.55, ease: "expo.out" },
-        0.1
-      );
-
-      tl.fromTo(".home-start-btn",
-        { opacity: 0, y: 10, scale: 0.92 },
-        { opacity: 1, y: 0,  scale: 1, duration: 0.45, ease: "back.out(1.8)" },
-        0.55
+        0.15
       );
     }
 
     _animateHomeEntrance();
-    _startFloating();
 
 
     /* ───────────────────────────────────────────────────────────────────────
@@ -322,25 +448,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     /* ───────────────────────────────────────────────────────────────────────
      * 6. PAGE 6 — PRINTING SEQUENCE
-     *    Strip feeds first; status col + QR col slide in after.
+     *    Strip feeds down from the top; QR col slides in from the right.
+     *    printingStatusCol is hidden (display:none) — not animated.
      * ─────────────────────────────────────────────────────────────────────── */
-    const printingFrame    = document.getElementById("printingVideoFrame");
-    const printingStatusCol = document.getElementById("printingStatusCol");
-    const printingQrCol     = document.querySelector(".printing-qr-col");
-    const printPage         = document.getElementById("page-printing");
+    const printingFrame  = document.getElementById("printingVideoFrame");
+    const printingQrCol  = document.querySelector(".printing-qr-col");
+    const printPage      = document.getElementById("page-printing");
 
-    // Reset side cols to hidden whenever printing page is entered
+    // Reset QR col to hidden whenever printing page is entered
     if (printPage) {
       new MutationObserver(() => {
         if (!printPage.classList.contains("active")) return;
-        if (printingStatusCol) gsap.set(printingStatusCol, { opacity: 0, x: -20 });
-        if (printingQrCol)     gsap.set(printingQrCol,     { opacity: 0, x:  20 });
+        if (printingQrCol) gsap.set(printingQrCol, { opacity: 0, x: 20 });
       }).observe(printPage, { attributes: true, attributeFilter: ["class"] });
     }
 
     // Initial hide
-    if (printingStatusCol) gsap.set(printingStatusCol, { opacity: 0, x: -20 });
-    if (printingQrCol)     gsap.set(printingQrCol,     { opacity: 0, x:  20 });
+    if (printingQrCol) gsap.set(printingQrCol, { opacity: 0, x: 20 });
 
     if (printingFrame) {
       new MutationObserver((mutations) => {
@@ -354,8 +478,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function _animatePrinterFeed(el) {
       if (reducedMotion) {
-        if (printingStatusCol) gsap.set(printingStatusCol, { opacity: 1, x: 0 });
-        if (printingQrCol)     gsap.set(printingQrCol,     { opacity: 1, x: 0 });
+        if (printingQrCol) gsap.set(printingQrCol, { opacity: 1, x: 0 });
         return;
       }
 
@@ -383,9 +506,8 @@ document.addEventListener("DOMContentLoaded", () => {
       tl.to(el, { y: "-1.5%", duration: 0.10, ease: "power1.in" });
       tl.to(el, { y:   "0%",  duration: 0.22, ease: "expo.out" });
 
-      // Side columns appear after strip is seated
-      tl.to(printingStatusCol, { opacity: 1, x: 0, duration: 0.42, ease: "expo.out" }, "+=0.12");
-      tl.to(printingQrCol,     { opacity: 1, x: 0, duration: 0.42, ease: "expo.out" }, "-=0.28");
+      // QR col slides in from the right after strip is seated
+      tl.to(printingQrCol, { opacity: 1, x: 0, duration: 0.42, ease: "expo.out" }, "+=0.12");
     }
 
 
@@ -393,10 +515,13 @@ document.addEventListener("DOMContentLoaded", () => {
      * 7. PAGE-SPECIFIC ENTRANCE STAGGER
      * ─────────────────────────────────────────────────────────────────────── */
     const PAGE_ENTRANCES = {
-      "page-lock":   [".lock-logo", ".lock-subtitle", ".lock-field", ".lock-submit-btn"],
-      "page-setup":  [".setup-header", ".preview-panel", ".zoom-controls", ".nav-row"],
-      "page-frame":  [".page-title", ".frame-card", ".quantity-panel"],
-      "page-design": [".page-title", ".design-swatch", ".design-preview-panel"],
+      "page-lock":      [".lock-logo", ".lock-subtitle", ".lock-field", ".lock-submit-btn"],
+      "page-setup":     [".sb-page-header", ".setup-preview-col", ".setup-controls-col"],
+      "page-frame":     [".frame-card", ".quantity-panel"],
+      "page-shooting":  [".shooting-topbar", ".shooting-side-panel", ".shooting-look-text"],
+      "page-selection": [".sb-page-header", ".selection-grid-col", ".selection-preview-col"],
+      "page-design":    [".sb-page-header", ".design-carousel-col", ".design-preview-col"],
+      "page-printing":  [".sb-page-header-printing", ".printing-video-col", ".printing-qr-col"],
     };
 
     Object.entries(PAGE_ENTRANCES).forEach(([pageId, selectors]) => {

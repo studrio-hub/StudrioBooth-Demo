@@ -22,8 +22,12 @@
   --anim-blush:  #FDE68A;
   --anim-orange: #F07B23;
 
-  --accent:      var(--anim-amber);
+  --accent:      #F0C231;
   --accent-dark: #D4880F;
+
+  /* Font vars — mirrors style.css; defined here as fallback if loaded standalone */
+  --font-ui:     'Pretendard', 'PretendardVariable', system-ui, -apple-system, sans-serif;
+  --font-number: 'Hibana', 'Pretendard', system-ui, sans-serif;
 }
 
 
@@ -60,149 +64,23 @@ body {
 }
 
 
-/* ── 3. HOME PAGE — warm radial gradient ─────────────────────────────────── */
-#page-home {
-  background: radial-gradient(
-    ellipse at 48% 44%,
-    #f5a623 0%,
-    #f0c231 22%,
-    #fde68a 46%,
-    #fef3c7 68%,
-    #fffbeb 88%,
-    #ffffff 100%
-  ) !important;
-}
-#page-home .home-logo {
-  filter:
-    drop-shadow(0 0 28px rgba(245, 166, 35, 0.5))
-    drop-shadow(0 2px 10px rgba(0, 0, 0, 0.10));
-}
-.home-start-btn {
-  background:     rgba(255, 255, 255, 0.84) !important;
-  border-color:   rgba(245, 166, 35, 0.38)  !important;
-  box-shadow:
-    0 2px 24px rgba(245, 166, 35, 0.22),
-    0 1px  4px rgba(0,   0,   0,  0.10) !important;
-  font-weight:    700     !important;
-  letter-spacing: 0.04em !important;
-  transition:
-    background 0.2s ease,
-    box-shadow 0.2s ease,
-    transform  0.1s ease !important;
-}
-.home-start-btn:hover {
-  background: rgba(255, 255, 255, 0.97) !important;
-  box-shadow:
-    0 4px 36px rgba(245, 166, 35, 0.32),
-    0 2px  8px rgba(0,   0,   0,  0.12) !important;
-}
+/* ── 3. HOME PAGE — removed; frame page is now the start screen ──────────── */
 
 
-/* ── 4. PAGE 2 — CAMERA SETUP ────────────────────────────────────────────── */
-/*
- * Layout: 4:3 preview fills the column, controls bar sits below.
- * 4:3 = 2974×1984 (Canon DSLR sensor ratio) — width:auto derives from height.
- */
-
+/* ── 4. PAGE 2 — CAMERA MODE (redesigned) ───────────────────────────────── */
+/* Layout is now fully handled in style.css via .setup-main-layout.
+   Override: ensure the page is a flex column */
 #page-setup {
   display:        flex;
   flex-direction: column;
-  gap:            1.4vh;
-  padding:        2.2vh 3vw;
-}
-#page-setup .setup-layout {
-  display:        flex;
-  flex-direction: column;
-  gap:            1.4vh;
-  flex:           1;
-  min-height:     0;
-  margin-top:     0;
-}
-#page-setup .preview-panel {
-  flex:       1;
-  min-height: 0;
-  display:    flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/*
- * 4:3 preview frame.
- * height:100% fills the panel; width:auto lets aspect-ratio constrain it.
- * max-width:100% prevents overflow on very wide panels.
- */
-#page-setup .frame-34 {
-  aspect-ratio: 4 / 3;
-  height:       100%;
-  width:        auto;
-  max-width:    100%;
-  margin:       0 auto;
-}
-
-/* Controls bar: horizontal row */
-#page-setup .status-panel {
-  display:        flex;
-  flex-direction: row;
-  align-items:    center;
-  gap:            1.2vw;
-  overflow-y:     visible;
-  flex-shrink:    0;
-}
-/* Hide the How-It-Works guide — not in this layout */
-#page-setup .status-box {
-  display: none;
-}
-/* Zoom pill stretches to fill available bar space */
-#page-setup .zoom-controls {
-  flex:          1;
-  background:    rgba(255, 255, 255, 0.92);
-  border:        1px solid rgba(245, 166, 35, 0.18);
-  border-radius: var(--radius);
-  backdrop-filter: blur(8px);
-  padding:       1.2vh 1.4vw;
-}
-#page-setup .zoom-label { margin-bottom: 0.7vh; }
-/* Nav buttons sit at the far right of the controls bar */
-#page-setup .nav-row {
-  flex-shrink: 0;
-  gap:         0.8vw;
 }
 
 
 /* ── 5. KIOSK TIMER REPOSITIONING ────────────────────────────────────────── */
 /*
- * #kioskTimer is position:absolute inside #kiosk, shared across pages.
- * Default position (style.css): top:2vh right:3vw — overlaps page title
- * on the Camera Setup page, and overlaps the QR column on the Printing page.
- *
- * animations.js stamps data-active-page="<pageName>" on #kioskTimer
- * whenever goToPage() is called, letting us reposition per page here.
- *
- * Page 2 (setup):
- *   Move to bottom-right so it clears the camera title and the controls bar.
- *   bottom:2.6vh keeps it above the viewport edge; right:3vw matches the
- *   existing horizontal rhythm.
- *
- * Page 6 (printing):
- *   The three columns (status | strip | QR) span the full width.
- *   Move to bottom-left — the only clear zone — away from all columns.
+ * Per the redesign, the timer is centered at the top of each page (within the
+ * sb-page-header). Positioning is fully handled in style.css — no overrides needed here.
  */
-
-/* Page 2 — Camera Setup */
-#kioskTimer[data-active-page="setup"] {
-  top:    auto   !important;
-  bottom: 2.6vh;
-  right:  3vw;
-  left:   auto;
-}
-
-/* Page 6 — Printing / All Done */
-#kioskTimer[data-active-page="printing"] {
-  top:    auto   !important;
-  bottom: 2.6vh;
-  right:  auto;
-  left:   3vw;
-}
 
 
 /* ── 6. PAGE 4 — PHOTO SELECTION ─────────────────────────────────────────── */
@@ -238,23 +116,25 @@ body {
  */
 .photo-card-order-badge {
   position:         absolute;
-  top:              0.6vh;
-  right:            0.6vh;
-  width:            2.6vh;
-  height:           2.6vh;
+  top:              0.7vh;
+  right:            0.7vh;
+  /* +40% from original 2.6vh × 2.6vh */
+  width:            3.64vh;
+  height:           3.64vh;
   border-radius:    50%;
   background:       var(--anim-amber);
   color:            #fff;
-  font-size:        1.35vh;
+  /* +40% from original 1.35vh */
+  font-size:        1.9vh;
   font-weight:      800;
-  font-family:      inherit;
+  font-family:      var(--font-number, inherit);
   display:          flex;
   align-items:      center;
   justify-content:  center;
   z-index:          3;
   pointer-events:   none;
   line-height:      1;
-  box-shadow:       0 1px 8px rgba(245, 166, 35, 0.45);
+  box-shadow:       0 2px 10px rgba(245, 166, 35, 0.55);
 
   /* Hidden by default */
   opacity:   0;
@@ -286,36 +166,38 @@ body {
 .upload-progress-wrap.complete .upload-progress-hint { color: #1c1e21 !important; }
 
 /*
- * QR column: self-contained card.
- * Overrides the style.css padding-top:7vh that pushed content down.
+ * QR column: slim vertical stack — no full-height card background.
+ * The QR card itself (.qr-wrap) is self-contained.
  */
 .printing-qr-col {
-  background:     rgba(255, 255, 255, 0.96);
-  border:         1px solid rgba(245, 166, 35, 0.20);
-  border-radius:  var(--radius);
-  box-shadow:     0 2px 20px rgba(245, 166, 35, 0.10);
-  padding:        2vh 1.6vw !important;
-  gap:            1.2vh;
+  background:     transparent;
+  border:         none;
+  border-radius:  0;
+  box-shadow:     none;
+  padding:        0 !important;
+  gap:            1.4vh;
   justify-content: center;
+  align-items:    center;
 }
 .printing-qr-col .preview-panel-label {
-  font-size:      1.3vh;
+  font-size:      1.2vh;
   font-weight:    700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color:          var(--text-dim);
   text-align:     center;
 }
+/* QR card — neutral border, no amber tint */
 .qr-wrap {
   background:    #ffffff;
-  border:        1px solid rgba(245, 166, 35, 0.18);
-  border-radius: 10px;
-  padding:       1.2vh;
+  border:        1px solid var(--border);
+  border-radius: 14px;
+  padding:       1.4vh 1.2vw;
   width:         100%;
-  box-shadow:    none;
+  box-shadow:    0 2px 12px rgba(0, 0, 0, 0.06);
 }
 .qr-caption {
-  font-size:  1.1vh;
+  font-size:  1.05vh;
   color:      var(--text-dim);
   text-align: center;
 }
@@ -339,42 +221,39 @@ body {
 }
 
 
-/* ── 10. PRIMARY BUTTONS ─────────────────────────────────────────────────── */
+/* ── 10. PRIMARY BUTTONS (NEXT) — solid Studrio yellow, no gradient ─────── */
 .btn-primary:not(:disabled) {
-  background: linear-gradient(
-    135deg,
-    var(--anim-amber) 0%,
-    var(--anim-gold)  100%
-  ) !important;
-  color: #1a1200 !important;
-  box-shadow:
-    0 2px 12px rgba(245, 166, 35, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  background: #F0C231 !important;
+  color:      #1a1200 !important;
+  box-shadow: 0 2px 8px rgba(240, 194, 49, 0.28) !important;
 }
 .btn-primary:not(:disabled):hover {
-  box-shadow:
-    0 4px 22px rgba(245, 166, 35, 0.44),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  background: #d4a800 !important;
+  box-shadow: 0 4px 16px rgba(240, 194, 49, 0.38) !important;
 }
+
+/* ── BACK / btn-outline — white background, yellow border ────────────────── */
+.btn-outline {
+  background:   #ffffff  !important;
+  color:        #1a1200  !important;
+  border:       2px solid #F0C231 !important;
+}
+.btn-outline:hover {
+  background:   #fffbeb  !important;
+  box-shadow:   0 2px 10px rgba(240, 194, 49, 0.22) !important;
+}
+
 .lock-submit-btn {
-  background: linear-gradient(
-    135deg,
-    var(--anim-amber) 0%,
-    var(--anim-gold)  100%
-  ) !important;
-  color: #1a1200 !important;
+  background: #F0C231 !important;
+  color:      #1a1200 !important;
 }
 
 
-/* ── 11. TOGGLE BUTTONS ──────────────────────────────────────────────────── */
+/* ── 11. TOGGLE BUTTONS — solid yellow when active ───────────────────────── */
 .btn-toggle.active {
-  background: linear-gradient(
-    135deg,
-    var(--anim-amber) 0%,
-    var(--anim-gold)  100%
-  ) !important;
+  background:   #F0C231           !important;
   color:        #1a1200           !important;
-  border-color: var(--anim-amber) !important;
+  border-color: #F0C231           !important;
 }
 
 
@@ -410,7 +289,19 @@ body {
 
 
 /* ── 15. KIOSK TIMER RING COLOUR ─────────────────────────────────────────── */
-.kiosk-timer-progress { stroke: var(--anim-amber) !important; }
+/* Per spec: timer circle uses Studrio yellow #F0C231 as the countdown indicator */
+.kiosk-timer-progress { stroke: #F0C231 !important; }
+/* Track ring: light gray */
+.kiosk-timer-track { stroke: #e8eaed !important; }
+/* Timer number: black */
+.kiosk-timer-number { color: #1c1e21 !important; }
+/* Timer background: white card with subtle border */
+.kiosk-timer {
+  background: rgba(255,255,255,0.92);
+  border: 1.5px solid rgba(0,0,0,0.08);
+  border-radius: 50%;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
 
 
 /* ── 16. UPLOAD PROGRESS BAR ─────────────────────────────────────────────── */
