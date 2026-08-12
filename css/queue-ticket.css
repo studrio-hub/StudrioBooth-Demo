@@ -1,0 +1,600 @@
+/*
+ * QUEUE-TICKET.CSS — Studrio Booth QR Ticketing & Queue System
+ * ──────────────────────────────────────────────────────────────────────────────
+ * Styles for:
+ *   • Page 1: QR Ticket Scan (page-ticket) — kiosk home screen
+ *   • Admin Queue Management tab
+ *
+ * Reference canvas: 1920 × 1080 px (16:9 kiosk).
+ * Load AFTER style.css, animations.css, style-redesign.css.
+ */
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 1: QR TICKET SCAN
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#page-ticket {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Header (top ~13% of canvas) ───────────────────────────────────────── */
+.ticket-header {
+  position: absolute;
+  top: 10.65vh;     /* Y ≈ 115 / 1080 */
+  left: 5vw;        /* X ≈ 96 / 1920  */
+  right: 5vw;
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5vw;
+  z-index: 2;
+}
+
+.ticket-scanner-icon {
+  width: 3.75vw;    /* 72 / 1920 */
+  height: auto;
+  margin-top: 0.2vh;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.ticket-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5vh;
+}
+
+.ticket-main-title {
+  font-size: clamp(24px, 2.5vw, 48px);
+  font-weight: 800;
+  color: #1A1200;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+
+.ticket-sub-title {
+  font-size: clamp(14px, 1.5vw, 28px);
+  font-weight: 500;
+  color: rgba(26, 18, 0, 0.55);
+  line-height: 1.2;
+}
+
+/* ── Main body — spans roughly top 48% of canvas ──────────────────────── */
+.ticket-body {
+  position: absolute;
+  top: 22vh;         /* below header */
+  left: 0;
+  right: 0;
+  /* Stop just above the divider (at 50% height) */
+  bottom: 52%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4vw;
+  padding: 0 5vw;
+  z-index: 2;
+}
+
+/* ── Camera feed ─────────────────────────────────────────────────────────
+ * A square box: width matches the available height so it's always square.
+ * Centered in the left half of the body.
+ */
+.ticket-cam-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2vh;
+  flex-shrink: 0;
+}
+
+.ticket-cam-box {
+  /* Square — height of the body region drives the dimension */
+  width:  min(26vh, 22vw);
+  height: min(26vh, 22vw);
+  border-radius: 16px;
+  overflow: hidden;
+  position: relative;
+  background: #0a0a0a;
+  box-shadow: 0 0 0 2px rgba(26,18,0,0.10), 0 8px 32px rgba(0,0,0,0.18);
+}
+
+.ticket-cam-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Corner brackets ─────────────────────────────────────────────────────── */
+.ticket-cam-corners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tcc {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: #F0C231;
+  border-style: solid;
+  border-width: 0;
+}
+
+.tcc-tl { top: 10px; left: 10px;  border-top-width: 3px;    border-left-width: 3px;  border-radius: 4px 0 0 0; }
+.tcc-tr { top: 10px; right: 10px; border-top-width: 3px;    border-right-width: 3px; border-radius: 0 4px 0 0; }
+.tcc-bl { bottom: 10px; left: 10px;  border-bottom-width: 3px; border-left-width: 3px;  border-radius: 0 0 0 4px; }
+.tcc-br { bottom: 10px; right: 10px; border-bottom-width: 3px; border-right-width: 3px; border-radius: 0 0 4px 0; }
+
+/* ── Scanning beam animation ─────────────────────────────────────────────── */
+.ticket-cam-beam {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #F0C231, transparent);
+  top: 10px;
+  animation: camBeamScan 2s ease-in-out infinite;
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(240, 194, 49, 0.6);
+}
+
+@keyframes camBeamScan {
+  0%   { top: 12%; opacity: 0.9; }
+  50%  { top: 84%; opacity: 0.9; }
+  100% { top: 12%; opacity: 0.9; }
+}
+
+.ticket-cam-label {
+  font-size: clamp(11px, 0.75vw, 14px);
+  font-weight: 600;
+  color: rgba(26,18,0,0.4);
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+/* ── Info panel ──────────────────────────────────────────────────────────── */
+.ticket-info-panel {
+  flex: 1;
+  max-width: 36vw;
+  min-height: 22vh;
+  background: rgba(255, 255, 255, 0.88);
+  border: 2px solid rgba(26, 18, 0, 0.08);
+  border-radius: 20px;
+  padding: 2.8vh 2.5vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.6vh;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+  transition: border-color 0.3s, background 0.3s;
+}
+
+/* When camera is hidden (no stream), panel is wider.
+   .ticket-body.no-cam is set by JS when the feed fails to start. */
+.ticket-body.no-cam .ticket-info-panel {
+  max-width: 48vw;
+}
+
+.ticket-info-panel.idle       { border-color: rgba(26,18,0,0.08); }
+.ticket-info-panel.loading    { border-color: #F0C231; }
+.ticket-info-panel.validated  { border-color: #22c55e; background: rgba(240,255,246,0.95); }
+.ticket-info-panel.error      { border-color: #ef4444; background: rgba(255,241,241,0.95); }
+
+/* ── Idle scan prompt ────────────────────────────────────────────────────── */
+.ticket-scan-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2vh;
+}
+
+.ticket-scan-anim {
+  width: clamp(40px, 4vw, 72px);
+  height: auto;
+  opacity: 0.28;
+  animation: scanPulse 2.2s ease-in-out infinite;
+}
+
+@keyframes scanPulse {
+  0%, 100% { opacity: 0.22; transform: scale(1); }
+  50%       { opacity: 0.50; transform: scale(1.06); }
+}
+
+.ticket-scan-hint {
+  font-size: clamp(12px, 0.8vw, 15px);
+  font-weight: 500;
+  color: rgba(26,18,0,0.4);
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ── Hide/show panel children based on state ─────────────────────────────── */
+.ticket-info-panel.idle     .ticket-scan-prompt { display: flex; }
+.ticket-info-panel.loading  .ticket-scan-prompt { display: none; }
+.ticket-info-panel.validated .ticket-scan-prompt { display: none; }
+.ticket-info-panel.error    .ticket-scan-prompt { display: none; }
+
+.ticket-info-panel.loading  .ticket-spinner  { display: block; }
+
+.ticket-info-panel.validated .ticket-details { display: flex; }
+
+.ticket-info-panel.error    .ticket-error-msg { display: block; }
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.ticket-spinner {
+  display: none;
+  width: clamp(28px, 2.5vw, 44px);
+  height: clamp(28px, 2.5vw, 44px);
+  border: 3px solid rgba(26,18,0,0.10);
+  border-top-color: #F0C231;
+  border-radius: 50%;
+  animation: ticketSpin 0.75s linear infinite;
+}
+
+@keyframes ticketSpin { to { transform: rotate(360deg); } }
+
+/* ── Error message ───────────────────────────────────────────────────────── */
+.ticket-error-msg {
+  display: none;
+  font-size: clamp(12px, 0.85vw, 16px);
+  font-weight: 600;
+  color: #b91c1c;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ── Validated ticket details ────────────────────────────────────────────── */
+.ticket-details {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2vh;
+  width: 100%;
+}
+
+.ticket-queue-number {
+  font-size: clamp(52px, 6vw, 108px);
+  font-weight: 900;
+  color: #1A1200;
+  line-height: 1;
+  letter-spacing: -2px;
+}
+
+.ticket-queue-line {
+  font-size: clamp(11px, 0.85vw, 16px);
+  font-weight: 700;
+  color: rgba(26,18,0,0.5);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ticket-copies-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.ticket-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #F0C231;
+  color: #1A1200;
+  font-size: clamp(10px, 0.7vw, 13px);
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 100px;
+  letter-spacing: 0.02em;
+}
+
+.ticket-badge.addon {
+  background: #1A1200;
+  color: #F0C231;
+}
+
+/* ── NEXT button (disabled until validated) ──────────────────────────────── */
+#btnNextFromTicket {
+  background: rgba(26,18,0,0.06) !important;
+  border-color: transparent !important;
+  color: rgba(26,18,0,0.25) !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  transition: all 0.4s ease;
+}
+
+#btnNextFromTicket.activated {
+  /* Inherits sb-btn-next styles (white bg, yellow border) */
+  background: #ffffff !important;
+  border: 2px solid #F0C231 !important;
+  color: #1A1200 !important;
+  cursor: pointer !important;
+  pointer-events: auto;
+  animation: nextActivate 0.55s ease-out;
+}
+
+@keyframes nextActivate {
+  0%   { transform: scale(0.94); box-shadow: 0 0 0 0   rgba(240,194,49,0.45); }
+  55%  { transform: scale(1.04); box-shadow: 0 0 0 10px rgba(240,194,49,0);   }
+  100% { transform: scale(1);    box-shadow: none; }
+}
+
+/* ── Divider line — exactly at 50% height ────────────────────────────────── */
+.ticket-divider {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: rgba(26,18,0,0.09);
+  z-index: 1;
+}
+
+/* ── "Next in-line" — CENTERED below the divider ────────────────────────── */
+.ticket-next-section {
+  position: absolute;
+  top: calc(50% + 2px);         /* just below divider */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.ticket-next-label {
+  font-size: clamp(36px, 4.5vw, 88px);
+  font-weight: 900;
+  color: #1A1200;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  opacity: 0.18;                /* subtle — queue has no next info here */
+  user-select: none;
+}
+
+/* ── Hidden QR input ─────────────────────────────────────────────────────── */
+.ticket-qr-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * ADMIN QUEUE TAB
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+.queue-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+@media (max-width: 1100px) {
+  .queue-layout { grid-template-columns: 1fr; }
+}
+
+.queue-gen-card,
+.queue-active-card {
+  background: #fff;
+  border: 1.5px solid #e8e8e8;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.queue-gen-card { min-width: 0; }
+.queue-active-card { min-height: 400px; }
+
+.queue-gen-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1A1200;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.queue-gen-title::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #F0C231;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.queue-active-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.queue-active-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1A1200;
+  display: flex;
+  align-items: center;
+}
+
+.queue-line-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queue-line-filter select {
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 7px;
+  background: #fff;
+  color: #1A1200;
+  cursor: pointer;
+}
+
+/* ── Ticket items ─────────────────────────────────────────────────────────── */
+.queue-ticket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue-ticket-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1.5px solid #e8e8e8;
+  background: #fafafa;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.queue-ticket-item[data-status="IN_SESSION"] { border-color: #F0C231; background: #fffbee; }
+.queue-ticket-item[data-status="CALLED"]     { border-color: #22c55e; background: #f0fff4; }
+.queue-ticket-item[data-status="ON_HOLD"]    { opacity: 0.75; }
+
+.queue-ticket-num {
+  font-size: 22px;
+  font-weight: 900;
+  min-width: 40px;
+  text-align: center;
+  color: #1A1200;
+  line-height: 1;
+}
+
+.queue-ticket-info    { flex: 1; min-width: 0; }
+.queue-ticket-line-name { font-size: 13px; font-weight: 700; color: #1A1200; }
+.queue-ticket-addons  { font-size: 11px; color: #555; margin-top: 1px; }
+.queue-ticket-meta    { font-size: 10px; color: #bbb; margin-top: 1px; font-family: monospace; }
+
+.queue-ticket-status {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+
+.queue-ticket-status.WAITING    { background: #e8e8e8; color: #555; }
+.queue-ticket-status.CALLED     { background: #d1fae5; color: #065f46; }
+.queue-ticket-status.ON_HOLD    { background: #fef3c7; color: #92400e; }
+.queue-ticket-status.IN_SESSION { background: #fef9c3; color: #78350f; }
+.queue-ticket-status.COMPLETED  { background: #e0e7ff; color: #3730a3; }
+.queue-ticket-status.CANCELLED  { background: #fee2e2; color: #991b1b; }
+
+.queue-ticket-actions { display: flex; gap: 5px; flex-shrink: 0; }
+
+.btn-queue {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-queue-hold    { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+.btn-queue-hold:hover    { background: #fde68a; }
+.btn-queue-restore { background: #d1fae5; border-color: #10b981; color: #065f46; }
+.btn-queue-restore:hover { background: #a7f3d0; }
+.btn-queue-cancel  { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
+.btn-queue-cancel:hover  { background: #fecaca; }
+
+/* ── Call bar ─────────────────────────────────────────────────────────────── */
+.queue-call-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #F0C231;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.queue-call-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(26,18,0,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.queue-call-bar-next {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1A1200;
+  line-height: 1.15;
+}
+
+/* ── Realtime dot ─────────────────────────────────────────────────────────── */
+.queue-conn-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9e9e9e;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.queue-conn-dot.live  { background: #22c55e; }
+.queue-conn-dot.error { background: #ef4444; }
+
+/* ── QR modal ─────────────────────────────────────────────────────────────── */
+.queue-qr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.queue-qr-modal {
+  background: #fff;
+  border-radius: 20px;
+  padding: 32px 36px;
+  text-align: center;
+  max-width: 340px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+}
+
+.queue-qr-modal-number { font-size: 44px; font-weight: 900; color: #1A1200; line-height: 1; margin-bottom: 4px; }
+.queue-qr-modal-line   { font-size: 12px; font-weight: 700; color: rgba(26,18,0,0.45); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 18px; }
+.queue-qr-canvas       { margin: 0 auto 12px; }
+.queue-qr-id           { font-size: 10px; font-family: monospace; color: #bbb; letter-spacing: 0.04em; word-break: break-all; margin-bottom: 16px; }
+.queue-qr-meta         { font-size: 12px; color: #666; line-height: 1.5; margin-bottom: 18px; }
+
+/* ── Empty queue ─────────────────────────────────────────────────────────── */
+.queue-empty {
+  text-align: center;
+  padding: 36px 16px;
+  color: #bbb;
+  font-size: 13px;
+  font-weight: 500;
+}
