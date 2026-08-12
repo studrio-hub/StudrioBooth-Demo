@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../css/admin.css">
+  <link rel="stylesheet" href="../css/queue-ticket.css">
 </head>
 <body>
 
@@ -19,6 +20,7 @@
       <nav class="admin-tabs" id="adminTabs">
         <button class="admin-tab active" data-tab="stats">Overview</button>
         <button class="admin-tab"        data-tab="sessions">Sessions</button>
+        <button class="admin-tab"        data-tab="queue">Queue</button>
         <button class="admin-tab"        data-tab="templates">Templates</button>
         <button class="admin-tab"        data-tab="hardware">Hardware</button>
       </nav>
@@ -85,6 +87,15 @@
         </div>
       </div>
 
+    </section>
+
+    <!-- ── Queue tab ─────────────────────────────────────────────────────── -->
+    <section class="admin-panel" data-panel="queue">
+      <!--
+        Queue Manager injects all its own HTML into #queueSection.
+        admin-queue-manager.js → queueManager.init() fills this container.
+      -->
+      <div id="queueSection"></div>
     </section>
 
     <!-- ── Templates tab ────────────────────────────────────────────────── -->
@@ -221,12 +232,16 @@
 
   <!-- ── Scripts ───────────────────────────────────────────────────────────── -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="../js/cloud-storage.js"></script>
+  <script src="../js/queue-ticket.js"></script>
   <script src="../js/camera-bridge.js"></script>
   <script src="../js/camera-controller.js"></script>
   <script src="../js/print-alignment.js"></script>
   <script src="../js/admin-template-manager.js"></script>
+  <script src="../js/admin-queue-manager.js"></script>
   <script src="../js/admin-dashboard.js"></script>
+  <script src="../js/admin-queue-bridge.js"></script>
 
 </body>
 </html>

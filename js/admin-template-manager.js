@@ -49,6 +49,7 @@ const templateManager = (() => {
 
   let _templates     = [];
   let _dragSrcIndex  = null; // for drag-and-drop reordering
+  let _activeFormat  = "2x6"; // "2x6" | "4x6" — active template tab
 
   // ── Toast (reuse admin-dashboard's toast element) ───────────────────────────
 
@@ -70,23 +71,30 @@ const templateManager = (() => {
   function renderTemplateList(templates) {
     _containerEl.innerHTML = "";
 
-    if (!templates.length) {
+    // Filter to only show templates that have an overlay for the active format.
+    // A template with both 2×6 and 4×6 overlays will appear in both tabs.
+    const filtered = templates.filter((t) => {
+      if (_activeFormat === "2x6") return !!t.overlay_path_2x6;
+      if (_activeFormat === "4x6") return !!t.overlay_path_4x6;
+      return true;
+    });
+
+    if (!filtered.length) {
       _statusEl.hidden = false;
-      _statusEl.textContent = "No templates yet. Click \"Upload Template\" to add one.";
+      _statusEl.textContent = templates.length
+        ? `No ${_activeFormat === "2x6" ? "2×6" : "4×6"} templates yet. Click "Upload Template" to add one.`
+        : "No templates yet. Click \"Upload Template\" to add one.";
       return;
     }
     _statusEl.hidden = true;
 
-    templates.forEach((t, index) => {
+    filtered.forEach((t, index) => {
       const card = document.createElement("div");
       card.className = "template-card" + (t.enabled ? "" : " template-card--disabled");
       card.dataset.id = t.id;
       card.draggable = true;
 
-      const thumbHtml = t.thumbnail_url
-        ? `<img class="template-thumb" src="${t.thumbnail_url}" alt="${t.name}">`
-        : `<div class="template-thumb template-thumb--empty"><span>No thumbnail</span></div>`;
-
+      // No thumbnail shown in cards (thumbnail upload removed)
       const frameTypes = [];
       if (t.overlay_path_2x6) frameTypes.push("2×6");
       if (t.overlay_path_4x6) frameTypes.push("4×6");
@@ -94,7 +102,6 @@ const templateManager = (() => {
 
       card.innerHTML = `
         <div class="template-card-drag-handle" title="Drag to reorder">⠿</div>
-        <div class="template-card-thumb">${thumbHtml}</div>
         <div class="template-card-body">
           <p class="template-card-name" data-field="name">${escapeHtml(t.name)}</p>
           <p class="template-card-meta">${escapeHtml(frameLabel)} · v${t.version || 1}</p>
@@ -110,7 +117,7 @@ const templateManager = (() => {
         </div>
         <div class="template-card-order">
           <button class="btn-order" data-action="move-up" ${index === 0 ? "disabled" : ""}>▲</button>
-          <button class="btn-order" data-action="move-down" ${index === templates.length - 1 ? "disabled" : ""}>▼</button>
+          <button class="btn-order" data-action="move-down" ${index === filtered.length - 1 ? "disabled" : ""}>▼</button>
         </div>
       `;
 
@@ -176,13 +183,14 @@ const templateManager = (() => {
       });
 
       // ── Move Up / Down ──────────────────────────────────────────────────────
+      // Reorder within the filtered (tab-specific) list, then persist all IDs
       card.querySelector('[data-action="move-up"]').addEventListener("click", async () => {
         if (index === 0) return;
-        await swapOrder(index, index - 1);
+        await swapOrderFiltered(filtered, index, index - 1);
       });
       card.querySelector('[data-action="move-down"]').addEventListener("click", async () => {
-        if (index === templates.length - 1) return;
-        await swapOrder(index, index + 1);
+        if (index === filtered.length - 1) return;
+        await swapOrderFiltered(filtered, index, index + 1);
       });
 
       // ── Drag-and-drop reordering ────────────────────────────────────────────
@@ -203,7 +211,7 @@ const templateManager = (() => {
         card.classList.remove("drag-over");
         const targetIndex = index;
         if (_dragSrcIndex === null || _dragSrcIndex === targetIndex) return;
-        await moveToIndex(_dragSrcIndex, targetIndex);
+        await moveToIndexFiltered(filtered, _dragSrcIndex, targetIndex);
         _dragSrcIndex = null;
       });
 
@@ -219,11 +227,39 @@ const templateManager = (() => {
     await saveOrder(copy);
   }
 
+  /*
+   * swapOrderFiltered — swaps two items within a filtered subset of _templates
+   * and persists the full _templates array with updated sort_order values.
+   */
+  async function swapOrderFiltered(filtered, indexA, indexB) {
+    // Swap within the filtered copy
+    const filteredCopy = [...filtered];
+    [filteredCopy[indexA], filteredCopy[indexB]] = [filteredCopy[indexB], filteredCopy[indexA]];
+
+    // Rebuild full _templates list, replacing the filtered items in their
+    // original slots while preserving items that are NOT in the filtered set.
+    const filteredIds   = new Set(filtered.map((t) => t.id));
+    const remaining     = _templates.filter((t) => !filteredIds.has(t.id));
+    const reordered     = [...filteredCopy, ...remaining];
+    await saveOrder(reordered);
+  }
+
   async function moveToIndex(fromIndex, toIndex) {
     const copy = [..._templates];
     const [item] = copy.splice(fromIndex, 1);
     copy.splice(toIndex, 0, item);
     await saveOrder(copy);
+  }
+
+  async function moveToIndexFiltered(filtered, fromIndex, toIndex) {
+    const filteredCopy = [...filtered];
+    const [item] = filteredCopy.splice(fromIndex, 1);
+    filteredCopy.splice(toIndex, 0, item);
+
+    const filteredIds = new Set(filtered.map((t) => t.id));
+    const remaining   = _templates.filter((t) => !filteredIds.has(t.id));
+    const reordered   = [...filteredCopy, ...remaining];
+    await saveOrder(reordered);
   }
 
   async function saveOrder(newOrder) {
@@ -312,18 +348,20 @@ const templateManager = (() => {
     // Clear file inputs (they can't be pre-filled for security reasons)
     const f2El = sel("editTemplateFile2x6");
     const f4El = sel("editTemplateFile4x6");
-    const thEl = sel("editTemplateThumb");
     if (f2El) f2El.value = "";
     if (f4El) f4El.value = "";
-    if (thEl) thEl.value = "";
 
-    // Show what's currently set
+    // Show what's currently set for each format
     const cur2x6El = sel("editCurrent2x6");
     const cur4x6El = sel("editCurrent4x6");
-    const curThEl  = sel("editCurrentThumb");
     if (cur2x6El) cur2x6El.textContent = template.overlay_path_2x6 ? "✓ Existing file" : "None";
     if (cur4x6El) cur4x6El.textContent = template.overlay_path_4x6 ? "✓ Existing file" : "None";
-    if (curThEl)  curThEl.textContent  = template.thumbnail_path    ? "✓ Existing file" : "None";
+
+    // Show only the active format's file field
+    const field2x6 = sel("editField2x6");
+    const field4x6 = sel("editField4x6");
+    if (field2x6) field2x6.style.display = _activeFormat === "2x6" ? "" : "none";
+    if (field4x6) field4x6.style.display = _activeFormat === "4x6" ? "" : "none";
 
     // Reset progress/error state
     const progressEl = sel("editTemplateProgress");
@@ -357,13 +395,12 @@ const templateManager = (() => {
       const typeEl = sel("editTemplateAssetType");
       const f2El   = sel("editTemplateFile2x6");
       const f4El   = sel("editTemplateFile4x6");
-      const thEl   = sel("editTemplateThumb");
 
       const newName     = nameEl ? nameEl.value.trim() : "";
       const newType     = typeEl ? typeEl.value : "";
-      const newFile2x6  = f2El ? (f2El.files[0] || null) : null;
-      const newFile4x6  = f4El ? (f4El.files[0] || null) : null;
-      const newThumb    = thEl ? (thEl.files[0] || null) : null;
+      // Only update the file for the active format tab
+      const newFile2x6  = (_activeFormat === "2x6" && f2El) ? (f2El.files[0] || null) : null;
+      const newFile4x6  = (_activeFormat === "4x6" && f4El) ? (f4El.files[0] || null) : null;
 
       if (!newName) { showToast("Template name cannot be empty."); return; }
 
@@ -407,13 +444,6 @@ const templateManager = (() => {
             newFile4x6, `${storagePrefix}/overlay_4x6.png`, "image/png"
           );
         }
-        if (newThumb) {
-          if (progressEl) progressEl.textContent = "Uploading thumbnail…";
-          updates.thumbnail_path = await adminTemplates._uploadFile(
-            newThumb, `${storagePrefix}/thumbnail.png`, newThumb.type || "image/png"
-          );
-        }
-
         if (progressEl) progressEl.textContent = "Updating database…";
         await adminTemplates.updateTemplate(_editingTemplateId, updates);
 
@@ -428,6 +458,42 @@ const templateManager = (() => {
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = "Save";
+      }
+    });
+  }
+
+  // ── Format tabs (2×6 / 4×6) ────────────────────────────────────────────────
+
+  function wireFormatTabs() {
+    const tabsEl = document.getElementById("templateFormatTabs");
+    if (!tabsEl) return;
+
+    tabsEl.addEventListener("click", (ev) => {
+      const tab = ev.target.closest(".template-format-tab");
+      if (!tab) return;
+
+      const format = tab.dataset.format;
+      if (!format || format === _activeFormat) return;
+
+      _activeFormat = format;
+
+      // Update tab styles
+      tabsEl.querySelectorAll(".template-format-tab").forEach((t) => {
+        t.classList.toggle("active", t.dataset.format === format);
+      });
+
+      // Re-render the template grid with the active format filter
+      renderTemplateList(_templates);
+
+      // Update count label
+      const countEl = document.getElementById("templateCount");
+      if (countEl) {
+        const visible = _templates.filter((t) =>
+          format === "2x6" ? !!t.overlay_path_2x6 : !!t.overlay_path_4x6
+        );
+        countEl.textContent = visible.length
+          ? `${visible.length} template${visible.length !== 1 ? "s" : ""}`
+          : "";
       }
     });
   }
@@ -453,17 +519,25 @@ const templateManager = (() => {
 
     openBtn.addEventListener("click", () => {
       console.log("[templateManager] Upload Template button clicked — opening modal.");
-      const nameEl = sel("templateName");
-      const typeEl = sel("templateAssetType");
-      const f2El   = sel("templateFile2x6");
-      const f4El   = sel("templateFile4x6");
-      const thEl   = sel("templateThumb");
+      const nameEl     = sel("templateName");
+      const typeEl     = sel("templateAssetType");
+      const f2El       = sel("templateFile2x6");
+      const f4El       = sel("templateFile4x6");
+      const titleEl    = sel("templateUploadModalTitle");
+      const field2x6   = sel("uploadField2x6");
+      const field4x6   = sel("uploadField4x6");
+
       if (nameEl) nameEl.value = "";
       if (typeEl) typeEl.value = "frame_template";
       if (f2El)   f2El.value = "";
       if (f4El)   f4El.value = "";
-      if (thEl)   thEl.value = "";
       if (progressEl) { progressEl.textContent = ""; progressEl.hidden = true; }
+
+      // Show only the active format field
+      if (field2x6) field2x6.style.display = _activeFormat === "2x6" ? "" : "none";
+      if (field4x6) field4x6.style.display = _activeFormat === "4x6" ? "" : "none";
+      if (titleEl)  titleEl.textContent = `Upload ${_activeFormat === "2x6" ? "2×6" : "4×6"} Template`;
+
       modal.hidden = false;
     });
 
@@ -472,23 +546,22 @@ const templateManager = (() => {
     submitBtn.addEventListener("click", async () => {
       console.log("[templateManager] Upload submit clicked.");
 
-      let name, assetType, file2x6, file4x6, thumbFile;
+      let name, assetType, file2x6, file4x6;
       try {
         const nameEl = sel("templateName");
         const typeEl = sel("templateAssetType");
         const f2El   = sel("templateFile2x6");
         const f4El   = sel("templateFile4x6");
-        const thEl   = sel("templateThumb");
 
-        if (!nameEl || !typeEl || !f2El || !f4El) {
+        if (!nameEl || !typeEl) {
           throw new Error("Upload form fields not found in the page — try a hard refresh (Ctrl+Shift+R).");
         }
 
         name      = nameEl.value.trim();
         assetType = typeEl.value;
-        file2x6   = f2El.files[0] || null;
-        file4x6   = f4El.files[0] || null;
-        thumbFile = thEl ? (thEl.files[0] || null) : null;
+        // Only read the file field for the active format tab
+        file2x6   = (_activeFormat === "2x6" && f2El) ? (f2El.files[0] || null) : null;
+        file4x6   = (_activeFormat === "4x6" && f4El) ? (f4El.files[0] || null) : null;
       } catch (e) {
         console.error("[templateManager] Could not read upload form:", e);
         showToast(`Could not read upload form: ${e.message}`);
@@ -496,14 +569,18 @@ const templateManager = (() => {
       }
 
       if (!name) { showToast("Please enter a template name."); return; }
-      if (!file2x6 && !file4x6) { showToast("Upload at least one frame file (2×6 or 4×6)."); return; }
+      if (!file2x6 && !file4x6) {
+        showToast(`Please select a ${_activeFormat === "2x6" ? "2×6" : "4×6"} frame PNG file.`);
+        return;
+      }
 
       submitBtn.disabled = true;
       submitBtn.textContent = "Uploading…";
       if (progressEl) { progressEl.hidden = false; progressEl.textContent = "Uploading files…"; }
 
       try {
-        await adminTemplates.uploadTemplate({ name, assetType, file2x6, file4x6, thumbFile });
+        // thumbFile intentionally omitted — thumbnail upload removed
+        await adminTemplates.uploadTemplate({ name, assetType, file2x6, file4x6, thumbFile: null });
         modal.hidden = true;
         showToast(`Template "${name}" uploaded.`);
         await loadTemplates();
@@ -595,23 +672,107 @@ const templateManager = (() => {
   // Filters are stored in localStorage (client-side only, no Supabase table).
   // ════════════════════════════════════════════════════════════════════════════
 
-  const FILTERS_LS_KEY = "studrio_filters";
+  const FILTERS_LS_KEY     = "studrio_filters";
+  const FILTERS_CLOUD_PATH = "filters/filters.json"; // path in Supabase Storage bucket
 
   let _filters = []; // Array of { id, name, fileData (base64), format, opacity }
 
-  function loadFilters() {
-    try {
-      _filters = JSON.parse(localStorage.getItem(FILTERS_LS_KEY) || "[]");
-    } catch (e) {
-      _filters = [];
-    }
-  }
+  // ── localStorage (fast local cache) ─────────────────────────────────────────
 
-  function saveFilters() {
+  function _saveFiltersLocal() {
     try {
       localStorage.setItem(FILTERS_LS_KEY, JSON.stringify(_filters));
     } catch (e) {
-      console.warn("[templateManager] Could not save filters:", e);
+      console.warn("[templateManager] Could not save filters to localStorage:", e);
+    }
+  }
+
+  function _loadFiltersLocal() {
+    try {
+      return JSON.parse(localStorage.getItem(FILTERS_LS_KEY) || "[]");
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // ── Supabase Storage persistence ─────────────────────────────────────────────
+
+  async function saveFiltersToCloud(filters) {
+    const client = adminStorage.getClient();
+    if (!client) throw new Error("Supabase client not available.");
+    const json = JSON.stringify(filters);
+    const blob = new Blob([json], { type: "application/json" });
+    const { error } = await client.storage
+      .from(CLOUD_CONFIG.bucketName)
+      .upload(FILTERS_CLOUD_PATH, blob, { upsert: true, contentType: "application/json" });
+    if (error) throw error;
+    console.log(`[templateManager] ${filters.length} filter(s) saved to Supabase Storage.`);
+  }
+
+  async function loadFiltersFromCloud() {
+    try {
+      const client = adminStorage.getClient();
+      if (!client) throw new Error("Supabase client not available.");
+      const { data } = client.storage
+        .from(CLOUD_CONFIG.bucketName)
+        .getPublicUrl(FILTERS_CLOUD_PATH);
+      const res = await fetch(`${data.publicUrl}?t=${Date.now()}`);
+      if (!res.ok) {
+        if (res.status === 404) return []; // no filters uploaded yet
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const parsed = await res.json();
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.warn("[templateManager] Could not load filters from Supabase:", e.message || e);
+      return null; // null = cloud unavailable
+    }
+  }
+
+  /*
+   * _mergeFilters — merges two filter arrays by id, preferring newer entries.
+   * The local array takes precedence over cloud for items with the same id
+   * (local is always the most recently edited copy).
+   * Items that exist only in cloud are kept.
+   * Items that exist only in local are kept.
+   */
+  function _mergeFilters(cloudFilters, localFilters) {
+    const merged = new Map();
+    // Cloud first (older / authoritative for items not modified locally)
+    (cloudFilters || []).forEach((f) => { if (f && f.id) merged.set(String(f.id), f); });
+    // Local overwrites cloud (local is the freshest copy)
+    (localFilters || []).forEach((f) => { if (f && f.id) merged.set(String(f.id), f); });
+    return Array.from(merged.values());
+  }
+
+  // ── Unified load/save (cloud-first with merge, local fallback) ────────────────
+
+  async function loadFilters() {
+    const cloudFilters  = await loadFiltersFromCloud();
+    const localFilters  = _loadFiltersLocal();
+
+    if (cloudFilters !== null) {
+      // Merge: keep everything from both cloud and local (local wins on conflict)
+      _filters = _mergeFilters(cloudFilters, localFilters);
+      _saveFiltersLocal();
+    } else {
+      // Cloud unavailable — use local cache
+      _filters = localFilters;
+    }
+  }
+
+  /*
+   * saveFilters — persists _filters to localStorage immediately, then awaits
+   * the Supabase upload before returning so callers can confirm it landed.
+   * Fire-and-forget callers can still .catch(() => {}) if they don't need to
+   * wait.
+   */
+  async function saveFilters() {
+    _saveFiltersLocal();
+    try {
+      await saveFiltersToCloud(_filters);
+    } catch (e) {
+      console.warn("[templateManager] Cloud filter save failed (will retry on next sync):", e.message || e);
     }
   }
 
@@ -702,9 +863,18 @@ const templateManager = (() => {
       card.querySelector('[data-action="delete-filter"]').addEventListener("click", () => {
         if (!confirm(`Delete filter "${filter.name}"?`)) return;
         _filters.splice(index, 1);
-        saveFilters();
+        saveFilters(); // saves locally + pushes to Supabase in background
         renderFilterList();
         showToast(`Filter "${filter.name}" deleted.`);
+        // Notify kiosk filter engine
+        document.dispatchEvent(new CustomEvent("studrio:filtersUpdated", { detail: { filters: _filters } }));
+        // Update filter count label
+        const filterCountEl = document.getElementById("filterCount");
+        if (filterCountEl) {
+          filterCountEl.textContent = _filters.length
+            ? `${_filters.length} filter${_filters.length !== 1 ? "s" : ""}`
+            : "";
+        }
       });
 
       grid.appendChild(card);
@@ -770,6 +940,41 @@ const templateManager = (() => {
   }
 
   function wireFilterSection() {
+    // ── Sync Filters button ──────────────────────────────────────────────────
+    const syncBtn = document.getElementById("btnSyncFilters");
+    if (syncBtn) {
+      syncBtn.addEventListener("click", async () => {
+        syncBtn.disabled = true;
+        const orig = syncBtn.textContent;
+        syncBtn.textContent = "Syncing…";
+        try {
+          // 1. Merge cloud + local (loadFilters does the merge internally)
+          await loadFilters();
+
+          // 2. Push the MERGED result back to Supabase so nothing is lost.
+          //    This is the key fix: Sync = merge then re-upload, not replace.
+          await saveFilters();
+
+          renderFilterList();
+
+          // 3. Notify kiosk filter engine so it picks up the merged list
+          document.dispatchEvent(new CustomEvent("studrio:filtersUpdated", { detail: { filters: _filters } }));
+
+          // 4. Optionally trigger kiosk-side asset-sync refresh
+          if (typeof assetSync !== "undefined" && assetSync.forceRefresh) {
+            await assetSync.forceRefresh();
+          }
+
+          showToast(`✓ Filters synced — ${_filters.length} filter${_filters.length !== 1 ? "s" : ""} saved.`, 4000);
+        } catch (e) {
+          showToast(`Sync failed: ${e.message}`);
+        } finally {
+          syncBtn.disabled = false;
+          syncBtn.textContent = orig;
+        }
+      });
+    }
+
     // Upload filter button
     const openBtn   = document.getElementById("btnUploadFilter");
     const modal     = document.getElementById("filterUploadModal");
@@ -810,7 +1015,7 @@ const templateManager = (() => {
       submitBtn.textContent = "Reading…";
 
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const filter = {
           id: `filter_${Date.now()}`,
           name,
@@ -820,14 +1025,35 @@ const templateManager = (() => {
           previewDataUrl: null
         };
         _filters.push(filter);
-        saveFilters();
-        modal.hidden = true;
-        nameEl.value = "";
-        fileEl.value = "";
-        renderFilterList();
-        showToast(`Filter "${name}" uploaded.`);
+
+        // Show "saving" state while the cloud upload completes
+        submitBtn.textContent = "Saving…";
+        try {
+          await saveFilters(); // saves locally AND awaits Supabase upload
+          modal.hidden = true;
+          nameEl.value = "";
+          fileEl.value = "";
+          renderFilterList();
+          showToast(`Filter "${name}" uploaded and synced.`);
+        } catch (e) {
+          // Local save succeeded; cloud failed — still show as uploaded since
+          // the next Sync or background retry will push it.
+          modal.hidden = true;
+          nameEl.value = "";
+          fileEl.value = "";
+          renderFilterList();
+          showToast(`Filter "${name}" saved locally. Cloud sync pending.`);
+        }
+
         // Notify kiosk filter engine
         document.dispatchEvent(new CustomEvent("studrio:filtersUpdated", { detail: { filters: _filters } }));
+        // Update filter count label
+        const filterCountEl = document.getElementById("filterCount");
+        if (filterCountEl) {
+          filterCountEl.textContent = _filters.length
+            ? `${_filters.length} filter${_filters.length !== 1 ? "s" : ""}`
+            : "";
+        }
         submitBtn.disabled = false;
         submitBtn.textContent = "Upload";
       };
@@ -872,6 +1098,12 @@ const templateManager = (() => {
         </div>
       </div>
 
+      <!-- ── Template format tabs ──────────────────────────────────────── -->
+      <div class="template-format-tabs" id="templateFormatTabs">
+        <button class="template-format-tab active" data-format="2x6" type="button">2×6 Templates</button>
+        <button class="template-format-tab" data-format="4x6" type="button">4×6 Templates</button>
+      </div>
+
       <p class="admin-status" id="templateStatus">Loading templates…</p>
       <div class="template-grid" id="templateGrid"></div>
 
@@ -911,7 +1143,8 @@ const templateManager = (() => {
               </select>
             </div>
 
-            <div class="form-field">
+            <!-- Edit modal shows only the relevant format file field based on active tab -->
+            <div class="form-field" id="editField2x6">
               <label for="editTemplateFile2x6">
                 Replace Frame PNG — 2×6 (Long Frame)
                 <span class="edit-current-label" id="editCurrent2x6"></span>
@@ -920,22 +1153,13 @@ const templateManager = (() => {
               <p class="form-hint">Leave blank to keep the existing 2×6 overlay. Upload a <strong>single strip</strong> at 1200×3600px, 600dpi — the kiosk mirrors it into a two-strip print layout automatically.</p>
             </div>
 
-            <div class="form-field">
+            <div class="form-field" id="editField4x6">
               <label for="editTemplateFile4x6">
                 Replace Frame PNG — 4×6 (Wide Frame)
                 <span class="edit-current-label" id="editCurrent4x6"></span>
               </label>
               <input type="file" id="editTemplateFile4x6" accept=".png,image/png">
               <p class="form-hint">Leave blank to keep the existing 4×6 overlay.</p>
-            </div>
-
-            <div class="form-field">
-              <label for="editTemplateThumb">
-                Replace Thumbnail
-                <span class="edit-current-label" id="editCurrentThumb"></span>
-              </label>
-              <input type="file" id="editTemplateThumb" accept=".png,.jpg,.jpeg,image/png,image/jpeg">
-              <p class="form-hint">Leave blank to keep the existing thumbnail.</p>
             </div>
 
             <p class="form-hint template-edit-version-note">
@@ -955,7 +1179,8 @@ const templateManager = (() => {
       <!-- ── Upload modal ───────────────────────────────────────────────── -->
       <div class="admin-modal-overlay" id="templateUploadModal" hidden>
         <div class="admin-modal-box admin-modal-box--wide">
-          <h3 class="admin-modal-title">Upload Template</h3>
+          <!-- Title updates dynamically to show which format is being uploaded -->
+          <h3 class="admin-modal-title" id="templateUploadModalTitle">Upload Template</h3>
 
           <div id="templateUploadForm" class="template-upload-form">
 
@@ -975,22 +1200,18 @@ const templateManager = (() => {
               </select>
             </div>
 
-            <div class="form-field">
+            <!-- 2×6 upload field — shown when 2×6 tab is active -->
+            <div class="form-field" id="uploadField2x6">
               <label for="templateFile2x6">Frame PNG — 2×6 (Long Frame)</label>
               <input type="file" id="templateFile2x6" accept=".png,image/png">
-              <p class="form-hint">Upload a <strong>single strip</strong> at 1200×3600px, 600dpi. The kiosk automatically mirrors it into a two-strip print layout. Leave blank if this design is 4×6 only.</p>
+              <p class="form-hint">Upload a <strong>single strip</strong> at 1200×3600px, 600dpi. The kiosk automatically mirrors it into a two-strip print layout.</p>
             </div>
 
-            <div class="form-field">
+            <!-- 4×6 upload field — shown when 4×6 tab is active -->
+            <div class="form-field" id="uploadField4x6" style="display:none">
               <label for="templateFile4x6">Frame PNG — 4×6 (Wide Frame)</label>
               <input type="file" id="templateFile4x6" accept=".png,image/png">
-              <p class="form-hint">Leave blank if this design is 2×6 only.</p>
-            </div>
-
-            <div class="form-field">
-              <label for="templateThumb">Thumbnail (optional)</label>
-              <input type="file" id="templateThumb" accept=".png,.jpg,.jpeg,image/png,image/jpeg">
-              <p class="form-hint">Small preview shown in the design picker. If omitted, the kiosk composites a thumbnail from the frame file.</p>
+              <p class="form-hint">Upload at 2400×3600px (4×6 format), 600dpi.</p>
             </div>
 
             <p class="template-upload-progress" id="templateUploadProgress" hidden></p>
@@ -1012,9 +1233,12 @@ const templateManager = (() => {
             <h2>Filters</h2>
             <p class="gallery-count" id="filterCount"></p>
           </div>
-          <button class="btn-admin btn-admin-primary btn-sm" id="btnUploadFilter" type="button">+ Upload Filter</button>
+          <div class="template-header-actions">
+            <button class="btn-admin btn-admin-outline btn-sm" id="btnSyncFilters" type="button">↻ Sync Filters</button>
+            <button class="btn-admin btn-admin-primary btn-sm" id="btnUploadFilter" type="button">+ Upload Filter</button>
+          </div>
         </div>
-        <p class="form-hint" style="margin-bottom:1rem;">Upload <code>.lut</code> or <code>.cube</code> colour-grading files. Adjust each filter's strength with the opacity slider. The kiosk applies filters to the guest's photos on the Frame Design page.</p>
+        <p class="form-hint" style="margin-bottom:1rem;">Upload <code>.lut</code> or <code>.cube</code> colour-grading files. Adjust each filter's strength with the opacity slider. Filters are saved to Supabase and sync to the kiosk automatically.</p>
         <p class="admin-status" id="filterStatus">No filters yet.</p>
         <div class="filter-admin-grid" id="filterGrid"></div>
       </div>
@@ -1080,14 +1304,15 @@ const templateManager = (() => {
         console.error("[templateManager] init: #templateGrid or #templateStatus missing after injectHTML — aborting init.");
         return;
       }
+      wireFormatTabs();
       wireUploadModal();
       wireEditModal();
       wireDeleteModal();
       wireSyncButton();
       await loadTemplates();
 
-      // Filter manager
-      loadFilters();
+      // Filter manager — load from cloud (Supabase) first, fall back to localStorage
+      await loadFilters();
       renderFilterList();
       wireFilterSection();
 
