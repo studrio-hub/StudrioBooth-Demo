@@ -1,0 +1,357 @@
+/*
+ * ANIMATIONS.CSS — Studrio Booth animation & palette supplement  (v3)
+ *
+ * Changes in v3:
+ *  - Page 4: .photo-card-order-badge show/hide via CSS transition on .visible
+ *    (badge is rendered by selection.js in innerHTML; GSAP removed from tap flow)
+ *  - Page 2 (Camera Setup): preview enforced as 4:3 (2974×1984 native ratio)
+ *  - Timer repositioning via [data-active-page] attribute stamped by animations.js:
+ *      setup    → bottom-right, below the controls bar, away from page title
+ *      printing → bottom-left, away from all three content columns
+ *      All other pages → default top-right (from style.css)
+ *
+ * Load order: <link rel="stylesheet" href="css/animations.css">
+ *   AFTER style.css, BEFORE print.css
+ */
+
+/* ── 0. PALETTE TOKENS ───────────────────────────────────────────────────── */
+:root {
+  --anim-amber:  #F5A623;
+  --anim-gold:   #F0C231;
+  --anim-cream:  #FEF3C7;
+  --anim-blush:  #FDE68A;
+  --anim-orange: #F07B23;
+
+  --accent:      #F0C231;
+  --accent-dark: #D4880F;
+
+  /* Font vars — mirrors style.css; defined here as fallback if loaded standalone */
+  --font-ui:     'Pretendard', 'PretendardVariable', system-ui, -apple-system, sans-serif;
+  --font-number: 'Hibana', 'Pretendard', system-ui, sans-serif;
+}
+
+
+/* ── 1. GLOBAL: WHITE BACKGROUND ────────────────────────────────────────── */
+#kiosk,
+body {
+  background: #ffffff !important;
+}
+.page {
+  background: #ffffff;
+}
+
+
+/* ── 2. LOGIN PAGE — warm amber gradient ─────────────────────────────────── */
+#page-lock {
+  background: radial-gradient(
+    ellipse at 50% 46%,
+    #f5a623 0%,
+    #f0c231 24%,
+    #fde68a 50%,
+    #fef3c7 72%,
+    #fffbeb 88%,
+    #ffffff 100%
+  ) !important;
+}
+#page-lock .lock-form {
+  background:               rgba(255, 255, 255, 0.82);
+  backdrop-filter:          blur(14px);
+  -webkit-backdrop-filter:  blur(14px);
+  border-radius:            20px;
+  padding:                  2.8vh 2.4vw;
+  border:                   1px solid rgba(245, 166, 35, 0.22);
+  box-shadow:               0 4px 32px rgba(245, 166, 35, 0.14);
+}
+
+
+/* ── 3. HOME PAGE — removed; frame page is now the start screen ──────────── */
+
+
+/* ── 4. PAGE 2 — CAMERA MODE (redesigned) ───────────────────────────────── */
+/* Layout is now fully handled in style.css via .setup-main-layout.
+   Override: ensure the page is a flex column */
+#page-setup {
+  display:        flex;
+  flex-direction: column;
+}
+
+
+/* ── 5. KIOSK TIMER REPOSITIONING ────────────────────────────────────────── */
+/*
+ * Per the redesign, the timer is centered at the top of each page (within the
+ * sb-page-header). Positioning is fully handled in style.css — no overrides needed here.
+ */
+
+
+/* ── 6. PAGE 4 — PHOTO SELECTION ─────────────────────────────────────────── */
+
+/*
+ * Selected state: amber border only — no fill, no shadow.
+ * Border width bumped to 3px so it reads clearly without a background change.
+ */
+.photo-card.selected {
+  border-color: var(--anim-amber) !important;
+  border-width: 3px               !important;
+  background:   transparent       !important;
+  box-shadow:   none              !important;
+}
+
+/*
+ * Hide the original checkmark — selection.js no longer renders it,
+ * but this guard handles any stale render.
+ */
+.photo-card-check {
+  display: none !important;
+}
+
+/*
+ * Order badge — rendered by selection.js inside every .photo-card.
+ *
+ * Default: invisible (opacity:0, scale:0).
+ * When .visible is added by selection.js: springs into view.
+ * When .visible is removed on deselect: reverses automatically.
+ *
+ * No GSAP involved here — pure CSS transition so it survives
+ * selection.js's renderGrid() innerHTML wipe on every tap.
+ */
+.photo-card-order-badge {
+  position:         absolute;
+  top:              0.7vh;
+  right:            0.7vh;
+  /* +40% from original 2.6vh × 2.6vh */
+  width:            3.64vh;
+  height:           3.64vh;
+  border-radius:    50%;
+  background:       var(--anim-amber);
+  color:            #fff;
+  /* +40% from original 1.35vh */
+  font-size:        1.9vh;
+  font-weight:      800;
+  font-family:      var(--font-number, inherit);
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  z-index:          3;
+  pointer-events:   none;
+  line-height:      1;
+  box-shadow:       0 2px 10px rgba(245, 166, 35, 0.55);
+
+  /* Hidden by default */
+  opacity:   0;
+  transform: scale(0);
+  transition:
+    opacity   0.15s ease,
+    transform 0.20s cubic-bezier(0.34, 1.56, 0.64, 1); /* spring pop */
+}
+
+/* .visible toggled by selection.js → badge springs in */
+.photo-card-order-badge.visible {
+  opacity:   1;
+  transform: scale(1);
+}
+/* Deselect: .visible removed → transition reverses automatically */
+
+
+/* ── 7. PAGE 6 — ALL DONE ────────────────────────────────────────────────── */
+
+/* Upload status text: forced black */
+#uploadProgressLabel,
+.print-status-text,
+.print-qty-note,
+.upload-progress-pct,
+.upload-progress-hint {
+  color: #1c1e21 !important;
+}
+.upload-progress-wrap.complete #uploadProgressLabel { color: #1c1e21 !important; }
+.upload-progress-wrap.complete .upload-progress-hint { color: #1c1e21 !important; }
+
+/*
+ * QR column: slim vertical stack — no full-height card background.
+ * The QR card itself (.qr-wrap) is self-contained.
+ */
+.printing-qr-col {
+  background:     transparent;
+  border:         none;
+  border-radius:  0;
+  box-shadow:     none;
+  padding:        0 !important;
+  gap:            1.4vh;
+  justify-content: center;
+  align-items:    center;
+}
+.printing-qr-col .preview-panel-label {
+  font-size:      1.2vh;
+  font-weight:    700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color:          var(--text-dim);
+  text-align:     center;
+}
+/* QR card — neutral border, no amber tint */
+.qr-wrap {
+  background:    #ffffff;
+  border:        1px solid var(--border);
+  border-radius: 14px;
+  padding:       1.4vh 1.2vw;
+  width:         100%;
+  box-shadow:    0 2px 12px rgba(0, 0, 0, 0.06);
+}
+.qr-caption {
+  font-size:  1.05vh;
+  color:      var(--text-dim);
+  text-align: center;
+}
+.qr-uploading-dot { background: var(--anim-amber); }
+
+
+/* ── 8. FLASH OVERLAY ────────────────────────────────────────────────────── */
+#page-flash-overlay {
+  pointer-events: none !important;
+  will-change:    opacity;
+}
+
+
+/* ── 9. BUTTON FILL CLIP ─────────────────────────────────────────────────── */
+.btn,
+.home-start-btn,
+.lock-submit-btn,
+.qty-btn,
+.frame-card {
+  overflow: hidden;
+}
+
+
+/* ── 10. PRIMARY BUTTONS (NEXT) — solid Studrio yellow, no gradient ─────── */
+.btn-primary:not(:disabled) {
+  background: #F0C231 !important;
+  color:      #1a1200 !important;
+  box-shadow: 0 2px 8px rgba(240, 194, 49, 0.28) !important;
+}
+.btn-primary:not(:disabled):hover {
+  background: #d4a800 !important;
+  box-shadow: 0 4px 16px rgba(240, 194, 49, 0.38) !important;
+}
+
+/* ── BACK / btn-outline — white background, yellow border ────────────────── */
+.btn-outline {
+  background:   #ffffff  !important;
+  color:        #1a1200  !important;
+  border:       2px solid #F0C231 !important;
+}
+.btn-outline:hover {
+  background:   #fffbeb  !important;
+  box-shadow:   0 2px 10px rgba(240, 194, 49, 0.22) !important;
+}
+
+.lock-submit-btn {
+  background: #F0C231 !important;
+  color:      #1a1200 !important;
+}
+
+
+/* ── 11. TOGGLE BUTTONS — solid yellow when active ───────────────────────── */
+.btn-toggle.active {
+  background:   #F0C231           !important;
+  color:        #1a1200           !important;
+  border-color: #F0C231           !important;
+}
+
+
+/* ── 12. FRAME CARDS ─────────────────────────────────────────────────────── */
+.frame-card {
+  background:   #ffffff       !important;
+  border-color: var(--border) !important;
+}
+.frame-card.selected {
+  border-color: var(--anim-amber) !important;
+  background:   rgba(254, 243, 199, 0.55) !important;
+  box-shadow:   0 0 0 3px color-mix(in srgb, var(--anim-amber) 16%, transparent) !important;
+}
+
+
+/* ── 13. DESIGN SWATCHES ─────────────────────────────────────────────────── */
+.design-swatch.selected {
+  border-color: var(--anim-amber) !important;
+  box-shadow:   0 0 0 3px color-mix(in srgb, var(--anim-amber) 16%, transparent) !important;
+}
+
+
+/* ── 14. SELECTION COUNTER ───────────────────────────────────────────────── */
+.selection-counter-card   { border-color: var(--anim-amber) !important; }
+.selection-counter-number { color: var(--anim-amber) !important; }
+.selection-counter-card.complete {
+  background: linear-gradient(
+    135deg,
+    var(--anim-amber) 0%,
+    var(--anim-gold)  100%
+  ) !important;
+}
+
+
+/* ── 15. KIOSK TIMER RING COLOUR ─────────────────────────────────────────── */
+/* Per spec: timer circle uses Studrio yellow #F0C231 as the countdown indicator */
+.kiosk-timer-progress { stroke: #F0C231 !important; }
+/* Track ring: light gray */
+.kiosk-timer-track { stroke: #e8eaed !important; }
+/* Timer number: black */
+.kiosk-timer-number { color: #1c1e21 !important; }
+/* Timer background: white card with subtle border */
+.kiosk-timer {
+  background: rgba(255,255,255,0.92);
+  border: 1.5px solid rgba(0,0,0,0.08);
+  border-radius: 50%;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+
+/* ── 16. UPLOAD PROGRESS BAR ─────────────────────────────────────────────── */
+.upload-progress-bar {
+  background: linear-gradient(
+    90deg,
+    var(--anim-orange) 0%,
+    var(--anim-amber)  55%,
+    var(--anim-gold)   100%
+  ) !important;
+}
+.upload-progress-wrap.complete .upload-progress-bar {
+  background: linear-gradient(90deg, #1fae63, #16a05a) !important;
+}
+.upload-progress-wrap.error .upload-progress-bar {
+  background: var(--off) !important;
+}
+
+
+/* ── 17. HOW-IT-WORKS STEP NUMBERS ──────────────────────────────────────── */
+.guide-step-num {
+  background:   rgba(245, 166, 35, 0.12) !important;
+  border-color: rgba(245, 166, 35, 0.28) !important;
+  color:        var(--anim-orange)        !important;
+}
+
+
+/* ── 18. PRINTER VIDEO FRAME ─────────────────────────────────────────────── */
+.printing-video-frame {
+  background:   #f8f8f8       !important;
+  border-color: var(--border) !important;
+  box-shadow:   none          !important;
+}
+
+
+/* ── 19. SCROLL BARS ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: #f4f4f4; border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: rgba(245, 166, 35, 0.30); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(245, 166, 35, 0.55); }
+
+
+/* ── 20. FLOATING HOME SHARDS ────────────────────────────────────────────── */
+.home-float-shard { will-change: transform, opacity; }
+
+
+/* ── 21. REDUCED MOTION ──────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .home-float-shard       { animation: none !important; transition: none !important; }
+  #page-flash-overlay     { display:   none !important; }
+  .btn-fill-layer         { display:   none !important; }
+  .photo-card-order-badge { transition: none !important; }
+}

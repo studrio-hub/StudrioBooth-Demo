@@ -195,7 +195,7 @@
               <output id="alignScaleVal">100</output>
             </div>
             <input type="range" id="alignScale" min="80" max="100" step="1" value="100">
-            <p class="form-hint">%</p>
+            <p class="form-hint">% — shrinks the image inside the 4×6 canvas</p>
           </div>
 
           <div class="alignment-control">
@@ -203,8 +203,10 @@
               <label for="alignX">Horizontal offset</label>
               <output id="alignXVal">0</output>
             </div>
-            <input type="range" id="alignX" min="-200" max="200" step="1" value="0">
-            <p class="form-hint">px</p>
+            <!-- Range in millimetres matching compositeForPrint's PX_PER_MM math.
+                 ±15 mm = ±354 px at 600 dpi — enough for any physical alignment issue. -->
+            <input type="range" id="alignX" min="-15" max="15" step="0.5" value="0">
+            <p class="form-hint">mm — negative shifts left, positive shifts right</p>
           </div>
 
           <div class="alignment-control">
@@ -212,15 +214,24 @@
               <label for="alignY">Vertical offset</label>
               <output id="alignYVal">0</output>
             </div>
-            <input type="range" id="alignY" min="-200" max="200" step="1" value="0">
-            <p class="form-hint">px</p>
+            <input type="range" id="alignY" min="-15" max="15" step="0.5" value="0">
+            <p class="form-hint">mm — negative shifts up, positive shifts down</p>
           </div>
         </div>
 
         <div class="printer-actions-row">
+          <button class="btn-admin btn-admin-ghost" id="btnResetAlignment">Reset to defaults</button>
           <button class="btn-admin btn-admin-outline" id="btnSaveAlignment">Save alignment</button>
           <button class="btn-admin btn-admin-primary" id="btnTestPrint">Test Print</button>
         </div>
+        <p class="form-hint" style="margin-top:6px;">
+          <strong>Still seeing a border at scale 100%, offset 0?</strong>
+          That border comes from the printer driver's minimum non-printable area,
+          not from this software. Open <em>Printer Preferences</em> above,
+          set the paper type to <strong>Borderless</strong> or <strong>4×6 Full Bleed</strong>,
+          and disable any driver-side scaling or auto-fit. Then use the offset sliders
+          to fine-tune position if needed.
+        </p>
       </div>
 
     </section>

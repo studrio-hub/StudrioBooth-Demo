@@ -13,6 +13,192 @@
  * Gallery URL format: https://studrio.cc/g/#<sessionId>
  */
 
+/* ===========================================================
+ * OFFLINE UPLOAD QUEUE
+ *
+ * When an upload fails (no internet / Supabase unreachable), the full
+ * session blob is saved to a local IndexedDB queue ("studrioQueue").
+ * A background retry loop checks connectivity every 15 s and drains
+ * the queue automatically once the connection returns.
+ *
+ * Public API (auto-starts on load):
+ *   offlineQueue.enqueue(sessionData)   — called by cloudStorage.saveSession()
+ *   offlineQueue.status()               — { pending: N }
+ * =========================================================== */
+const offlineQueue = (() => {
+  const DB_NAME    = "studrioQueue";
+  const DB_VERSION = 1;
+  const STORE      = "sessions";
+  const RETRY_MS   = 15_000;
+
+  let _db   = null;
+  let _loop = null;
+
+  // ── IndexedDB helpers ──────────────────────────────────────────────────────
+  function _openDB() {
+    if (_db) return Promise.resolve(_db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE)) {
+          db.createObjectStore(STORE, { keyPath: "id" });
+        }
+      };
+      req.onsuccess  = (e) => { _db = e.target.result; resolve(_db); };
+      req.onerror    = (e) => reject(e.target.error);
+    });
+  }
+
+  async function _put(record) {
+    const db  = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE, "readwrite");
+      const st  = tx.objectStore(STORE);
+      const req = st.put(record);
+      req.onsuccess = () => resolve();
+      req.onerror   = (e) => reject(e.target.error);
+    });
+  }
+
+  async function _getAll() {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE, "readonly");
+      const st  = tx.objectStore(STORE);
+      const req = st.getAll();
+      req.onsuccess = (e) => resolve(e.target.result || []);
+      req.onerror   = (e) => reject(e.target.error);
+    });
+  }
+
+  async function _delete(id) {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE, "readwrite");
+      const st  = tx.objectStore(STORE);
+      const req = st.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror   = (e) => reject(e.target.error);
+    });
+  }
+
+  // ── Blob serialization (IDB can't store Blob URLs, store actual bytes) ─────
+  async function _serializeSession(sessionData) {
+    async function blobToBase64(blob) {
+      if (!blob) return null;
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve({ b64: reader.result.split(",")[1], type: blob.type });
+        reader.onerror = () => reject(new Error("FileReader failed"));
+        reader.readAsDataURL(blob);
+      });
+    }
+    return {
+      id:         sessionData.id,
+      frameType:  sessionData.frameType,
+      design:     sessionData.design,
+      enqueuedAt: Date.now(),
+      finalStripPng:   await blobToBase64(sessionData.finalStripPng),
+      finalStripVideo: await blobToBase64(sessionData.finalStripVideo),
+      printReadyPng:   await blobToBase64(sessionData.printReadyPng)
+    };
+  }
+
+  function _deserializeSession(record) {
+    function b64ToBlob(entry) {
+      if (!entry) return null;
+      const bytes = atob(entry.b64);
+      const arr = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      return new Blob([arr], { type: entry.type });
+    }
+    return {
+      id:              record.id,
+      frameType:       record.frameType,
+      design:          record.design,
+      finalStripPng:   b64ToBlob(record.finalStripPng),
+      finalStripVideo: b64ToBlob(record.finalStripVideo),
+      printReadyPng:   b64ToBlob(record.printReadyPng)
+    };
+  }
+
+  // ── Online detection ───────────────────────────────────────────────────────
+  async function _isOnline() {
+    if (!navigator.onLine) return false;
+    // Ping Supabase health endpoint (zero-byte HEAD is cheapest)
+    try {
+      const res = await fetch(
+        `${CLOUD_CONFIG.supabaseUrl}/rest/v1/`,
+        { method: "HEAD", signal: AbortSignal.timeout(5000) }
+      );
+      return res.ok || res.status < 500;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ── Retry loop ─────────────────────────────────────────────────────────────
+  async function _drain() {
+    let items;
+    try { items = await _getAll(); } catch (e) { return; }
+    if (!items.length) return;
+
+    const online = await _isOnline();
+    if (!online) return;
+
+    console.info(`[offlineQueue] Connection restored — retrying ${items.length} queued session(s).`);
+
+    for (const record of items) {
+      try {
+        const sessionData = _deserializeSession(record);
+        // Call _saveSessionOnce directly — NOT saveSession() — to avoid
+        // re-enqueuing the session if a transient error occurs mid-retry.
+        // _saveSessionOnce treats "already exists" errors as success, so
+        // partial uploads from the original session are handled gracefully.
+        await cloudStorage._saveSessionOnce(sessionData);
+        await _delete(record.id);
+        console.info(`[offlineQueue] ✓ session ${record.id} uploaded and removed from queue.`);
+      } catch (err) {
+        console.warn(`[offlineQueue] Retry failed for ${record.id}:`, err.message || err);
+        // Leave it in the queue; try again next interval
+      }
+    }
+  }
+
+  function _startLoop() {
+    if (_loop) return;
+    _loop = setInterval(_drain, RETRY_MS);
+    // Also try immediately when coming back online
+    window.addEventListener("online", _drain);
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+  async function enqueue(sessionData) {
+    try {
+      const record = await _serializeSession(sessionData);
+      await _put(record);
+      console.info(`[offlineQueue] Session ${sessionData.id} saved to offline queue (${await _getAll().then(a => a.length)} pending).`);
+    } catch (err) {
+      console.error("[offlineQueue] Could not save to IndexedDB:", err.message || err);
+    }
+  }
+
+  async function status() {
+    try {
+      const all = await _getAll();
+      return { pending: all.length };
+    } catch (_) {
+      return { pending: 0 };
+    }
+  }
+
+  // Auto-start the retry loop as soon as the module loads
+  _startLoop();
+
+  return { enqueue, status };
+})();
+
 const CLOUD_CONFIG = {
   enabled: true,
   supabaseUrl: "https://oismyjlhnlfavrdfvabg.supabase.co",
@@ -37,6 +223,31 @@ function videoExtensionFor(blob) {
   return blob && blob.type && blob.type.includes("mp4") ? "mp4" : "webm";
 }
 
+/*
+ * _isAlreadyExistsError — returns true for Supabase Storage / PostgREST
+ * errors that mean "this resource was already uploaded".
+ *
+ * Supabase Storage surfaces this as:
+ *   { statusCode: "23505", error: "Duplicate", message: "The resource already exists" }
+ * PostgREST (DB insert) surfaces it as:
+ *   { code: "23505", message: "duplicate key value violates unique constraint …" }
+ *
+ * Treating these as success in the offline-retry path prevents infinite loops
+ * when reconnecting after a session that was already partially uploaded before
+ * the connection dropped.
+ */
+function _isAlreadyExistsError(err) {
+  if (!err) return false;
+  const code    = String(err.code    || err.statusCode || "");
+  const message = String(err.message || err.error      || "").toLowerCase();
+  return (
+    code === "23505" ||
+    message.includes("already exists") ||
+    message.includes("duplicate key") ||
+    message.includes("duplicate")
+  );
+}
+
 const cloudStorage = {
   isAvailable() {
     return CLOUD_CONFIG.enabled && typeof supabase !== "undefined"
@@ -48,16 +259,34 @@ const cloudStorage = {
     // upsert is intentionally false — every session has a unique ID so paths
     // are never reused. upsert:true internally requires UPDATE permission on
     // storage.objects which the anon role does not have.
+    //
+    // "The resource already exists" (Supabase error code "23505" or message
+    // containing "already exists") means the file was uploaded successfully
+    // during the original attempt before the connection dropped. In that case
+    // the queued retry should treat it as done and just return the public URL
+    // — NOT throw and loop forever.
     const { error } = await client.storage.from(CLOUD_CONFIG.bucketName).upload(path, blob, {
       upsert: false,
       contentType: blob.type || "application/octet-stream"
     });
-    if (error) throw error;
+    if (error && !_isAlreadyExistsError(error)) throw error;
     const { data } = client.storage.from(CLOUD_CONFIG.bucketName).getPublicUrl(path);
     return data.publicUrl;
   },
 
   async saveSession(sessionData) {
+    // ── Offline guard: if upload throws, enqueue and return gracefully ────────
+    // The actual upload attempt is wrapped below; on catch we hand off to the
+    // offline queue so the booth can keep running without interruption.
+    return this._saveSessionOnce(sessionData).catch(async (err) => {
+      console.warn("[cloudStorage] Upload failed — queuing for retry:", err.message || err);
+      await offlineQueue.enqueue(sessionData);
+      // Propagate so qr.js can show the "Upload unavailable" fallback QR
+      throw err;
+    });
+  },
+
+  async _saveSessionOnce(sessionData) {
     const finalStripUrl = sessionData.finalStripPng
       ? await this.uploadBlob(sessionData.finalStripPng, `sessions/${sessionData.id}/strip.png`)
       : null;
@@ -93,7 +322,12 @@ const cloudStorage = {
         final_strip_video_url: finalStripVideoUrl,
         print_ready_url: printReadyUrl
       });
-      if (error) throw error;
+      // 23505 = unique_violation: row was already inserted on the first
+      // (partial) attempt before the connection dropped — safe to ignore.
+      if (error && !_isAlreadyExistsError(error)) throw error;
+      if (error && _isAlreadyExistsError(error)) {
+        console.info("[cloudStorage] sessions row already exists — skipping insert (idempotent retry).");
+      }
     } catch (e) {
       console.error("[cloudStorage] Could not mirror session into sessions table:", e.message || e);
     }
@@ -413,3 +647,118 @@ const adminTemplates = {
     if (deleteError) throw deleteError;
   }
 };
+
+/* ===========================================================
+ * TEMPLATE & FILTER OFFLINE CACHE
+ *
+ * Persists the last successfully synced template list (and any
+ * custom filter list) to IndexedDB so the kiosk can boot and
+ * operate fully offline using cached data.
+ *
+ * Used by asset-sync.js:
+ *   await templateCache.saveTemplates(templateRows)
+ *   const rows = await templateCache.loadTemplates()   // null if never saved
+ *   await templateCache.saveFilters(filterRows)
+ *   const filters = await templateCache.loadFilters()  // null if never saved
+ *
+ * The cache is keyed by simple string keys ("templates", "filters")
+ * in the "studrioAssets" IDB store, separate from the session queue.
+ * =========================================================== */
+const templateCache = (() => {
+  const DB_NAME    = "studrioAssets";
+  const DB_VERSION = 1;
+  const STORE      = "cache";
+
+  let _db = null;
+
+  function _openDB() {
+    if (_db) return Promise.resolve(_db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE)) {
+          db.createObjectStore(STORE, { keyPath: "key" });
+        }
+      };
+      req.onsuccess = (e) => { _db = e.target.result; resolve(_db); };
+      req.onerror   = (e) => reject(e.target.error);
+    });
+  }
+
+  async function _set(key, value) {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE, "readwrite");
+      const st  = tx.objectStore(STORE);
+      const req = st.put({ key, value, savedAt: Date.now() });
+      req.onsuccess = () => resolve();
+      req.onerror   = (e) => reject(e.target.error);
+    });
+  }
+
+  async function _get(key) {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE, "readonly");
+      const st  = tx.objectStore(STORE);
+      const req = st.get(key);
+      req.onsuccess = (e) => resolve(e.target.result ? e.target.result.value : null);
+      req.onerror   = (e) => reject(e.target.error);
+    });
+  }
+
+  return {
+    /*
+     * Persist the full template list returned by Supabase after a
+     * successful sync. Call this inside asset-sync.js after fetching.
+     */
+    async saveTemplates(rows) {
+      try {
+        await _set("templates", rows);
+        console.info(`[templateCache] Saved ${rows.length} template(s) to local cache.`);
+      } catch (err) {
+        console.warn("[templateCache] Could not save templates:", err.message || err);
+      }
+    },
+
+    /*
+     * Load the last cached template list.
+     * Returns the array, or null if the cache is empty (first ever run).
+     */
+    async loadTemplates() {
+      try {
+        return await _get("templates");
+      } catch (err) {
+        console.warn("[templateCache] Could not load templates:", err.message || err);
+        return null;
+      }
+    },
+
+    /*
+     * Persist the active filter list (custom filters from admin panel,
+     * or the built-in defaults if the admin hasn't configured any).
+     */
+    async saveFilters(rows) {
+      try {
+        await _set("filters", rows);
+        console.info(`[templateCache] Saved ${rows.length} filter(s) to local cache.`);
+      } catch (err) {
+        console.warn("[templateCache] Could not save filters:", err.message || err);
+      }
+    },
+
+    /*
+     * Load the last cached filter list.
+     * Returns the array, or null if the cache is empty.
+     */
+    async loadFilters() {
+      try {
+        return await _get("filters");
+      } catch (err) {
+        console.warn("[templateCache] Could not load filters:", err.message || err);
+        return null;
+      }
+    }
+  };
+})();

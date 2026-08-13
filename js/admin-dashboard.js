@@ -141,13 +141,35 @@
       await window.electronAPI.openPrinterPreferences(printer);
     });
 
-    // Alignment Save
+    // Alignment Reset — clears both storage keys and snaps sliders back to defaults.
+    // Use this when stale values from an old version (which stored offsets in px
+    // instead of mm) are causing unexpected borders.
+    document.getElementById('btnResetAlignment')?.addEventListener('click', () => {
+      const defaults = printAlignment.resetPrefs();
+      // Also clear the legacy key in case it holds a stale px value
+      localStorage.removeItem('studrio_print_alignment');
+
+      const scaleEl = document.getElementById('alignScale');
+      const xEl     = document.getElementById('alignX');
+      const yEl     = document.getElementById('alignY');
+      if (scaleEl) { scaleEl.value = defaults.scale;   document.getElementById('alignScaleVal').textContent = defaults.scale; }
+      if (xEl)     { xEl.value     = defaults.offsetX; document.getElementById('alignXVal').textContent    = defaults.offsetX; }
+      if (yEl)     { yEl.value     = defaults.offsetY; document.getElementById('alignYVal').textContent    = defaults.offsetY; }
+
+      showToast('Alignment reset to defaults (scale 100%, offsets 0 mm)');
+    });
+
+    // Alignment Save — writes to the canonical key ('studrio_printer_prefs') that
+    // printAlignment.loadPrefs() reads, so kiosk prints and admin test prints use
+    // the same values. The legacy 'studrio_print_alignment' key is also updated so
+    // any in-flight admin panel tabs that read it see consistent values.
     document.getElementById('btnSaveAlignment')?.addEventListener('click', () => {
-      const config = {
-        scale: parseInt(document.getElementById('alignScale').value),
-        offsetX: parseInt(document.getElementById('alignX').value),
-        offsetY: parseInt(document.getElementById('alignY').value)
-      };
+      const config = printAlignment.savePrefs({
+        scale:   parseInt(document.getElementById('alignScale').value,  10),
+        offsetX: parseFloat(document.getElementById('alignX').value),
+        offsetY: parseFloat(document.getElementById('alignY').value)
+      });
+      // Keep the legacy key in sync for any code that still reads it.
       localStorage.setItem('studrio_print_alignment', JSON.stringify(config));
       showToast('Alignment saved');
     });
@@ -267,25 +289,29 @@
       }
     });
 
-    // Load saved alignment
-    const savedAlign = localStorage.getItem('studrio_print_alignment');
-    if (savedAlign) {
-      try {
-        const config = JSON.parse(savedAlign);
-        if (config.scale) {
-          document.getElementById('alignScale').value = config.scale;
-          document.getElementById('alignScaleVal').textContent = config.scale;
-        }
-        if (config.offsetX !== undefined) {
-          document.getElementById('alignX').value = config.offsetX;
-          document.getElementById('alignXVal').textContent = config.offsetX;
-        }
-        if (config.offsetY !== undefined) {
-          document.getElementById('alignY').value = config.offsetY;
-          document.getElementById('alignYVal').textContent = config.offsetY;
-        }
-      } catch(e) {}
-    }
+    // Load saved alignment — read via printAlignment.loadPrefs() so the same
+    // merge logic (canonical key + legacy key) applies here as in the print path.
+    // This guarantees the sliders always reflect exactly what the next print job
+    // will use, with no key-mismatch surprises.
+    const savedPrefs = printAlignment.loadPrefs();
+    (function applySavedPrefs(config) {
+      if (!config) return;
+      const scaleEl = document.getElementById('alignScale');
+      const xEl     = document.getElementById('alignX');
+      const yEl     = document.getElementById('alignY');
+      if (scaleEl) {
+        scaleEl.value = config.scale;
+        document.getElementById('alignScaleVal').textContent = config.scale;
+      }
+      if (xEl) {
+        xEl.value = config.offsetX;
+        document.getElementById('alignXVal').textContent = config.offsetX;
+      }
+      if (yEl) {
+        yEl.value = config.offsetY;
+        document.getElementById('alignYVal').textContent = config.offsetY;
+      }
+    })(savedPrefs);
   }
 
   async function checkHardware() {
@@ -594,26 +620,25 @@
   async function handlePrint(session) {
     if (!session.print_ready_url) { showToast("No print-ready file.", 'error'); return; }
     try {
-      const printer = state.selectedPrinter;
-      if (!printer) { showToast("Select a printer in the Hardware tab first.", 'error'); return; }
-      
+      if (!state.selectedPrinter) {
+        showToast("Select a printer in the Hardware tab first.", 'error');
+        return;
+      }
+
       showToast("Sending to printer...");
-      
-      const align = JSON.parse(localStorage.getItem('studrio_print_alignment') || '{}');
-      
-      const result = await window.electronAPI.printSilent({
-        filePath: session.print_ready_url,
-        printerName: printer,
-        settings: {
-          scale: align.scale || 100,
-          offsetX: align.offsetX || 0,
-          offsetY: align.offsetY || 0
-        }
-      });
-      
-      if (result.success) showToast("Print successful!");
-      else showToast(`Print failed: ${result.error}`, 'error');
+
+      // Use printAlignment.sendPrintJob() — the same path the kiosk uses at
+      // print time. This ensures:
+      //   1. Scale + offset are composited onto a 2400×3600 canvas (alignment
+      //      is baked into pixels, not left to the driver to interpret).
+      //   2. Borderless 4×6 page-size settings are passed to Electron.
+      //   3. The saved printer name is read from the canonical localStorage key.
+      const prefs = printAlignment.loadPrefs();
+      await printAlignment.sendPrintJob(session.print_ready_url, 1, prefs);
+
+      showToast("Print successful!");
     } catch (e) {
+      console.error("[Admin] Print failed:", e);
       showToast(`Print error: ${e.message}`, 'error');
     }
   }

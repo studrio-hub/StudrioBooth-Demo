@@ -380,6 +380,38 @@ a { color: inherit; }
 }
 .session-checkbox { width: 16px; height: 16px; accent-color: var(--accent-dark); cursor: pointer; }
 
+/* ── Template format tabs (2×6 / 4×6) ───────────────────────────────────── */
+.template-format-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0;
+}
+
+.template-format-tab {
+  padding: 7px 20px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.template-format-tab:hover {
+  color: var(--text);
+}
+
+.template-format-tab.active {
+  color: var(--studrio-yellow, #F0C231);
+  border-bottom-color: var(--studrio-yellow, #F0C231);
+}
+
 /* ── Templates: grid ─────────────────────────────────────────────────────── */
 .template-grid {
   display: grid;
@@ -1015,7 +1047,9 @@ a { color: inherit; }
   color: var(--text-dim);
 }
 .form-group select,
-.form-group input[type="text"] {
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="email"] {
   background: var(--panel-light);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1024,10 +1058,29 @@ a { color: inherit; }
   color: var(--text);
 }
 .form-group select:focus,
-.form-group input[type="text"]:focus {
+.form-group input[type="text"]:focus,
+.form-group input[type="number"]:focus,
+.form-group input[type="email"]:focus {
   outline: none;
   border-color: var(--accent);
 }
+
+/* Generic admin input (used outside .form-group, e.g. queue manager) */
+.admin-input {
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  color: var(--text);
+  width: 100%;
+  font-family: inherit;
+}
+.admin-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.admin-input::placeholder { color: var(--text-dim); }
 
 /* Three-column alignment slider grid */
 .alignment-grid {

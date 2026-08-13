@@ -1,0 +1,1181 @@
+/*
+ * STYLE-REDESIGN.CSS — Studrio Booth Pages 2–6 UI Redesign
+ *
+ * Load AFTER style.css and animations.css.
+ * Overrides and extends layout, typography, and animation for Pages 2–6.
+ *
+ * Reference canvas: 1920 × 1080 (16:9).
+ * All pixel values are expressed in vh/vw relative to the 1920×1080 kiosk
+ * container so they scale correctly on any display.
+ *
+ * Design language:
+ *   – Square-grid background on all workflow pages (Pages 2–6)
+ *   – Studrio yellow (#F0C231 / #FFDD66) + white
+ *   – NEXT button: gradient #fffbee → #ffdd66, radius 25px 0 25px 0
+ *   – No progress bar, no BACK buttons on Pages 2–6
+ *   – Timer: continuously spinning gray track + gray countdown stroke
+ */
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 0. DESIGN TOKENS
+ * ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --studrio-yellow:   #F0C231;
+  --studrio-yellow-2: #FFDD66;
+  --studrio-cream:    #FFFBEE;
+  --studrio-black:    #1A1200;
+
+  /* Grid background */
+  --grid-size:        40px;
+  --grid-color:       rgba(0, 0, 0, 0.055);
+
+  /* NEXT button gradient */
+  --next-grad-start:  #fffbee;
+  --next-grad-end:    #ffdd66;
+  --next-radius:      25px 0px 25px 0px;
+
+  /* Kiosk timer: light track + Studrio yellow stroke */
+  --timer-track-color:    #e0e0e0;
+  --timer-stroke-color:   #F0C231;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 1. HIDE PROGRESS BAR ON ALL WORKFLOW PAGES (Pages 2–6)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* Hide the progress bar on every workflow page as per spec */
+#kiosk-progress[data-active-page="setup"],
+#kiosk-progress[data-active-page="frame"],
+#kiosk-progress[data-active-page="shooting"],
+#kiosk-progress[data-active-page="selection"],
+#kiosk-progress[data-active-page="design"],
+#kiosk-progress[data-active-page="printing"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Remove top-padding clearance that was reserved for the progress bar */
+#page-setup,
+#page-frame,
+#page-shooting,
+#page-selection,
+#page-design,
+#page-printing {
+  padding-top: 2.8vh !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 2. SQUARE GRID BACKGROUND (Pages 2–6)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#page-setup,
+#page-frame,
+#page-shooting,
+#page-selection,
+#page-design,
+#page-printing {
+  background-color: #ffffff !important;
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px) !important;
+  background-size: var(--grid-size) var(--grid-size) !important;
+  background-position: top left !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 3. KIOSK TIMER — CONTINUOUSLY SPINNING + GRAY COLORS
+ *    Timer ring spins independently of stroke-dashoffset countdown.
+ *    The SVG ring element rotates; the progress arc counts down.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* Override timer track and progress stroke to gray */
+.kiosk-timer-track {
+  stroke: var(--timer-track-color) !important;
+}
+.kiosk-timer-progress {
+  stroke: var(--timer-stroke-color) !important;
+}
+
+/* The entire SVG (ring + arc) spins continuously */
+.kiosk-timer-ring {
+  animation: timerRingSpin 4s linear infinite;
+  transform-origin: center center;
+}
+
+@keyframes timerRingSpin {
+  from { transform: rotate(-90deg); }   /* start at 12 o'clock */
+  to   { transform: rotate(270deg); }   /* full 360° rotation   */
+}
+
+/* Timer centered at top on Pages 4, 5; right-side on Pages 2, 3 */
+.kiosk-timer[data-active-page="selection"],
+.kiosk-timer[data-active-page="design"] {
+  /* Centered at top: X=909/1920 ≈ 47.3vw, size 100px → 5.2vw */
+  top:   2.8vh !important;
+  left:  calc(50% - 2.6vw) !important;
+  right: auto !important;
+  bottom: auto !important;
+  width:  5.2vw !important;
+  height: 5.2vw !important;
+}
+
+/* Page 2 (Camera Mode): top-center, matching Pages 4 & 5 */
+.kiosk-timer[data-active-page="setup"] {
+  top:   2.8vh !important;
+  left:  calc(50% - 2.6vw) !important;
+  right: auto !important;
+  bottom: auto !important;
+  width:  5.2vw !important;
+  height: 5.2vw !important;
+}
+
+/* Page 3: top-right (keep existing right positioning) */
+.kiosk-timer[data-active-page="frame"],
+.kiosk-timer[data-active-page="shooting"] {
+  top:   2.8vh !important;
+  right: 3vw !important;
+  left:  auto !important;
+  width: 5.2vw !important;
+  height: 5.2vw !important;
+}
+
+/* Page 6: hide timer (spec says no separate countdown timer on print page) */
+.kiosk-timer[data-active-page="printing"] {
+  display: none !important;
+}
+
+/* Timer number font refinement */
+.kiosk-timer-number {
+  font-size: 2.6vh !important;
+  font-weight: 800 !important;
+  color: var(--text) !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 4. SHARED PAGE HEADER STYLE (Pages 2–6)
+ *    Each page has a large icon + title + subtitle in the top-left.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+.page-header-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.2vw;
+  flex-shrink: 0;
+  margin-bottom: 1.4vh;
+  min-height: 0;
+}
+
+.page-header-icon {
+  width: 3.75vw;   /* ~72px at 1920 */
+  height: auto;
+  flex-shrink: 0;
+  margin-top: 0.2vh;
+  object-fit: contain;
+}
+
+.page-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3vh;
+}
+
+.page-header-title {
+  font-size: 2.5vh;
+  font-weight: 800;
+  color: var(--studrio-black);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.page-header-subtitle {
+  font-size: 1.55vh;
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0.01em;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 5. NEXT BUTTON — Studrio spec gradient + radius
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+.btn-next-studrio {
+  background: #ffffff !important;
+  border: 2px solid #F0C231 !important;
+  border-radius: var(--next-radius) !important;
+  color: var(--studrio-black) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em !important;
+  overflow: hidden;
+  position: relative;
+}
+
+.btn-next-studrio:hover:not(:disabled) {
+  background: #fffbee !important;
+}
+
+.btn-next-studrio:disabled {
+  background: #f5f5f5 !important;
+  border-color: #d9dce1 !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* White→yellow fill animation overlay triggered by .fill-anim class */
+.btn-next-studrio .btn-next-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #ffffff 0%, var(--studrio-yellow-2) 100%);
+  transform: scaleX(0);
+  transform-origin: left center;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: none;
+}
+
+.btn-next-studrio.fill-anim .btn-next-fill {
+  animation: nextBtnWhiteYellow 1.5s ease-in-out forwards;
+}
+
+@keyframes nextBtnWhiteYellow {
+  0%   { transform: scaleX(0); opacity: 0.9; }
+  60%  { transform: scaleX(1); opacity: 0.9; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * 6. LEFT-TO-RIGHT PIXEL-GRID TRANSITION OVERLAY
+ *    Used on: Page 2 → Page 3, Page 6 → Page 1
+ *    Aligns with the square grid background.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#pixelGridTransitionOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  display: none;
+  overflow: hidden;
+}
+
+#pixelGridTransitionOverlay.active {
+  display: block;
+}
+
+/* Individual pixel cells are injected by JS */
+.pg-cell {
+  position: absolute;
+  background: #ffffff;
+  opacity: 0;
+  /* Each cell animates with a delay computed from its column position */
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 2 — CAMERA MODE (page-setup redesign)
+ * Reference: 1920×1080
+ * Live View: W1156 × H772, X96, Y200
+ * Controls on RIGHT side
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#page-setup {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 2.8vh 2.2vw 2.2vh 2.2vw !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Remove old .setup-layout grid and replace */
+#page-setup .setup-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 1.6vw !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  margin-top: 0 !important;
+}
+
+/* Live view panel (left, ~60% width matching 1156/1920) */
+#page-setup .preview-panel {
+  flex: 0 0 60.2% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+}
+
+#page-setup .frame-34 {
+  /* Override old 4:3 — use 3:2 DSLR sensor ratio (2974:1984 ≈ 3:2) */
+  aspect-ratio: 3 / 2 !important;
+  height: 100% !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+/* Right-side controls column */
+#page-setup .status-panel {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.4vh !important;
+  justify-content: center !important;
+  overflow: visible !important;
+}
+
+/* Hide legacy HOW-IT-WORKS box */
+#page-setup .status-box {
+  display: none !important;
+}
+
+/* Camera controls: Zoom In / Zoom Out / Mirror pills */
+#page-setup .zoom-controls {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1.5px solid rgba(240, 194, 49, 0.22) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(8px) !important;
+  padding: 1.4vh 1.2vw !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.8vh !important;
+}
+
+#page-setup .zoom-label {
+  font-size: 1.2vh !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  color: var(--text-dim) !important;
+  margin-bottom: 0.4vh !important;
+}
+
+/* Camera control buttons (Zoom In, Zoom Out, Mirror) — full-width pills */
+#page-setup .zoom-buttons {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.8vh !important;
+}
+
+#page-setup .zoom-buttons .btn {
+  width: 100% !important;
+  flex: none !important;
+  border-radius: 12px 0 12px 0 !important;
+  font-size: 1.45vh !important;
+  font-weight: 700 !important;
+  padding: 1.2vh 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.6vw !important;
+  background: #ffffff !important;
+  border: 1.5px solid var(--border) !important;
+  color: var(--text) !important;
+  transition: background 0.15s ease, border-color 0.15s ease !important;
+  letter-spacing: 0.03em !important;
+  text-transform: uppercase !important;
+  position: relative;
+  overflow: hidden;
+}
+
+#page-setup .zoom-buttons .btn .ctrl-icon {
+  width: 1.6vw;
+  height: auto;
+  object-fit: contain;
+  opacity: 0.75;
+}
+
+#page-setup .zoom-buttons .btn:hover {
+  background: var(--studrio-cream) !important;
+  border-color: var(--studrio-yellow) !important;
+}
+
+#page-setup .zoom-buttons .btn.active {
+  background: var(--studrio-yellow) !important;
+  border-color: var(--studrio-yellow) !important;
+  color: var(--studrio-black) !important;
+}
+
+/* Nav row: NEXT only (no BACK on Pages 2–6) */
+#page-setup .nav-row {
+  flex-shrink: 0 !important;
+  justify-content: flex-end !important;
+  gap: 0.8vw !important;
+  margin-top: auto !important;
+}
+
+/* Hide the BACK button on Page 2 */
+#btnBackFromSetup {
+  display: none !important;
+}
+
+/* Photo Taking label + icon below NEXT */
+.setup-next-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5vh;
+}
+
+.setup-photo-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5vw;
+  font-size: 1.15vh;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.setup-photo-hint img {
+  width: 1.3vw;
+  height: auto;
+  opacity: 0.55;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 3 — PHOTO TAKING (page-shooting)
+ *  – Grid background
+ *  – Photos displayed LEFT side
+ *  – Blinking red recording dot beside "Photo Taking"
+ *  – Instructional text below "Look at the camera"
+ *  – 4×6 pose overlay (preview-only)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#page-shooting {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 2.8vh 2.2vw 2.2vh 2.2vw !important;
+}
+
+/* New two-column layout for shooting page */
+.shooting-redesign-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 1.6vw;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Left: thumbnail strip of taken photos */
+.shooting-taken-col {
+  flex: 0 0 13vw;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8vh;
+  align-items: center;
+  overflow-y: auto;
+  padding-right: 0.4vw;
+  min-height: 0;
+}
+
+.shooting-taken-col::-webkit-scrollbar { width: 3px; }
+.shooting-taken-col::-webkit-scrollbar-track { background: transparent; }
+.shooting-taken-col::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 99px; }
+
+.shooting-taken-thumb {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border-radius: 8px;
+  background: #000;
+  border: 1.5px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.shooting-taken-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shooting-taken-thumb-num {
+  position: absolute;
+  bottom: 0.4vh;
+  left: 0.4vw;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 1vh;
+  font-weight: 700;
+  padding: 0.2vh 0.5vw;
+  border-radius: 4px;
+}
+
+.shooting-taken-label {
+  font-size: 1vh;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.shooting-taken-count {
+  font-size: 2.4vh;
+  font-weight: 800;
+  color: var(--text);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Center/right: main live preview */
+.shooting-main-col {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+}
+
+/* Shooting page header row */
+.shooting-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7vw;
+  flex-shrink: 0;
+}
+
+.shooting-header-icon {
+  width: 1.5vw;
+  height: auto;
+  object-fit: contain;
+}
+
+.shooting-header-title {
+  font-size: 1.25vh;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Blinking red recording dot (beside "Photo Taking") */
+.shooting-rec-dot {
+  width: 0.85vh;
+  height: 0.85vh;
+  border-radius: 50%;
+  background: #e03030;
+  animation: recBlink 1.1s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes recBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.15; }
+}
+
+/* "Look at the camera" instruction + subtext */
+.shooting-instruction-wrap {
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.shooting-look-text {
+  font-size: 1.25vh !important;
+  font-weight: 700 !important;
+  color: var(--text-dim) !important;
+  letter-spacing: 0.04em !important;
+}
+
+.shooting-sub-text {
+  font-size: 1.05vh;
+  color: var(--text-dim);
+  margin-top: 0.25vh;
+  letter-spacing: 0.02em;
+}
+
+/* Pose overlay (4×6 only — preview frame overlay) */
+.pose-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  display: none;
+}
+.pose-overlay.visible {
+  display: block;
+}
+/* Grid of pose boxes */
+.pose-overlay-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 2px;
+  padding: 2%;
+}
+.pose-box {
+  border: 2px dashed rgba(255, 255, 255, 0.55);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pose-box-num {
+  font-size: 2.5vh;
+  font-weight: 800;
+  color: rgba(255,255,255,0.5);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 4 — PHOTO SELECTION (page-selection)
+ * Reference: 1920×1080
+ * Selection Grid: 1142×756, X96, Y217
+ * Strip preview: X1307/1397, Y215
+ * Timer centered top
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#page-selection {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 2.8vh 2.2vw 2.2vh 2.2vw !important;
+}
+
+/* Override the selection-layout to match reference coordinates:
+   selection grid ≈ 59.5% of 1920, strip ≈ rest */
+#page-selection .selection-layout {
+  grid-template-columns: 59.5% 1fr !important;
+  gap: 1.8vw !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+
+/* Selection grid: tight grid, zero gaps, equal square cells */
+#page-selection .selection-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  grid-auto-rows: 1fr !important;
+  gap: 0 !important;
+  min-height: 0 !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  align-items: stretch !important;
+}
+
+/* Photo cards: no gap, no border-radius at seam */
+#page-selection .selection-grid .photo-card {
+  border-radius: 0 !important;
+  border: 0 !important;           /* seams are provided by the grid bg color */
+  outline: 0.5px solid rgba(200,200,200,0.35);
+  outline-offset: -0.5px;
+}
+
+/* Override the base selected style for selection page — use inset shadow for clean multi-photo grid */
+#page-selection .selection-grid .photo-card.selected {
+  box-shadow: inset 0 0 0 3px var(--studrio-yellow) !important;
+  outline: none !important;
+}
+
+/* Selection number badge style (from animations.css .photo-card-order-badge) */
+/* Already defined — just ensure it uses studrio yellow */
+.photo-card-order-badge {
+  background: var(--studrio-yellow) !important;
+}
+
+/* Photo darkening on selection */
+#page-selection .photo-card.selected img {
+  filter: brightness(0.72) !important;
+  transition: filter 0.25s ease !important;
+}
+
+/* When all 4 selected: radial yellow glow animation on the grid */
+#page-selection .selection-grid.all-selected {
+  animation: selectionGlow 1.2s ease-out forwards;
+}
+
+@keyframes selectionGlow {
+  0%   { box-shadow: inset 0 0 0 0 rgba(240, 194, 49, 0);  }
+  40%  { box-shadow: inset 0 0 60px 20px rgba(255, 221, 102, 0.45); }
+  100% { box-shadow: inset 0 0 80px 30px rgba(255, 255, 255, 0.15); }
+}
+
+/* Selection preview panel — right side */
+#page-selection .selection-preview-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1vh !important;
+  min-height: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Remove the margin-top that was compensating for the old timer */
+#page-selection .selection-preview-panel .strip-preview-wrap {
+  margin-top: 0 !important;
+}
+
+/* NEXT button on Page 4 */
+#btnNextFromSelection {
+  border-radius: var(--next-radius) !important;
+  background: #ffffff !important;
+  border: 2px solid #F0C231 !important;
+  color: var(--studrio-black) !important;
+  font-weight: 800 !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+/* Hide BACK button on Page 4 — none existed but guard it */
+#btnBackFromSelection { display: none !important; }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 5 — FRAME DESIGN (page-design)
+ * Templates: LEFT  — center-mode Cover Flow carousel (vertical scroll)
+ * Filters:   RIGHT — center-mode Cover Flow carousel (vertical scroll)
+ * Strip preview:   CENTER column
+ * Timer centered top
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#page-design {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 2.8vh 2.2vw 2.2vh 2.2vw !important;
+}
+
+/* Three-column layout: templates | preview | filters */
+#page-design .design-main-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 1.8vw !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  align-items: stretch !important;
+}
+
+/* Left template column + right filter column — fixed width */
+#page-design .design-carousel-col {
+  flex: 0 0 18vw !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.8vh !important;
+  min-height: 0 !important;
+  position: relative;
+}
+
+/* Carousel section label above the Cover Flow */
+.coverflow-section-label {
+  font-size: 1.1vh;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  text-align: center;
+  padding-bottom: 0.4vh;
+}
+
+/* Active item title — shown above/below the carousel, updates on snap */
+.coverflow-active-title {
+  font-size: 1.55vh;
+  font-weight: 800;
+  color: var(--studrio-black);
+  letter-spacing: -0.01em;
+  text-align: center;
+  flex-shrink: 0;
+  min-height: 2.2vh;
+  transition: opacity 0.2s ease;
+}
+
+/*
+ * Cover Flow scroll container.
+ *
+ * Technique: vertical flex list, scroll-snap on each card. The active card
+ * snaps to center (scroll-snap-align: center). Cards above/below the active
+ * card are visually shrunk + faded via JS to produce the Cover Flow effect.
+ * No 3-D transforms are used — lightweight enough for kiosk hardware.
+ */
+.coverflow-track {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  /* Padding at top + bottom = half the visible height so first/last items
+     can snap to center. Set via JS to half the container clientHeight. */
+  padding-top: 0;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8vh;
+  position: relative;
+}
+.coverflow-track::-webkit-scrollbar { display: none; }
+
+/* Individual Cover Flow card */
+.coverflow-card {
+  flex-shrink: 0;
+  width: 82%;
+  scroll-snap-align: center;
+  background: #ffffff;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1vh 0.7vw 0.8vh;
+  gap: 0.6vh;
+  /* Cover Flow: scale + opacity transitions */
+  transition:
+    border-color   0.22s ease,
+    transform      0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    opacity        0.22s ease,
+    box-shadow     0.22s ease;
+  will-change: transform, opacity;
+}
+
+/* Default (non-active) cards: slightly shrunk + dimmed */
+.coverflow-card {
+  transform: scale(0.82);
+  opacity: 0.55;
+}
+
+/* Active card: full scale, amber border, glow */
+.coverflow-card.coverflow-active {
+  transform: scale(1) !important;
+  opacity: 1 !important;
+  border-color: var(--studrio-yellow) !important;
+  box-shadow:
+    0 0 0 3px rgba(240, 194, 49, 0.22),
+    0 6px 24px rgba(240, 194, 49, 0.18) !important;
+}
+
+/* Cards immediately adjacent to active: slightly larger than further cards */
+.coverflow-card.coverflow-near {
+  transform: scale(0.91);
+  opacity: 0.78;
+}
+
+.coverflow-card:active {
+  transform: scale(0.97) !important;
+}
+
+/* Thumbnail inside each card */
+.coverflow-thumb {
+  width: 100%;
+  /* Template cards: 2:3 portrait (matches strip ratio) */
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--panel-light);
+  display: block;
+}
+
+/* Filter cards: wider thumbnail */
+.coverflow-card.coverflow-filter .coverflow-thumb {
+  aspect-ratio: 4 / 3;
+}
+
+.coverflow-card-name {
+  font-size: 1vh;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  line-height: 1.3;
+}
+
+/* Strip preview fills remaining height in center col */
+#page-design .design-preview-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.2vh !important;
+  min-height: 0 !important;
+  padding-top: 0 !important;
+}
+
+#page-design .design-preview-panel .strip-preview-wrap {
+  margin-top: 0 !important;
+}
+
+/* NEXT button on Page 5 */
+#btnNextFromDesign {
+  border-radius: var(--next-radius) !important;
+  background: #ffffff !important;
+  border: 2px solid #F0C231 !important;
+  color: var(--studrio-black) !important;
+  font-weight: 800 !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+/* Filter section in right design column */
+.design-filter-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2vh;
+  min-height: 0;
+}
+
+/* ── Filter column disabled ──────────────────────────────────────────────
+ * The filter carousel is hidden. The preview column expands to fill the
+ * freed space so the strip preview stays centered in the layout.
+ * No JS or logic changes — the filter JS still runs silently in the
+ * background (harmless) but guests cannot see or interact with it.
+ * ──────────────────────────────────────────────────────────────────────── */
+#page-design .design-filters-col {
+  display: none !important;
+}
+
+#page-design .design-preview-col {
+  flex: 1 !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 6 — PRINT & QR (page-printing)
+ * Reference: 1920×1080
+ * 2×6 Strip: 255×765, X833, Y208
+ * 4×6 Strip: 503×755, X709, Y217
+ * QR Code: 188×188, X1426.75, Y439.09
+ * DONE button: X1616.06, Y915.63, radius 25px 0 25px 0
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#page-printing {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 2.8vh 2.2vw 2.2vh 2.2vw !important;
+}
+
+/* Override the heading to use page-header-block style */
+.printing-heading {
+  display: none !important;
+}
+
+/* Printing layout: left strip + right QR/status */
+.printing-layout,
+.printing-layout-v2 {
+  grid-template-columns: 1fr 0.55fr !important;
+  gap: 2vw !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  align-items: center !important;
+}
+
+/* Wave/tide yellow overlay that appears when printing starts */
+#printWaveOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+#printWaveOverlay.active {
+  opacity: 1;
+}
+
+.print-wave {
+  position: absolute;
+  bottom: -60%;
+  left: -20%;
+  width: 140%;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 221, 102, 0.18) 40%,
+    rgba(255, 221, 102, 0.35) 70%,
+    rgba(255, 221, 102, 0.22) 100%
+  );
+  animation: waveTide 6s ease-in-out infinite alternate;
+  transform-origin: bottom center;
+  border-radius: 50% 55% 45% 50% / 30% 30% 20% 25%;
+}
+
+@keyframes waveTide {
+  0%   { bottom: -60%; transform: scaleX(1.05) rotate(-2deg); }
+  50%  { bottom: -35%; transform: scaleX(1.0)  rotate(0deg); }
+  100% { bottom: -20%; transform: scaleX(0.98) rotate(2deg); }
+}
+
+/* Uploading / printing status text — under page header */
+.print-status-line {
+  font-size: 1.4vh;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+/* Props reminder — readable pill centered below the video frame.
+   The pill is absolutely positioned relative to .printing-video-frame
+   (see style.css) so it floats just beneath the strip preview.
+   We override the legacy tiny font here and ensure it is always legible. */
+.printing-props-note {
+  font-size: 1.3vh !important;
+  font-weight: 500 !important;
+  color: var(--text-dim) !important;
+  text-align: center !important;
+  flex-shrink: 0 !important;
+  letter-spacing: 0.01em !important;
+}
+
+/* When the note is a direct child of the video column (HTML placement),
+   center it below the frame with good contrast. */
+.printing-video-col > .printing-props-note {
+  position: relative !important;
+  margin-top: 1vh !important;
+  background: rgba(15, 15, 15, 0.55) !important;
+  border-radius: 999px !important;
+  padding: 0.45vh 1.6vw !important;
+  width: max-content !important;
+  align-self: center !important;
+  color: rgba(255,255,255,0.82) !important;
+  font-size: 1.25vh !important;
+}
+
+/* DONE button: white bg + yellow border, radius 25px 0 25px 0 */
+.printing-done-btn {
+  border-radius: var(--next-radius) !important;
+}
+
+/* DONE button: gray until printing starts (handled by existing .ready class logic) */
+/* When .ready: apply white + yellow border styling */
+.printing-done-btn.ready {
+  background: #ffffff !important;
+  border: 2px solid #F0C231 !important;
+  color: var(--studrio-black) !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 12px rgba(240, 194, 49, 0.22) !important;
+}
+
+/* QR column: ensure proper layout */
+.printing-qr-col {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 1.4vh !important;
+  padding: 0 !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 2: QR TICKETING (page-frame) — REMOVE BACK BUTTON
+ * ══════════════════════════════════════════════════════════════════════════ */
+#btnBackFromFrame {
+  display: none !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * TRANSITION: NEXT button fade — keep only strip + NEXT visible
+ *   Used on: Page 4 → Page 5, Page 5 → Page 6
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+.page-transitioning-out > *:not(.strip-keep-visible):not(.nav-row):not(.btn-next-studrio) {
+  transition: opacity 0.55s ease;
+  pointer-events: none;
+}
+
+.page.transition-fade-other .page-transitioning-out > *:not(.keep-for-transition) {
+  opacity: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * STRIP CENTER TRANSITION — strip moves to center before page transition
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+.strip-centering-transition {
+  transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * FRAME SIZE: Page 2 (old page-frame) — remove BACK, keep style
+ * ══════════════════════════════════════════════════════════════════════════ */
+#page-frame .nav-row {
+  justify-content: flex-end !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * MISC OVERRIDES
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* Ensure NEXT buttons on selection + design pages get the Studrio nav style */
+#page-selection .nav-row .btn-primary,
+#page-design .nav-row .btn-primary {
+  border-radius: var(--next-radius) !important;
+  background: #ffffff !important;
+  border: 2px solid #F0C231 !important;
+  color: var(--studrio-black) !important;
+  font-weight: 800 !important;
+}
+
+/* Restore pointer events during transitions */
+.page.active {
+  pointer-events: auto;
+}
+
+/* Strip preview wrap: remove margin-top from old timer compensation */
+#page-design .strip-preview-wrap {
+  margin-top: 0 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PRINT & QR STATUS DISPLAY
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+.print-upload-status-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4vh;
+  flex-shrink: 0;
+}
+
+.print-upload-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5vw;
+  font-size: 1.3vh;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.print-status-dot {
+  width: 0.7vh;
+  height: 0.7vh;
+  border-radius: 50%;
+  background: var(--studrio-yellow);
+  flex-shrink: 0;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.print-status-dot.done {
+  background: var(--ok);
+  animation: none;
+}
+
+.print-status-dot.idle {
+  background: var(--border);
+  animation: none;
+}

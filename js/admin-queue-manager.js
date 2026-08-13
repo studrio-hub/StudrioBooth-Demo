@@ -45,6 +45,29 @@ const queueManager = (() => {
     if (!container) return;
 
     container.innerHTML = `
+      <style>
+        /* Cancel Session button — distinct from plain Cancel to prevent accidental taps */
+        .btn-queue-cancel-session {
+          background: transparent;
+          color: #c0392b;
+          border: 1.5px solid #c0392b;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 4px 10px;
+          border-radius: 6px;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background 0.15s, color 0.15s;
+        }
+        .btn-queue-cancel-session:hover {
+          background: #c0392b;
+          color: #fff;
+        }
+        /* IN_SESSION ticket row gets a subtle left border accent */
+        .queue-ticket-item[data-status="IN_SESSION"] {
+          border-left: 3px solid #f39c12;
+        }
+      </style>
       <div class="queue-layout">
 
         <!-- Left: Generate ticket -->
@@ -224,6 +247,11 @@ const queueManager = (() => {
     if (t.status === "WAITING" || t.status === "CALLED" || t.status === "ON_HOLD") {
       actions.push(`<button class="btn-queue btn-queue-cancel" data-action="cancel" data-id="${_esc(t.id)}">Cancel</button>`);
     }
+    if (t.status === "IN_SESSION") {
+      // Uses a distinct action key so the handler shows a confirmation prompt
+      // before cancelling a session that is actively in progress on the kiosk.
+      actions.push(`<button class="btn-queue btn-queue-cancel-session" data-action="cancel-session" data-id="${_esc(t.id)}">Cancel Session</button>`);
+    }
 
     return `
       <div class="queue-ticket-item" data-status="${statusClass}" data-id="${_esc(t.id)}">
@@ -319,6 +347,26 @@ const queueManager = (() => {
         // Auto-advance: if the cancelled ticket was CALLED/IN_SESSION, call next
         if (cancelled && (cancelled.status === "CALLED" || cancelled.status === "IN_SESSION")) {
           const nextCalled = await _callNextForLine(cancelled.queue_line);
+          if (nextCalled) showToast(`Called #${nextCalled.queue_number}.`);
+        }
+      }
+
+      if (action === "cancel-session") {
+        const ticket = _queue.find(t => t.id === id);
+        const label  = ticket ? `#${ticket.queue_number} (${ticket.queue_line})` : id;
+
+        // Confirm before interrupting an active kiosk session
+        const confirmed = window.confirm(
+          `Cancel the IN-SESSION ticket ${label}?\n\nThis will mark the ticket as cancelled and call the next guest in line.`
+        );
+        if (!confirmed) return; // bail — skip _loadQueue below
+
+        await queueTickets.cancelTicket(id);
+        showToast(`Session for ${label} cancelled.`);
+
+        // Auto-advance: call next WAITING ticket in the same line
+        if (ticket) {
+          const nextCalled = await _callNextForLine(ticket.queue_line);
           if (nextCalled) showToast(`Called #${nextCalled.queue_number}.`);
         }
       }
