@@ -27,7 +27,22 @@ const queueManager = (() => {
   let _queue        = [];
   let _channel      = null;
   let _activeFilter = "all"; // "all" or a queue line name
-  let _lines        = new Set(["Main"]);
+  let _lines        = new Set(["Booth", "Drop"]);
+
+  // ── Daily queue-number reset ───────────────────────────────────────────────
+  // Stores today's date (YYYY-MM-DD) in localStorage; if stale, resets counters.
+  const _RESET_KEY = "studrio_queue_last_reset";
+  function _checkDailyReset() {
+    const today = new Date().toISOString().slice(0, 10); // "2025-08-16"
+    const last  = localStorage.getItem(_RESET_KEY);
+    if (last !== today) {
+      localStorage.setItem(_RESET_KEY, today);
+      // Notify any listeners that today is a fresh day.
+      // Actual ticket-number sequencing starts from 1 in queueTickets.createTicket
+      // because the Supabase query counts only today's tickets (see queue-ticket.js).
+      console.info("[queueManager] New day detected — queue numbers reset to #1.");
+    }
+  }
 
   // ── Toast (shared with admin-dashboard.js) ─────────────────────────────────
   function showToast(msg, duration = 3500) {
@@ -76,13 +91,10 @@ const queueManager = (() => {
 
           <div class="form-group" style="margin-bottom:14px">
             <label>Queue Line</label>
-            <input
-              type="text"
-              id="genQueueLine"
-              class="admin-input"
-              value="Main"
-              placeholder="e.g. Main, VIP, Group A"
-            >
+            <select id="genQueueLine" class="admin-input">
+              <option value="Booth">Booth</option>
+              <option value="Drop">Drop</option>
+            </select>
           </div>
 
           <div class="form-group" style="margin-bottom:14px">
@@ -94,6 +106,19 @@ const queueManager = (() => {
               value="1"
               min="1"
               max="20"
+            >
+          </div>
+
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Price <span style="color:#9e9e9e;font-weight:400">(₱)</span></label>
+            <input
+              type="number"
+              id="genPrice"
+              class="admin-input"
+              value="0"
+              min="0"
+              step="0.01"
+              placeholder="e.g. 250"
             >
           </div>
 
@@ -452,6 +477,7 @@ const queueManager = (() => {
     else                         addons.push("1 copy");
     if (ticket.frame_addon)     addons.push(`${ticket.frame_addon} frame${ticket.frame_addon !== 1 ? "s" : ""}`);
     if (ticket.keychain_addon)  addons.push(`${ticket.keychain_addon} keychain${ticket.keychain_addon !== 1 ? "s" : ""}`);
+    if (ticket.price > 0)       addons.push(`₱${Number(ticket.price).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`);
     metaEl.textContent = addons.join(" · ");
 
     // Render QR
@@ -485,12 +511,13 @@ const queueManager = (() => {
     const btnGen = document.getElementById("btnGenerateTicket");
     if (btnGen) {
       btnGen.addEventListener("click", async () => {
-        const line       = (document.getElementById("genQueueLine")?.value || "Main").trim();
+        const line       = (document.getElementById("genQueueLine")?.value || "Booth").trim();
         const copies     = parseInt(document.getElementById("genCopies")?.value || "1", 10);
+        const price      = parseFloat(document.getElementById("genPrice")?.value || "0") || 0;
         const frameAddon = parseInt(document.getElementById("genFrameAddon")?.value || "0", 10);
         const keychain   = parseInt(document.getElementById("genKeychainAddon")?.value || "0", 10);
 
-        if (!line) { showToast("Please enter a queue line name."); return; }
+        if (!line) { showToast("Please select a queue line."); return; }
         if (isNaN(copies) || copies < 1) { showToast("Copies must be at least 1."); return; }
 
         btnGen.disabled = true;
@@ -499,6 +526,7 @@ const queueManager = (() => {
           let ticket = await queueTickets.createTicket({
             queueLine: line,
             copies: Math.max(1, copies),
+            price: Math.max(0, price),
             frameAddon: Math.max(0, frameAddon),
             keychainAddon: Math.max(0, keychain)
           });
@@ -581,44 +609,225 @@ const queueManager = (() => {
     const btnClose = document.getElementById("btnCloseQr");
     if (btnClose) btnClose.addEventListener("click", _hideQrModal);
 
-    // QR Modal: print
+    // QR Modal: print (58mm thermal layout)
     const btnPrint = document.getElementById("btnPrintQr");
     if (btnPrint) {
       btnPrint.addEventListener("click", () => {
-        // Simple print: open a print-friendly version of the QR
         const canvas = document.querySelector("#qrModalCanvas canvas");
         const num    = document.getElementById("qrModalNumber")?.textContent || "";
         const line   = document.getElementById("qrModalLine")?.textContent || "";
         const id     = document.getElementById("qrModalId")?.textContent || "";
         const meta   = document.getElementById("qrModalMeta")?.textContent || "";
 
-        const imgSrc = canvas ? canvas.toDataURL("image/png") : "";
+        // Parse meta parts: "X copies · ₱NNN.NN" etc.
+        const metaParts  = meta.split(" · ");
+        const copiesText = metaParts.find(p => p.includes("cop")) || "";
+        const priceText  = metaParts.find(p => p.startsWith("₱")) || "";
+        const addonParts = metaParts.filter(p => !p.includes("cop") && !p.startsWith("₱"));
 
-        const win = window.open("", "_blank", "width=400,height=560");
+        const imgSrc = canvas ? canvas.toDataURL("image/png") : "";
+        const now    = new Date();
+        const dateStr = now.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+        const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
+
+        // 58mm thermal: usable width ≈ 48mm; at 203dpi ≈ 383px but browser units vary.
+        // We use @page size + mm units; iOS AirPrint handles the rest.
+        const win = window.open("", "_blank", "width=320,height=600");
         win.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="UTF-8">
-            <title>Queue Ticket ${num}</title>
-            <style>
-              body { font-family: Inter, system-ui, sans-serif; text-align: center; padding: 24px; margin: 0; }
-              h1   { font-size: 48px; font-weight: 900; margin: 0; }
-              p    { color: #666; font-size: 13px; margin: 4px 0; }
-              img  { margin: 16px auto; display: block; }
-              .id  { font-family: monospace; font-size: 11px; color: #999; word-break: break-all; }
-              .line { font-weight: 700; font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
-            </style>
-          </head>
-          <body>
-            <h1>${num}</h1>
-            <div class="line">${line}</div>
-            ${imgSrc ? `<img src="${imgSrc}" width="200" height="200">` : ""}
-            <p>${meta}</p>
-            <p class="id">${id}</p>
-            <script>window.onload = function() { window.print(); window.close(); };<\/script>
-          </body>
-          </html>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Queue Ticket ${num}</title>
+  <style>
+    /* ── Thermal 58mm page setup ── */
+    @page {
+      size: 58mm auto;
+      margin: 0;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 10pt;
+      color: #000;
+      background: #fff;
+      width: 58mm;
+      padding: 3mm 3mm 6mm;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Header */
+    .t-header {
+      text-align: center;
+      border-bottom: 1px dashed #000;
+      padding-bottom: 3mm;
+      margin-bottom: 3mm;
+    }
+    .t-brand {
+      font-size: 9pt;
+      font-weight: bold;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .t-subtitle {
+      font-size: 7.5pt;
+      color: #333;
+    }
+
+    /* Line badge */
+    .t-line-badge {
+      display: block;
+      text-align: center;
+      font-size: 8pt;
+      font-weight: bold;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      border: 1.5px solid #000;
+      border-radius: 3mm;
+      padding: 1mm 2mm;
+      margin: 2mm auto;
+      width: fit-content;
+    }
+
+    /* Big queue number */
+    .t-number {
+      text-align: center;
+      font-size: 32pt;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -1px;
+      margin: 2mm 0;
+    }
+
+    /* QR code — centred, max 36mm so it prints cleanly */
+    .t-qr {
+      text-align: center;
+      margin: 3mm 0;
+    }
+    .t-qr img {
+      width: 36mm;
+      height: 36mm;
+      image-rendering: pixelated;
+    }
+
+    /* Detail rows */
+    .t-divider {
+      border: none;
+      border-top: 1px dashed #000;
+      margin: 2.5mm 0;
+    }
+
+    .t-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 2mm;
+      font-size: 8pt;
+      padding: 0.5mm 0;
+    }
+    .t-row-label { color: #444; white-space: nowrap; }
+    .t-row-value { font-weight: bold; text-align: right; word-break: break-all; }
+
+    .t-price-row {
+      font-size: 10pt;
+      font-weight: bold;
+      border-top: 1.5px solid #000;
+      padding-top: 2mm;
+      margin-top: 1mm;
+    }
+
+    /* Ticket ID (monospace, small) */
+    .t-id {
+      font-size: 6.5pt;
+      color: #555;
+      text-align: center;
+      word-break: break-all;
+      margin-top: 2mm;
+    }
+
+    /* Footer */
+    .t-footer {
+      text-align: center;
+      font-size: 7pt;
+      color: #555;
+      margin-top: 3mm;
+      padding-top: 2mm;
+      border-top: 1px dashed #000;
+    }
+
+    @media print {
+      body { width: 58mm; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="t-header">
+    <div class="t-brand">Studrio Booth</div>
+    <div class="t-subtitle">Queue Ticket</div>
+  </div>
+
+  <!-- Line badge -->
+  <span class="t-line-badge">${line}</span>
+
+  <!-- Queue number -->
+  <div class="t-number">${num}</div>
+
+  <!-- QR code -->
+  <div class="t-qr">
+    ${imgSrc ? `<img src="${imgSrc}" alt="Ticket QR">` : `<div style="font-size:7pt;color:#999">QR unavailable</div>`}
+  </div>
+
+  <hr class="t-divider">
+
+  <!-- Details -->
+  ${copiesText ? `
+  <div class="t-row">
+    <span class="t-row-label">Copies</span>
+    <span class="t-row-value">${copiesText}</span>
+  </div>` : ""}
+
+  ${addonParts.length ? `
+  <div class="t-row">
+    <span class="t-row-label">Add-ons</span>
+    <span class="t-row-value">${addonParts.join(", ")}</span>
+  </div>` : ""}
+
+  ${priceText ? `
+  <div class="t-row t-price-row">
+    <span class="t-row-label">Total</span>
+    <span class="t-row-value">${priceText}</span>
+  </div>` : ""}
+
+  <hr class="t-divider">
+
+  <div class="t-row">
+    <span class="t-row-label">Date</span>
+    <span class="t-row-value">${dateStr}</span>
+  </div>
+  <div class="t-row">
+    <span class="t-row-label">Time</span>
+    <span class="t-row-value">${timeStr}</span>
+  </div>
+
+  <!-- Ticket ID -->
+  <p class="t-id">${id}</p>
+
+  <!-- Footer -->
+  <div class="t-footer">Thank you! Please wait for your number to be called.</div>
+
+  <script>
+    window.onload = function () {
+      // Small delay lets the QR image fully render before printing
+      setTimeout(function () { window.print(); }, 400);
+    };
+  <\/script>
+</body>
+</html>
         `);
         win.document.close();
       });
@@ -637,6 +846,7 @@ const queueManager = (() => {
 
   return {
     async init() {
+      _checkDailyReset();
       _injectHTML();
       _wire();
       await _loadQueue();

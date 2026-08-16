@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Studrio Booth — Queue Status</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    /* ── Reset ──────────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Design tokens ──────────────────────────────────────────────────────── */
+    :root {
+      --yellow:      #F0C231;
+      --yellow-2:    #FFDD66;
+      --cream:       #FFFBEE;
+      --black:       #1A1200;
+      --gray-100:    #F5F5F5;
+      --gray-200:    #E8E8E8;
+      --gray-400:    #9E9E9E;
+      --grid-color:  rgba(0, 0, 0, 0.045);
+      --grid-size:   48px;
+      --radius:      16px;
+      --radius-sm:   8px;
+    }
+
+    /* ── Body / Background ──────────────────────────────────────────────────── */
+    html, body {
+      height: 100%;
+      font-family: "Inter", system-ui, sans-serif;
+      background-color: #fff;
+      background-image:
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+      background-size: var(--grid-size) var(--grid-size);
+      color: var(--black);
+      overflow-x: hidden;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────────────── */
+    .qs-root {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Top bar ─────────────────────────────────────────────────────────────── */
+    .qs-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 32px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1.5px solid var(--gray-200);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .qs-logo {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .qs-logo-tag {
+      display: inline-block;
+      margin-left: 8px;
+      background: var(--yellow);
+      color: var(--black);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 100px;
+      vertical-align: middle;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Connection status ──────────────────────────────────────────────────── */
+    .qs-connection {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--gray-400);
+    }
+
+    .qs-conn-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--gray-400);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+
+    .qs-conn-dot.live   { background: #22c55e; }
+    .qs-conn-dot.poll   { background: var(--yellow); }
+    .qs-conn-dot.error  { background: #ef4444; }
+
+    /* ── Main content ────────────────────────────────────────────────────────── */
+    .qs-main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 24px;
+      padding: 32px;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* ── Section header ─────────────────────────────────────────────────────── */
+    .qs-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gray-400);
+      margin-bottom: 10px;
+    }
+
+    /* ── Now Serving card ───────────────────────────────────────────────────── */
+    .qs-serving-block {
+      grid-column: 1 / -1;
+    }
+
+    .qs-serving-card {
+      background: var(--yellow);
+      border-radius: var(--radius);
+      padding: 32px 40px;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .qs-serving-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+    }
+
+    .qs-serving-badge {
+      background: var(--black);
+      color: var(--yellow);
+      border-radius: 12px;
+      padding: 6px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      position: relative;
+      z-index: 1;
+      white-space: nowrap;
+    }
+
+    .qs-serving-number {
+      font-size: clamp(64px, 8vw, 120px);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -2px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .qs-serving-line {
+      font-size: clamp(16px, 2vw, 22px);
+      font-weight: 600;
+      opacity: 0.75;
+      position: relative;
+      z-index: 1;
+    }
+
+    .qs-serving-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .qs-serving-detail {
+      font-size: 14px;
+      font-weight: 500;
+      opacity: 0.75;
+    }
+
+    .qs-serving-empty {
+      font-size: clamp(20px, 3vw, 32px);
+      font-weight: 700;
+      color: var(--black);
+      opacity: 0.5;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── Queue columns ──────────────────────────────────────────────────────── */
+    .qs-waiting-block,
+    .qs-onhold-block {
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(6px);
+      border-radius: var(--radius);
+      padding: 24px;
+      border: 1.5px solid var(--gray-200);
+      overflow: hidden;
+    }
+
+    /* ── Ticket row ─────────────────────────────────────────────────────────── */
+    .qs-ticket-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 60vh;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+
+    .qs-ticket-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--gray-200);
+      background: #fff;
+      transition: all 0.2s;
+      animation: ticketAppear 0.35s ease-out;
+    }
+
+    @keyframes ticketAppear {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .qs-ticket-row.is-next {
+      border-color: var(--yellow);
+      background: var(--cream);
+    }
+
+    .qs-ticket-num {
+      font-size: 22px;
+      font-weight: 800;
+      min-width: 48px;
+      text-align: center;
+      color: var(--black);
+    }
+
+    .qs-ticket-row.is-next .qs-ticket-num {
+      color: #8a6800;
+    }
+
+    .qs-ticket-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .qs-ticket-line {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--black);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .qs-ticket-addons {
+      font-size: 11px;
+      color: var(--gray-400);
+      margin-top: 1px;
+    }
+
+    .qs-next-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: var(--yellow);
+      color: var(--black);
+      border-radius: 100px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+
+    .qs-hold-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: var(--gray-200);
+      color: var(--gray-400);
+      border-radius: 100px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+
+    /* ── Empty states ───────────────────────────────────────────────────────── */
+    .qs-empty {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--gray-400);
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────────────────────── */
+    .qs-footer {
+      text-align: center;
+      padding: 16px 32px;
+      font-size: 12px;
+      color: var(--gray-400);
+      border-top: 1.5px solid var(--gray-200);
+      background: rgba(255,255,255,0.8);
+    }
+
+    .qs-updated {
+      display: inline-block;
+      margin-left: 8px;
+    }
+
+    /* ── Pulse animation for "Now Serving" number ───────────────────────────── */
+    @keyframes servingPulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.02); }
+      100% { transform: scale(1); }
+    }
+
+    .serving-changed {
+      animation: servingPulse 0.4s ease-out;
+    }
+
+    /* ── Responsive: TV/wide (default above covers desktop) ─────────────────── */
+    @media (max-width: 960px) {
+      .qs-main {
+        grid-template-columns: 1fr;
+        padding: 20px;
+        gap: 16px;
+      }
+      .qs-serving-block { grid-column: 1; }
+      .qs-serving-card  { padding: 24px; gap: 20px; }
+    }
+
+    @media (max-width: 600px) {
+      .qs-topbar       { padding: 14px 16px; }
+      .qs-main         { padding: 12px; gap: 12px; }
+      .qs-serving-card { flex-wrap: wrap; }
+    }
+
+    /* ── Admin Pass QR panel ────────────────────────────────────────────────── */
+    .qs-admin-pass {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      background: var(--black);
+      color: var(--yellow);
+      border-radius: var(--radius);
+      padding: 20px 28px;
+      flex-wrap: wrap;
+    }
+
+    .qs-admin-pass-text { flex: 1; min-width: 160px; }
+    .qs-admin-pass-title {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .qs-admin-pass-desc {
+      font-size: 11px;
+      color: rgba(240,194,49,0.65);
+      line-height: 1.5;
+    }
+
+    .qs-admin-qr-wrap {
+      background: #fff;
+      border-radius: 10px;
+      padding: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* ── Line column headers ────────────────────────────────────────────────── */
+    .qs-line-col-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .qs-line-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--yellow);
+      flex-shrink: 0;
+    }
+    .qs-line-dot.drop { background: #1A1200; }
+
+    /* ── Offline overlay ────────────────────────────────────────────────────── */
+    .qs-offline-banner {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #ef4444;
+      color: #fff;
+      text-align: center;
+      padding: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 999;
+    }
+
+    .qs-offline-banner.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="qs-root">
+
+  <!-- Top bar -->
+  <header class="qs-topbar">
+    <span class="qs-logo">
+      Studrio Booth
+      <span class="qs-logo-tag">Queue</span>
+    </span>
+    <div class="qs-connection">
+      <span class="qs-conn-dot" id="connDot"></span>
+      <span id="connLabel">Connecting…</span>
+    </div>
+  </header>
+
+  <!-- Offline banner -->
+  <div class="qs-offline-banner" id="offlineBanner">
+    ⚠ Connection lost — showing last known queue. Reconnecting…
+  </div>
+
+  <!-- Main -->
+  <main class="qs-main">
+
+    <!-- Admin Pass QR -->
+    <div class="qs-admin-pass">
+      <div class="qs-admin-pass-text">
+        <div class="qs-admin-pass-title">🔐 Admin Access</div>
+        <div class="qs-admin-pass-desc">Scan this QR code to open the Staff Control Room dashboard. Keep this page visible only to booth staff.</div>
+      </div>
+      <div class="qs-admin-qr-wrap" id="adminPassQrWrap">
+        <!-- QR injected by JS -->
+      </div>
+    </div>
+
+    <!-- Now Serving -->
+    <div class="qs-serving-block">
+      <div class="qs-section-label">Now Serving</div>
+      <div class="qs-serving-card" id="servingCard">
+        <span class="qs-serving-empty" id="servingEmpty">No one being served yet</span>
+        <span class="qs-serving-badge" id="servingBadge" hidden>Now Serving</span>
+        <span class="qs-serving-number" id="servingNumber" hidden>—</span>
+        <div class="qs-serving-meta" id="servingMeta" hidden>
+          <span class="qs-serving-line" id="servingLine">—</span>
+          <span class="qs-serving-detail" id="servingDetail">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Booth Line Queue -->
+    <div class="qs-waiting-block">
+      <div class="qs-line-col-head">
+        <span class="qs-line-dot"></span>
+        <div class="qs-section-label" style="margin-bottom:0">Booth Line <span id="waitingCountBooth" style="color:var(--black);font-weight:800;"></span></div>
+      </div>
+      <div class="qs-ticket-list" id="waitingListBooth">
+        <div class="qs-empty">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Drop Line Queue -->
+    <div class="qs-onhold-block">
+      <div class="qs-line-col-head">
+        <span class="qs-line-dot drop"></span>
+        <div class="qs-section-label" style="margin-bottom:0">Drop Line <span id="waitingCountDrop" style="color:var(--black);font-weight:800;"></span></div>
+      </div>
+      <div class="qs-ticket-list" id="waitingListDrop">
+        <div class="qs-empty">Loading…</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="qs-footer">
+    Queue updates automatically.
+    <span class="qs-updated" id="lastUpdated"></span>
+  </footer>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// ── Config (same as cloud-storage.js) ────────────────────────────────────────
+const SUPABASE_URL = "https://oismyjlhnlfavrdfvabg.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pc215amxobmxmYXZyZGZ2YWJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMTI3OTMsImV4cCI6MjEwMDU4ODc5M30.TLGFzBFDYJsWUErTVV8yP2SlpkL9LzEPoFKV2R3hBGE";
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let _queue        = [];    // sorted active tickets
+let _realtimeOk   = false;
+let _pollTimer    = null;
+const POLL_MS     = 8000;
+
+// ── The two fixed booth lines ─────────────────────────────────────────────────
+const LINES = ["Booth", "Drop"];
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const connDot          = document.getElementById("connDot");
+const connLabel        = document.getElementById("connLabel");
+const offlineBanner    = document.getElementById("offlineBanner");
+const servingEmpty     = document.getElementById("servingEmpty");
+const servingBadge     = document.getElementById("servingBadge");
+const servingNumber    = document.getElementById("servingNumber");
+const servingMeta      = document.getElementById("servingMeta");
+const servingLine      = document.getElementById("servingLine");
+const servingDetail    = document.getElementById("servingDetail");
+const waitingListBooth = document.getElementById("waitingListBooth");
+const waitingListDrop  = document.getElementById("waitingListDrop");
+const waitingCountBooth= document.getElementById("waitingCountBooth");
+const waitingCountDrop = document.getElementById("waitingCountDrop");
+const lastUpdated      = document.getElementById("lastUpdated");
+
+// ── Admin Pass QR ─────────────────────────────────────────────────────────────
+// Generates a QR pointing to the admin dashboard.html (same-origin).
+(function _renderAdminPassQr() {
+  const wrap = document.getElementById("adminPassQrWrap");
+  if (!wrap || typeof QRCode === "undefined") return;
+
+  // Resolve the admin dashboard URL relative to this page.
+  // queue-status.html lives next to dashboard.html in the same folder.
+  const adminUrl = new URL("dashboard.html", window.location.href).href;
+
+  new QRCode(wrap, {
+    text:         adminUrl,
+    width:        96,
+    height:       96,
+    colorDark:    "#1A1200",
+    colorLight:   "#FFFFFF",
+    correctLevel: QRCode.CorrectLevel.M
+  });
+})();
+
+// ── Fetch queue from Supabase ─────────────────────────────────────────────────
+async function fetchQueue() {
+  const { data, error } = await db
+    .from("tickets")
+    .select("*")
+    .not("status", "in", '("COMPLETED","CANCELLED")')
+    .order("queue_number", { ascending: true });
+
+  if (error) throw error;
+
+  const ORDER = { IN_SESSION: 0, CALLED: 1, ON_HOLD: 2, WAITING: 3 };
+  return (data || []).sort((a, b) => {
+    const oa = ORDER[a.status] ?? 99;
+    const ob = ORDER[b.status] ?? 99;
+    if (oa !== ob) return oa - ob;
+    return a.queue_number - b.queue_number;
+  });
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function addonLabel(ticket) {
+  const parts = [];
+  if (ticket.copies)         parts.push(`${ticket.copies} cop${ticket.copies !== 1 ? "ies" : "y"}`);
+  if (ticket.frame_addon)    parts.push(`${ticket.frame_addon} frame${ticket.frame_addon !== 1 ? "s" : ""}`);
+  if (ticket.keychain_addon) parts.push(`${ticket.keychain_addon} keychain${ticket.keychain_addon !== 1 ? "s" : ""}`);
+  return parts.join(" · ") || "—";
+}
+
+function renderQueue(queue) {
+  // Globally the "serving" ticket is whichever is CALLED or IN_SESSION
+  // across any line — show the one with the highest priority first.
+  const ORDER   = { IN_SESSION: 0, CALLED: 1, ON_HOLD: 2, WAITING: 3 };
+  const serving = queue.find(t => t.status === "IN_SESSION" || t.status === "CALLED");
+
+  // ── Now Serving ──
+  if (serving) {
+    servingEmpty.hidden  = true;
+    servingBadge.hidden  = false;
+    servingNumber.hidden = false;
+    servingMeta.hidden   = false;
+
+    const numStr = String(serving.queue_number);
+    if (servingNumber.textContent !== numStr) {
+      servingNumber.textContent = numStr;
+      servingNumber.classList.remove("serving-changed");
+      void servingNumber.offsetWidth;
+      servingNumber.classList.add("serving-changed");
+    }
+    servingBadge.textContent  = serving.status === "IN_SESSION" ? "In Session" : "Now Serving";
+    servingLine.textContent   = serving.queue_line;
+    servingDetail.textContent = addonLabel(serving);
+  } else {
+    servingEmpty.hidden  = false;
+    servingBadge.hidden  = true;
+    servingNumber.hidden = true;
+    servingMeta.hidden   = true;
+  }
+
+  // ── Booth line column ──
+  const boothTickets = queue.filter(t => t.queue_line === "Booth" && t.status === "WAITING");
+  const boothHold    = queue.filter(t => t.queue_line === "Booth" && t.status === "ON_HOLD");
+  const boothAll     = [...boothTickets, ...boothHold];
+  waitingCountBooth.textContent = boothAll.length ? `(${boothAll.length})` : "";
+  if (boothAll.length === 0) {
+    waitingListBooth.innerHTML = '<div class="qs-empty">Queue is empty</div>';
+  } else {
+    waitingListBooth.innerHTML = boothAll.map((t, i) => {
+      const isNext = t.status === "WAITING" && i === 0;
+      const isHold = t.status === "ON_HOLD";
+      return `
+      <div class="qs-ticket-row ${isNext ? "is-next" : ""}">
+        <span class="qs-ticket-num">${t.queue_number}</span>
+        <div class="qs-ticket-info">
+          <div class="qs-ticket-line">${escHtml(t.queue_line)}</div>
+          <div class="qs-ticket-addons">${addonLabel(t)}</div>
+        </div>
+        ${isNext ? '<span class="qs-next-badge">Next</span>' : ""}
+        ${isHold ? '<span class="qs-hold-badge">On Hold</span>' : ""}
+      </div>`;
+    }).join("");
+  }
+
+  // ── Drop line column ──
+  const dropTickets = queue.filter(t => t.queue_line === "Drop" && t.status === "WAITING");
+  const dropHold    = queue.filter(t => t.queue_line === "Drop" && t.status === "ON_HOLD");
+  const dropAll     = [...dropTickets, ...dropHold];
+  waitingCountDrop.textContent = dropAll.length ? `(${dropAll.length})` : "";
+  if (dropAll.length === 0) {
+    waitingListDrop.innerHTML = '<div class="qs-empty">Queue is empty</div>';
+  } else {
+    waitingListDrop.innerHTML = dropAll.map((t, i) => {
+      const isNext = t.status === "WAITING" && i === 0;
+      const isHold = t.status === "ON_HOLD";
+      return `
+      <div class="qs-ticket-row ${isNext ? "is-next" : ""}">
+        <span class="qs-ticket-num">${t.queue_number}</span>
+        <div class="qs-ticket-info">
+          <div class="qs-ticket-line">${escHtml(t.queue_line)}</div>
+          <div class="qs-ticket-addons">${addonLabel(t)}</div>
+        </div>
+        ${isNext ? '<span class="qs-next-badge">Next</span>' : ""}
+        ${isHold ? '<span class="qs-hold-badge">On Hold</span>' : ""}
+      </div>`;
+    }).join("");
+  }
+
+  // ── Last updated ──
+  lastUpdated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+}
+
+function escHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ── Connection status UI ──────────────────────────────────────────────────────
+function setConnected(live) {
+  _realtimeOk = live;
+  if (live) {
+    connDot.className   = "qs-conn-dot live";
+    connLabel.textContent = "Live";
+    offlineBanner.classList.remove("visible");
+  } else {
+    connDot.className   = "qs-conn-dot error";
+    connLabel.textContent = "Reconnecting…";
+    offlineBanner.classList.add("visible");
+  }
+}
+
+function setPolling() {
+  connDot.className   = "qs-conn-dot poll";
+  connLabel.textContent = "Polling";
+}
+
+// ── Refresh helper ────────────────────────────────────────────────────────────
+async function refresh() {
+  try {
+    const queue = await fetchQueue();
+    _queue = queue;
+    renderQueue(queue);
+  } catch (e) {
+    console.warn("[queue-status] Fetch failed:", e.message);
+    setConnected(false);
+  }
+}
+
+// ── Fallback polling ──────────────────────────────────────────────────────────
+function startPolling() {
+  if (_pollTimer) return;
+  setPolling();
+  _pollTimer = setInterval(refresh, POLL_MS);
+}
+
+function stopPolling() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+}
+
+// ── Realtime subscription ─────────────────────────────────────────────────────
+function subscribeRealtime() {
+  const channel = db
+    .channel("queue-status-page")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "tickets" },
+      () => refresh()
+    )
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        setConnected(true);
+        stopPolling();
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        setConnected(false);
+        startPolling();
+        // Try to reconnect after 10s
+        setTimeout(() => {
+          db.removeChannel(channel);
+          subscribeRealtime();
+        }, 10000);
+      }
+    });
+  return channel;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async function init() {
+  // Initial fetch
+  await refresh();
+
+  // Subscribe to realtime
+  subscribeRealtime();
+
+  // Offline/online detection
+  window.addEventListener("offline", () => {
+    setConnected(false);
+    startPolling();
+  });
+  window.addEventListener("online", () => {
+    refresh();
+  });
+})();
+</script>
+</body>
+</html>
