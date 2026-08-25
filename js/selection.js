@@ -1,18 +1,35 @@
 /*
- * SELECTION LOGIC — Page 4  (v2)
+ * SELECTION LOGIC — Page 4  (v3)
  *
- * Changes from v1:
- *  - Removed ✓ checkmark span; replaced with .photo-card-order-badge
- *    that shows the 1-based tap-order number (e.g. first photo tapped → "1").
- *  - No external animations on selection — badge visibility is CSS-only
- *    (.visible class toggled here; transition in animations.css).
- *  - All selection logic (toggleShot, selectionOrder, limit flash,
- *    autoComplete, strip preview) is preserved exactly.
+ * Changes from v2 (crash fix — "page lags/errors right after the 4th photo"):
  *
- * Why the badge lives here and not in animations.js:
- *   renderGrid() clears innerHTML on every toggle, destroying any nodes
- *   injected externally. The badge must be part of the initial innerHTML
- *   so it is recreated correctly on every re-render.
+ *  ROOT CAUSE #1 — full grid teardown on every tap:
+ *   renderGrid() used to wipe #selectionGrid's innerHTML and recreate all
+ *   8 <img> cards (+ re-attach 8 click listeners) on EVERY single tap, just
+ *   to update one badge/class. That meant every photo was re-decoded by the
+ *   browser on every tap, and old event listeners were only cleaned up by
+ *   GC — never guaranteed to happen promptly. Fixed by building the 8 cards
+ *   ONCE (per session, on init()) and afterwards only updating the
+ *   `.selected` class + order-badge text/visibility in place. Listeners are
+ *   attached exactly once per card per session — no duplicates.
+ *
+ *  ROOT CAUSE #2 — unthrottled concurrent preview renders:
+ *   renderPreview() -> stripModule.render() is async (full-resolution
+ *   2400×3600 canvas compositing) but was never awaited by toggleShot().
+ *   Fast taps fired a new render() before the previous one had finished,
+ *   so several heavy composites ran concurrently, all racing to write into
+ *   the same preview container. Because the 4th tap is the first time all
+ *   4 slots hold *real* photos (vs. cheap placeholder outlines for empty
+ *   slots), that's exactly where the pile-up became heavy enough to freeze
+ *   the page. Fixed with a single-flight queue in _queuePreviewRender():
+ *   only one stripModule.render() call is ever in flight for the preview;
+ *   any taps that land while one is running are coalesced into a single
+ *   follow-up render of the latest state (see also the generation guard
+ *   added inside stripModule.render() itself, as defense in depth).
+ *
+ *  Selection behavior (toggleShot, selectionOrder, limit flash,
+ *  autoComplete, strip preview, badge numbering) is unchanged — only the
+ *  DOM/async plumbing around it was tightened.
  */
 
 const selectionModule = {
@@ -20,33 +37,44 @@ const selectionModule = {
     grid: document.getElementById("selectionGrid"),
     previewContainer: document.getElementById("stripPreviewContainer"),
     nextBtn: document.getElementById("btnNextFromSelection"),
-    counterCard: null // created dynamically in renderGrid()
+    counterCard: null // created in renderGrid() the first time it runs
   },
 
   selectionOrder: [], // shot ids in tap order; null means slot is empty (max 4 slots)
 
+  // shotId -> { card, badge } — built once per session by renderGrid()
+  _cardEls: {},
+  _cardsBuilt: false,
+
+  // Single-flight guard for the async strip preview render (see header note)
+  _previewRenderInFlight: false,
+  _previewRenderPending: false,
+
   init() {
     this.selectionOrder = [];
+    this._cardsBuilt = false; // force a full grid rebuild for the new session's shots
     this.renderGrid();
     this.renderPreview();
   },
 
   renderGrid() {
+    if (!this._cardsBuilt) {
+      this._buildGrid();
+    }
+    this._updateAllCardVisuals();
+  },
+
+  /* Builds the 8 photo cards + counter tile exactly once per session. */
+  _buildGrid() {
     this.els.grid.innerHTML = "";
+    this._cardEls = {};
 
     sessionState.shots
       .slice()
       .sort((a, b) => a.id - b.id)
       .forEach((shot) => {
-        // Slot number is the 1-based position in selectionOrder (nulls are skipped for display)
-        // selectionOrder holds shot ids; find which slot this shot occupies.
-        const slotIndex = this.selectionOrder.indexOf(shot.id);
-        // Display the 1-based slot number (position in the fixed order array)
-        const orderNum   = slotIndex === -1 ? "" : String(slotIndex + 1);
-        const isSelected = shot.selected;
-
         const card = document.createElement("div");
-        card.className = "photo-card" + (isSelected ? " selected" : "");
+        card.className = "photo-card";
         card.dataset.shotId = shot.id;
 
         /*
@@ -54,15 +82,23 @@ const selectionModule = {
          *   - always rendered in the DOM so CSS transitions work
          *   - .visible class makes it opaque/scaled-up (see animations.css)
          *   - textContent is the tap-order number, empty when not selected
+         *   - lives here permanently now (not recreated per tap), so the
+         *     CSS "spring pop" transition actually plays instead of the
+         *     badge always appearing already in its end state.
          */
         card.innerHTML = `
           <img src="${shot.imageUrl}" alt="Photo ${shot.id}">
           <span class="photo-card-badge">PHOTO ${shot.id}</span>
-          <span class="photo-card-order-badge${isSelected ? " visible" : ""}">${orderNum}</span>
+          <span class="photo-card-order-badge"></span>
         `;
 
         card.addEventListener("click", () => this.toggleShot(shot.id));
         this.els.grid.appendChild(card);
+
+        this._cardEls[shot.id] = {
+          card,
+          badge: card.querySelector(".photo-card-order-badge")
+        };
       });
 
     // 9th tile — live selection counter
@@ -71,6 +107,25 @@ const selectionModule = {
     counterCard.id = "selectionCounterCard";
     this.els.grid.appendChild(counterCard);
     this.els.counterCard = counterCard;
+
+    this._cardsBuilt = true;
+  },
+
+  /* Cheap in-place update — no DOM teardown, no image re-decode, no new listeners. */
+  _updateAllCardVisuals() {
+    sessionState.shots.forEach((shot) => {
+      const refs = this._cardEls[shot.id];
+      if (!refs) return;
+
+      const slotIndex   = this.selectionOrder.indexOf(shot.id);
+      const orderNum    = slotIndex === -1 ? "" : String(slotIndex + 1);
+      const isSelected  = shot.selected;
+
+      refs.card.classList.toggle("selected", isSelected);
+      refs.badge.textContent = orderNum;
+      refs.badge.classList.toggle("visible", isSelected);
+    });
+
     this.renderCounterCard();
   },
 
@@ -104,10 +159,10 @@ const selectionModule = {
       }
     }
 
-    // Re-render the full grid so order badges update correctly on all cards
+    // Cheap in-place visual update (see renderGrid/_updateAllCardVisuals above)
     this.renderGrid();
+    // Queues (and coalesces) the async strip-preview canvas render
     this.renderPreview();
-    this.updateCountAndNav();
   },
 
   flashLimit() {
@@ -155,18 +210,79 @@ const selectionModule = {
 
   renderPreview() {
     this.updateCountAndNav();
-    stripModule.render(this.els.previewContainer, {
+    this._queuePreviewRender();
+  },
+
+  /*
+   * Single-flight + coalescing queue for the strip preview canvas render.
+   *
+   * Without this, every tap kicked off its own `await stripModule.render(...)`
+   * (a full-resolution canvas composite) with no regard for whether a
+   * previous one was still running. Rapid taps piled up several of these
+   * concurrently, which is what froze/crashed Page 4 right around the 4th
+   * photo. Now: only one render is ever in flight; if more taps land while
+   * it's running, we don't start a second one — we just remember to render
+   * once more with the latest state as soon as the current one finishes.
+   */
+  _queuePreviewRender() {
+    if (this._previewRenderInFlight) {
+      this._previewRenderPending = true;
+      return;
+    }
+
+    this._previewRenderInFlight = true;
+    const opts = {
       frameType: sessionState.frameType || "2x6",
       selectedShots: sessionState.selectedShots,
       designId: sessionState.design
-    });
+    };
+
+    stripModule.render(this.els.previewContainer, opts)
+      .catch((e) => console.warn("[selection] preview render failed:", e && e.message || e))
+      .finally(() => {
+        this._previewRenderInFlight = false;
+        if (this._previewRenderPending) {
+          this._previewRenderPending = false;
+          this._queuePreviewRender();
+        }
+      });
   }
 };
 
-document.getElementById("btnNextFromSelection").addEventListener("click", () => {
+document.getElementById("btnNextFromSelection").addEventListener("click", async () => {
   kioskTimer.hide();
-  designModule.init();
-  goToPage("design");
+
+  // ── Audio: fire printing SFX immediately on button press ──────────────
+  if (typeof audioManager !== "undefined") {
+    audioManager.playPrintSfx();
+  }
+
+  // The design was already selected on Page 2 (template selection).
+  // Ensure designModule has the correct selection before printing.
+  if (typeof designModule !== "undefined") {
+    if (!sessionState.design && typeof STRIP_DESIGNS !== "undefined" && STRIP_DESIGNS.length) {
+      sessionState.design = STRIP_DESIGNS[0].id;
+    }
+    designModule._activeFilter = "none"; // reset filter
+  }
+
+  // Reset + start progress bar immediately
+  if (typeof uploadProgress !== "undefined") uploadProgress.start();
+  // Fire QR generation
+  if (typeof qrModule !== "undefined") qrModule.generateAndRender();
+  // Set the video frame's aspect ratio
+  if (typeof _setPrintingFrameAspectRatio === "function") _setPrintingFrameAspectRatio();
+  // Init printing module
+  if (typeof printingModule !== "undefined") await printingModule.init();
+
+  // Link ticket to session (fire-and-forget)
+  if (sessionState.ticketId && sessionState.id && typeof queueTickets !== "undefined") {
+    queueTickets.linkSession(sessionState.ticketId, sessionState.id).catch((e) => {
+      console.warn("[selection] Could not link ticket to session:", e.message || e);
+    });
+  }
+
+  goToPage("printing");
 });
 
 /* Auto-jump into selection once the 8-shot session finishes (from shooting.js) */

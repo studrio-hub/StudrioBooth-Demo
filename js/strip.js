@@ -87,60 +87,80 @@ const stripModule = {
       label: t.name,
       cssClass: `theme-${t.id}`,
       thumbnail: t.thumbnailUrl,
+      /*
+       * category — normalised to lowercase kiosk tab key.
+       * assetSync exposes the Supabase `asset_type` column as t.assetType
+       * (e.g. "Originals" | "Designs" | "Accessories"). We normalise here
+       * so templateModule._getCategory() can do a simple string compare
+       * instead of fragile substring matching on the template name.
+       */
+      category: (() => {
+        // Supabase returns snake_case column names (asset_type), not camelCase.
+        // Read both forms so we work whether or not a JS layer camelCases it.
+        const raw = (t.asset_type || t.assetType || t.category || "").trim().toLowerCase();
+        if (raw === "originals")   return "originals";
+        if (raw === "accessories") return "accessories";
+        if (raw === "designs")     return "designs";
+        return "originals"; // default for legacy entries with no category
+      })(),
       overlays: {
-        "2x6": t.overlayUrl2x6,
-        "4x6": t.overlayUrl4x6
-      }
+        "2x6":      t.overlayUrl2x6,
+        "4x6":      t.overlayUrl4x6,
+        "long-duo": t.overlayUrlLongDuo  || null,
+        "long-mini":t.overlayUrlLongMini || null,
+        "film-duo": t.overlayUrlFilmDuo  || null,
+        "wide-mini":t.overlayUrlWideMini || null
+      },
+      /*
+       * previewOverlays — strip preview overlay URLs per frame type.
+       * These are used ONLY on the selection/printing preview canvas; they
+       * are sized to the preview region (1200×3600 or 2400×1800) so they
+       * align exactly with the cropped photo slots shown in the preview.
+       * The full-frame overlay (overlays[frameType]) is used for print.
+       *
+       * Supabase column names come through as snake_case via assetSync.
+       * adminTemplates.listTemplates() resolves them to public URLs as
+       * preview_overlay_url_<format>. assetSync maps them to camelCase
+       * as previewOverlayUrl<Format>. We read both forms defensively.
+       */
+      previewOverlays: {
+        "long-duo":  t.preview_overlay_url_long_duo  || t.previewOverlayUrlLongDuo  || null,
+        "long-mini": t.preview_overlay_url_long_mini || t.previewOverlayUrlLongMini || null,
+        "film-duo":  t.preview_overlay_url_film_duo  || t.previewOverlayUrlFilmDuo  || null,
+        "wide-mini": t.preview_overlay_url_wide_mini || t.previewOverlayUrlWideMini || null
+      },
+      // Linked keychain template overlay URL — populated when this 2×6 design
+      // has a corresponding keychain template (keychain_overlay_path in Supabase,
+      // resolved to a blob: URL by asset-sync.js as keychainOverlayUrl).
+      keychainOverlayUrl: t.keychainOverlayUrl || null
     }));
     console.log(`[stripModule] Loaded ${STRIP_DESIGNS.length} designs from assetSync.`);
     this.preloadDesignOverlays();
     this._updateFrameAvailability();
+    // Refresh the new template carousel (page-template) if it has been initialised
+    if (typeof templateModule !== "undefined" && typeof templateModule.refresh === "function") {
+      templateModule.refresh();
+    }
   },
 
   /*
-   * Hides frame size cards on Page 2 when no uploaded template has an
-   * overlay for that size. If a size has zero templates, its card and
-   * any existing selection are hidden so guests can't choose it.
+   * Frame availability — now informational only.
+   * The old page-frame cards are hidden stubs; the new templateModule
+   * handles filtering by frame type directly. We keep this method so
+   * any callers don't throw, but no UI manipulation of hidden stubs is done.
    */
   _updateFrameAvailability() {
-    const has2x6 = STRIP_DESIGNS.some(d => d.overlays && d.overlays["2x6"]);
-    const has4x6 = STRIP_DESIGNS.some(d => d.overlays && d.overlays["4x6"]);
-
-    const card2x6 = document.getElementById("frameCard2x6");
-    const card4x6 = document.getElementById("frameCard4x6");
-
-    if (card2x6) {
-      card2x6.style.display = has2x6 ? "" : "none";
-      // If this frame type was previously selected but is now unavailable, deselect it
-      if (!has2x6 && typeof sessionState !== "undefined" && sessionState.frameType === "2x6") {
-        sessionState.frameType = null;
-        card2x6.classList.remove("selected");
-        const nextBtn = document.getElementById("btnNextFromFrame");
-        if (nextBtn) nextBtn.disabled = true;
-      }
+    const ALL_FRAME_TYPES = ["2x6", "4x6", "long-duo", "long-mini", "film-duo", "wide-mini"];
+    const availability = {};
+    ALL_FRAME_TYPES.forEach(ft => {
+      availability[ft] = STRIP_DESIGNS.some(d => d.overlays && d.overlays[ft]);
+    });
+    console.log("[stripModule] Frame availability —", Object.entries(availability).map(([k,v]) => `${k}: ${v}`).join(", "));
+    // If sessionState has an invalid frameType, clear it so the carousel re-selects correctly.
+    if (typeof sessionState !== "undefined" && sessionState.frameType) {
+      const ft = sessionState.frameType;
+      if (ALL_FRAME_TYPES.includes(ft) && !availability[ft]) sessionState.frameType = null;
     }
-
-    if (card4x6) {
-      card4x6.style.display = has4x6 ? "" : "none";
-      if (!has4x6 && typeof sessionState !== "undefined" && sessionState.frameType === "4x6") {
-        sessionState.frameType = null;
-        card4x6.classList.remove("selected");
-        const nextBtn = document.getElementById("btnNextFromFrame");
-        if (nextBtn) nextBtn.disabled = true;
-      }
-    }
-
-    // Auto-select if only one size is available and nothing is selected yet
-    if (typeof sessionState !== "undefined" && !sessionState.frameType) {
-      if (has2x6 && !has4x6 && card2x6) {
-        // Only 2x6 available — auto-select it but don't advance the page
-        console.log("[stripModule] Only 2x6 templates available — auto-selecting.");
-      } else if (has4x6 && !has2x6 && card4x6) {
-        console.log("[stripModule] Only 4x6 templates available — auto-selecting.");
-      }
-    }
-
-    console.log(`[stripModule] Frame availability — 2x6: ${has2x6}, 4x6: ${has4x6}`);
   },
 
   loadImage(src) {
@@ -177,6 +197,66 @@ const stripModule = {
   },
 
   /*
+   * drawRotatedCropFill — draws an image into a bounding box (x, y, w, h) rotated
+   * by `angleDeg` degrees clockwise around the centre of that box.
+   * The image is crop-to-filled within the rotated frame.
+   *
+   * Used for photo slots that specify `angle: 90` (or any angle) in LAYOUT_CONFIGS.
+   * The canvas context is saved and restored so the rotation is isolated.
+   *
+   * COORDINATE CONTRACT:
+   *   x, y, w, h are the ABSOLUTE bounding-box coordinates on the master canvas
+   *   (2400 × 3600 px) exactly as written in LAYOUT_CONFIGS.  They must never be
+   *   swapped, scaled, or reinterpreted here.
+   *
+   *   The visual bounding box on the canvas is always w × h at position (x, y)
+   *   BEFORE rotation is applied. Rotation pivots around the centre of that
+   *   box, so the box's content — not its footprint — is what gets rotated.
+   *
+   *   The crop-fill step below always uses the plain w/h ratio (identical to
+   *   the non-rotated drawCropFill), because the image is cropped and drawn
+   *   to fill that local w × h rectangle BEFORE rotation is applied. Rotating
+   *   a correctly-filled w × h rectangle by 90° is a rigid transform — it
+   *   does not distort the image, it just reorients it, and the rectangle's
+   *   footprint on the canvas naturally becomes h × w as a consequence.
+   *
+   *   A previous version of this function cropped to the transposed h/w
+   *   ratio (reasoning that the rotated interior is h wide × w tall) but
+   *   still drew into a w × h destination rect. Since drawImage stretches
+   *   the source rect to fit the destination independently on each axis,
+   *   cropping to h/w while drawing into w×h forced a non-uniform stretch
+   *   whenever w ≠ h — visible as squished/stretched photos in any
+   *   strongly non-square rotated slot (e.g. the long-mini tiny strips,
+   *   wide-mini side frames, and the film-duo filmstrip).
+   */
+  drawRotatedCropFill(ctx, img, x, y, w, h, angleDeg) {
+    const rad = (angleDeg * Math.PI) / 180;
+    // Centre of the bounding box — rotation pivot, never changes.
+    const cx  = x + w / 2;
+    const cy  = y + h / 2;
+
+    // Crop-fill uses the local (pre-rotation) w/h ratio — same as the
+    // non-rotated case — because rotation is applied to the already-filled
+    // w × h rectangle as a rigid transform (see comment above).
+    const imgRatio = img.width / img.height;
+    const boxRatio = w / h;
+    let sx, sy, sw, sh;
+    if (imgRatio > boxRatio) {
+      sh = img.height; sw = sh * boxRatio; sx = (img.width  - sw) / 2; sy = 0;
+    } else {
+      sw = img.width;  sh = sw / boxRatio; sx = 0; sy = (img.height - sh) / 2;
+    }
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rad);
+    // Draw at (-w/2, -h/2, w, h) so the destination bounding box is always
+    // the spec-exact w × h rectangle centred on (cx, cy).
+    ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  },
+
+  /*
    * Composites the full pixel-perfect layout onto an off-DOM canvas at
    * EXACT export resolution (2400 x 3600 @ 600dpi). This single canvas
    * is used for both the live preview (CSS-scaled down) and the final
@@ -203,7 +283,7 @@ const stripModule = {
     return overlayImg && overlayImg.naturalWidth > 0 && overlayImg.naturalWidth < 1800;
   },
 
-  async compositeLayout({ frameType, selectedShots, designId, singleStrip = false }) {
+  async compositeLayout({ frameType, selectedShots, designId, singleStrip = false, debugSlots = false }) {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
@@ -219,9 +299,15 @@ const stripModule = {
     );
 
     config.photoSlots.forEach((slot, i) => {
-      const img = photoImages[config.slotToPhotoIndex[i]];
+      // Per-slot photoIndex takes priority over the legacy slotToPhotoIndex array.
+      const photoIdx = (slot.photoIndex !== undefined) ? slot.photoIndex : config.slotToPhotoIndex[i];
+      const img = photoImages[photoIdx];
       if (img) {
-        this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
+        if (slot.angle) {
+          this.drawRotatedCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h, slot.angle);
+        } else {
+          this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
+        }
       } else {
         ctx.save();
         ctx.strokeStyle = "rgba(255,255,255,0.25)";
@@ -245,13 +331,45 @@ const stripModule = {
             ctx.drawImage(overlayImg, 0, 0, stripW, config.canvasHeight);
             ctx.drawImage(overlayImg, stripW, 0, stripW, config.canvasHeight);
           } else {
-            // Full double-strip overlay (legacy format): draw at full width
+            // Full overlay: draw at full canvas size
             ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
           }
         } else {
           console.warn(`[stripModule] Overlay not found: ${overlayPath}`);
         }
       }
+    }
+
+    // DEBUG ONLY — draws every configured photo slot's exact bounding box
+    // (per LAYOUT_CONFIGS) on top of everything, including the design
+    // overlay artwork. Use this to check whether an overlay PNG's own
+    // transparent "windows" actually line up with the real slot coordinates —
+    // any opaque overlay area that covers part of a red box below is the
+    // overlay artwork, not a slot/coordinate bug.
+    // Toggle: compositeLayout({ ..., debugSlots: true }) or
+    // stripModule.exportDebugPNG({ frameType, selectedShots, designId }).
+    // REMOVE before shipping to production — for verification only.
+    if (debugSlots) {
+      config.photoSlots.forEach((slot, i) => {
+        ctx.save();
+        ctx.strokeStyle = "#ff0033";
+        ctx.lineWidth = 6;
+        ctx.setLineDash([18, 10]);
+        ctx.strokeRect(slot.x, slot.y, slot.w, slot.h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#ff0033";
+        ctx.font = "bold 36px sans-serif";
+        ctx.fillText(`#${i}`, slot.x + 10, slot.y + 44);
+        ctx.restore();
+      });
+      (config.qrPlacements || []).forEach((p) => {
+        ctx.save();
+        ctx.strokeStyle = "#00aaff";
+        ctx.lineWidth = 6;
+        ctx.setLineDash([18, 10]);
+        ctx.strokeRect(p.x, p.y, p.w, p.h);
+        ctx.restore();
+      });
     }
 
     // If the caller only wants one strip (digital gallery download), crop
@@ -279,9 +397,21 @@ const stripModule = {
    * swatch thumbnails composite almost instantly.
    */
   preloadDesignOverlays() {
+    // All supported frame type keys — extend this list when new frame types are added.
+    const ALL_FRAME_TYPES = ["2x6", "4x6", "long-duo", "long-mini", "film-duo", "wide-mini"];
+    const PREVIEW_FRAME_TYPES = ["long-duo", "long-mini", "film-duo", "wide-mini"];
     STRIP_DESIGNS.forEach((design) => {
-      if (design.overlays && design.overlays["2x6"]) this.loadImage(design.overlays["2x6"]);
-      if (design.overlays && design.overlays["4x6"]) this.loadImage(design.overlays["4x6"]);
+      if (design.overlays) {
+        ALL_FRAME_TYPES.forEach((ft) => {
+          if (design.overlays[ft]) this.loadImage(design.overlays[ft]);
+        });
+      }
+      // Also warm strip preview overlay cache
+      if (design.previewOverlays) {
+        PREVIEW_FRAME_TYPES.forEach((ft) => {
+          if (design.previewOverlays[ft]) this.loadImage(design.previewOverlays[ft]);
+        });
+      }
     });
   },
 
@@ -306,10 +436,15 @@ const stripModule = {
     );
 
     config.photoSlots.forEach((slot, i) => {
-      const img = photoImages[config.slotToPhotoIndex[i]];
+      const photoIdx = (slot.photoIndex !== undefined) ? slot.photoIndex : config.slotToPhotoIndex[i];
+      const img = photoImages[photoIdx];
       const x = slot.x * scale, y = slot.y * scale, w = slot.w * scale, h = slot.h * scale;
       if (img) {
-        this.drawCropFill(ctx, img, x, y, w, h);
+        if (slot.angle) {
+          this.drawRotatedCropFill(ctx, img, x, y, w, h, slot.angle);
+        } else {
+          this.drawCropFill(ctx, img, x, y, w, h);
+        }
       } else {
         ctx.save();
         ctx.strokeStyle = "rgba(255,255,255,0.25)";
@@ -376,8 +511,72 @@ const stripModule = {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
+    // ── 2×6: single-strip canvas (half the print sheet width) ──────────────
+    if (frameType === "2x6") {
+      const copies = 2;
+      const stripW = Math.round(config.canvasWidth / copies);
+      const stripH = config.canvasHeight;
+
+      const canvas = document.createElement("canvas");
+      canvas.width  = stripW;
+      canvas.height = stripH;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, stripW, stripH);
+
+      // Layer 1: thumbnail background
+      const thumbSrc = "assets/designs/thumbnail/2x6_Strip_Thumbnail.png";
+      try {
+        const thumbImg = await this.loadImage(thumbSrc);
+        if (thumbImg) {
+          this.drawCropFill(ctx, thumbImg, 0, 0, stripW, stripH);
+          ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, stripW, stripH); ctx.restore();
+        }
+      } catch (_) { /* thumbnail is optional */ }
+
+      // Layer 2: photos — copy-0 slots only
+      const slotsPerCopy = Math.round(config.photoSlots.length / copies);
+      const copy0Slots   = config.photoSlots.slice(0, slotsPerCopy);
+      const photoImages  = await Promise.all(
+        (selectedShots || []).map((shot) =>
+          shot && shot.imageUrl ? this.loadImage(shot.imageUrl) : Promise.resolve(null)
+        )
+      );
+      copy0Slots.forEach((slot, i) => {
+        const photoIdx = (slot.photoIndex !== undefined) ? slot.photoIndex : config.slotToPhotoIndex[i];
+        const img = photoImages[photoIdx];
+        if (img) {
+          this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
+        } else {
+          ctx.save(); ctx.strokeStyle = "rgba(180,180,180,0.5)"; ctx.lineWidth = 3;
+          ctx.strokeRect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4); ctx.restore();
+        }
+      });
+
+      // Layer 3: overlay
+      const overlayDesignId = designId || (this._getOriginalDesign() || {}).id;
+      const design = this.getDesign(overlayDesignId);
+      if (design) {
+        const overlayPath = design.overlays && design.overlays["2x6"];
+        if (overlayPath) {
+          const overlayImg = await this.loadImage(overlayPath);
+          if (overlayImg) {
+            const isSingle = this._isSingleStripOverlay(overlayImg, "2x6");
+            if (isSingle) {
+              ctx.drawImage(overlayImg, 0, 0, stripW, stripH);
+            } else {
+              const srcW = Math.round(overlayImg.naturalWidth / 2);
+              const srcH = overlayImg.naturalHeight;
+              ctx.drawImage(overlayImg, 0, 0, srcW, srcH, 0, 0, stripW, stripH);
+            }
+          }
+        }
+      }
+      return canvas;
+    }
+
+    // ── 4×6: full-canvas composite (unchanged) ──────────────────────────────
     if (frameType === "4x6") {
-      // ── 4×6: full canvas (no duplication), 3-layer spec ──────────────────
       const canvasW = config.canvasWidth;
       const canvasH = config.canvasHeight;
 
@@ -387,126 +586,127 @@ const stripModule = {
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvasW, canvasH);
 
-      // ── Layer 1 (bottom): 4×6 strip thumbnail background ─────────────────
-      const thumbSrc4x6 = "assets/designs/thumbnail/4x6_Strip_Thumbnail.png";
+      // Layer 1: thumbnail background
+      const thumbSrc = this._getFrameThumbnail(frameType);
       try {
-        const thumbImg = await this.loadImage(thumbSrc4x6);
+        const thumbImg = await this.loadImage(thumbSrc);
         if (thumbImg) {
           this.drawCropFill(ctx, thumbImg, 0, 0, canvasW, canvasH);
-          // Soft white wash so photos on top are clearly readable
-          ctx.save();
-          ctx.globalAlpha = 0.18;
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(0, 0, canvasW, canvasH);
-          ctx.restore();
+          ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvasW, canvasH); ctx.restore();
         }
       } catch (_) { /* thumbnail optional */ }
 
-      // ── Layer 2 (middle): captured photos ────────────────────────────────
       const photoImages = await Promise.all(
         (selectedShots || []).map((shot) =>
           shot && shot.imageUrl ? this.loadImage(shot.imageUrl) : Promise.resolve(null)
         )
       );
       config.photoSlots.forEach((slot, i) => {
-        const img = photoImages[config.slotToPhotoIndex[i]];
+        const photoIdx = (slot.photoIndex !== undefined) ? slot.photoIndex : config.slotToPhotoIndex[i];
+        const img = photoImages[photoIdx];
         if (img) {
           this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
         } else {
-          ctx.save();
-          ctx.strokeStyle = "rgba(180,180,180,0.5)";
-          ctx.lineWidth = 3;
-          ctx.strokeRect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
-          ctx.restore();
+          ctx.save(); ctx.strokeStyle = "rgba(180,180,180,0.5)"; ctx.lineWidth = 3;
+          ctx.strokeRect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4); ctx.restore();
         }
       });
 
-      // ── Layer 3 (top): template overlay ──────────────────────────────────
-      // Page 4 (no designId) → Original; Page 5 → selected designId.
-      const overlayDesignId4x6 = designId || (this._getOriginalDesign() || {}).id;
-      const design4x6 = this.getDesign(overlayDesignId4x6);
-      if (design4x6) {
-        const overlayPath = design4x6.overlays && design4x6.overlays["4x6"];
+      // Layer 3: overlay
+      const overlayDesignId = designId || (this._getOriginalDesign() || {}).id;
+      const design = this.getDesign(overlayDesignId);
+      if (design) {
+        const overlayPath = design.overlays && design.overlays[frameType];
         if (overlayPath) {
           const overlayImg = await this.loadImage(overlayPath);
-          if (overlayImg) {
-            ctx.drawImage(overlayImg, 0, 0, canvasW, canvasH);
-          }
+          if (overlayImg) ctx.drawImage(overlayImg, 0, 0, canvasW, canvasH);
         }
       }
-
       return canvas;
     }
 
-    // ── 2×6: single-strip canvas ────────────────────────────────────────────
-    // The full sheet is 2400×3600. One strip is 1200×3600.
-    const copies = 2;
-    const stripW = Math.round(config.canvasWidth / copies);
-    const stripH = config.canvasHeight;
+    // ── New frame types: cropped preview canvas (left half or top half) ──────
+    // long-duo, long-mini, film-duo → W=1200, H=3600 (left strip, 4 slots)
+    // wide-mini                     → W=2400, H=1800 (top half, 4 slots)
+    // Only Frame 1 slots are drawn; the full canvas is used for print only.
+    const previewCfg = this._getPreviewConfig(frameType);
+    if (!previewCfg) throw new Error(`Unhandled frame type in compositeLayoutPreview: ${frameType}`);
+
+    const { canvasW, canvasH, slots } = previewCfg;
 
     const canvas = document.createElement("canvas");
-    canvas.width  = stripW;
-    canvas.height = stripH;
+    canvas.width  = canvasW;
+    canvas.height = canvasH;
     const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, stripW, stripH);
+    ctx.clearRect(0, 0, canvasW, canvasH);
 
-    // ── Layer 1 (bottom): 2×6 strip thumbnail background ───────────────────
-    const thumbSrc = "assets/designs/thumbnail/2x6_Strip_Thumbnail.png";
+    // Layer 1: thumbnail background
+    const thumbSrc = this._getFrameThumbnail(frameType);
     try {
       const thumbImg = await this.loadImage(thumbSrc);
       if (thumbImg) {
-        this.drawCropFill(ctx, thumbImg, 0, 0, stripW, stripH);
-        ctx.save();
-        ctx.globalAlpha = 0.18;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, stripW, stripH);
-        ctx.restore();
+        this.drawCropFill(ctx, thumbImg, 0, 0, canvasW, canvasH);
+        ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvasW, canvasH); ctx.restore();
       }
-    } catch (_) { /* thumbnail is optional — skip silently */ }
+    } catch (_) { /* thumbnail optional */ }
 
-    // ── Layer 2 (middle): photos only, copy-0 slots ──────────────────────────
-    const slotsPerCopy = Math.round(config.photoSlots.length / copies);
-    const copy0Slots   = config.photoSlots.slice(0, slotsPerCopy);
-
+    // Layer 2: preview slots only (4 photos, Frame 1 region)
     const photoImages = await Promise.all(
       (selectedShots || []).map((shot) =>
         shot && shot.imageUrl ? this.loadImage(shot.imageUrl) : Promise.resolve(null)
       )
     );
-
-    copy0Slots.forEach((slot, i) => {
-      const img = photoImages[config.slotToPhotoIndex[i]];
+    slots.forEach((slot) => {
+      const img = photoImages[slot.photoIndex];
       if (img) {
-        this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
+        if (slot.angle) {
+          this.drawRotatedCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h, slot.angle);
+        } else {
+          this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
+        }
       } else {
-        ctx.save();
-        ctx.strokeStyle = "rgba(180,180,180,0.5)";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
-        ctx.restore();
+        ctx.save(); ctx.strokeStyle = "rgba(180,180,180,0.5)"; ctx.lineWidth = 3;
+        ctx.strokeRect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4); ctx.restore();
       }
     });
 
-    // ── Layer 3 (top): template overlay ─────────────────────────────────────
+    // Layer 3: overlay — drawn into the preview region.
+    // Priority: strip preview overlay (sized for preview canvas) > full-frame overlay clipped.
     const overlayDesignId = designId || (this._getOriginalDesign() || {}).id;
     const design = this.getDesign(overlayDesignId);
     if (design) {
-      const overlayPath = design.overlays && design.overlays["2x6"];
-      if (overlayPath) {
-        const overlayImg = await this.loadImage(overlayPath);
-        if (overlayImg) {
-          const isSingle = this._isSingleStripOverlay(overlayImg, "2x6");
-          if (isSingle) {
-            ctx.drawImage(overlayImg, 0, 0, stripW, stripH);
-          } else {
-            const srcW = Math.round(overlayImg.naturalWidth  / 2);
-            const srcH = overlayImg.naturalHeight;
-            ctx.drawImage(overlayImg, 0, 0, srcW, srcH, 0, 0, stripW, stripH);
+      const previewPath = design.previewOverlays && design.previewOverlays[frameType];
+      if (previewPath) {
+        const previewImg = await this.loadImage(previewPath);
+        if (previewImg) {
+          // Purpose-built preview overlay — draw 1:1 into the preview canvas
+          ctx.drawImage(previewImg, 0, 0, canvasW, canvasH);
+        }
+      } else {
+        // Fallback: full-frame overlay, drawn at print scale, clipped by canvas size.
+        // film-duo landscape preview: rotate the portrait overlay 90° CW.
+        const overlayPath = design.overlays && design.overlays[frameType];
+        if (overlayPath) {
+          const overlayImg = await this.loadImage(overlayPath);
+          if (overlayImg) {
+            if (previewCfg && previewCfg.previewIsLandscape) {
+              ctx.save();
+              ctx.translate(canvasW, 0);
+              ctx.rotate(Math.PI / 2);
+              ctx.drawImage(overlayImg,
+                0, 0, 1200, config.canvasHeight,
+                0, 0, 1200, config.canvasHeight
+              );
+              ctx.restore();
+            } else {
+              ctx.drawImage(overlayImg, 0, 0, config.canvasWidth, config.canvasHeight);
+            }
           }
         }
       }
     }
-
     return canvas;
   },
 
@@ -522,7 +722,23 @@ const stripModule = {
    * For all other containers: compositeLayout() as before.
    */
   async render(containerEl, opts) {
-    containerEl.innerHTML = "";
+    /*
+     * Concurrency guard — Page 4 (selection.js) calls render() on every
+     * single tap. Each call does up to two full-resolution (2400×3600
+     * @600dpi) canvas composites, so rapid taps used to queue up several
+     * of these in parallel: each one clearing the container and racing
+     * the others to append its result, all decoding/drawing at once. On
+     * the 4th photo (the point where selectedShots first has 4 real,
+     * non-empty images to draw instead of cheap placeholder outlines)
+     * that pile-up of concurrent heavy composites is what froze/crashed
+     * the page.
+     *
+     * Fix: stamp a generation id on the container for every render()
+     * call. After each await, bail out silently if a newer call has
+     * since been made for this same container — a stale/superseded
+     * render never touches the DOM or does further work.
+     */
+    const myGen = (containerEl._renderGen = (containerEl._renderGen || 0) + 1);
 
     const isPreviewCol =
       containerEl.id === "stripPreviewContainer" ||
@@ -542,13 +758,20 @@ const stripModule = {
        * that matches the canvas dimensions.
        */
       const photoCanvas = await this._compositePhotosOnly(opts);
+      if (containerEl._renderGen !== myGen) return null; // superseded — discard
+
       const overlayCanvas = await this._compositeOverlayOnly(opts);
+      if (containerEl._renderGen !== myGen) return null; // superseded — discard
 
       photoCanvas.classList.add("layout-canvas", "layout-canvas-preview", "layout-canvas-photos");
       overlayCanvas.classList.add("layout-canvas-overlay");
 
       const clip = document.createElement("div");
       clip.className = "single-strip-clip";
+      // 2×6 shows a single-strip preview (half canvas); all other frame types show full canvas
+      // 2×6          → "preview-single"  (true single-strip canvas, no clip needed)
+      // 4×6          → "4x6"             (full canvas, full-width clip)
+      // new formats  → their own key so CSS can apply the right aspect-ratio sizing
       clip.dataset.frame = opts.frameType === "2x6" ? "preview-single" : (opts.frameType || "4x6");
 
       // Wrapper is positioned relative; both canvases fill it absolutely
@@ -562,6 +785,10 @@ const stripModule = {
 
       clip.appendChild(photoCanvas);
       clip.appendChild(overlayCanvas);
+
+      // Only now — after all async work finishes and this call is still
+      // the latest one for this container — do we touch the live DOM.
+      containerEl.innerHTML = "";
       containerEl.appendChild(clip);
 
       // Return the photos canvas as the "main" canvas reference
@@ -569,7 +796,10 @@ const stripModule = {
     } else {
       // Full composite for all non-preview uses (printing.js, video export, etc.)
       canvas = await this.compositeLayout(opts);
+      if (containerEl._renderGen !== myGen) return null; // superseded — discard
+
       canvas.classList.add("layout-canvas");
+      containerEl.innerHTML = "";
       containerEl.appendChild(canvas);
     }
 
@@ -580,15 +810,39 @@ const stripModule = {
    * _compositePhotosOnly — renders only the photo slots and thumbnail
    * background onto a canvas for the preview column. No overlay.
    * Used by render() for the filterable bottom layer.
+   *
+   * 2×6         — half-canvas (left strip only)
+   * 4×6         — full canvas
+   * new frames  — cropped preview canvas via _getPreviewConfig():
+   *               long-duo / long-mini / film-duo → 1200×3600 (left strip, 4 slots)
+   *               wide-mini                       → 2400×1800 (top half, 4 slots)
    */
   async _compositePhotosOnly({ frameType, selectedShots }) {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
-    const is2x6 = frameType === "2x6";
-    const copies = is2x6 ? 2 : 1;
-    const canvasW = is2x6 ? Math.round(config.canvasWidth / copies) : config.canvasWidth;
-    const canvasH = config.canvasHeight;
+    const previewCfg = this._getPreviewConfig(frameType); // null for 2×6 and 4×6
+
+    // Determine canvas dimensions and which slots to draw
+    let canvasW, canvasH, slots;
+
+    if (frameType === "2x6") {
+      const copies = 2;
+      canvasW = Math.round(config.canvasWidth / copies);
+      canvasH = config.canvasHeight;
+      const slotsPerCopy = Math.round(config.photoSlots.length / copies);
+      slots = config.photoSlots.slice(0, slotsPerCopy);
+    } else if (previewCfg) {
+      // New frame types: use the cropped preview region
+      canvasW = previewCfg.canvasW;
+      canvasH = previewCfg.canvasH;
+      slots   = previewCfg.slots;
+    } else {
+      // 4×6: full canvas, all slots
+      canvasW = config.canvasWidth;
+      canvasH = config.canvasHeight;
+      slots   = config.photoSlots;
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width  = canvasW;
@@ -596,10 +850,8 @@ const stripModule = {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvasW, canvasH);
 
-    // Thumbnail background layer
-    const thumbSrc = is2x6
-      ? "assets/designs/thumbnail/2x6_Strip_Thumbnail.png"
-      : "assets/designs/thumbnail/4x6_Strip_Thumbnail.png";
+    // Thumbnail background layer — use per-format thumbnails when available
+    const thumbSrc = this._getFrameThumbnail(frameType);
     try {
       const thumbImg = await this.loadImage(thumbSrc);
       if (thumbImg) {
@@ -612,10 +864,6 @@ const stripModule = {
       }
     } catch (_) {}
 
-    // Photo slots
-    const slotsPerCopy = is2x6 ? Math.round(config.photoSlots.length / copies) : config.photoSlots.length;
-    const slots = config.photoSlots.slice(0, slotsPerCopy);
-
     const photoImages = await Promise.all(
       (selectedShots || []).map((shot) =>
         shot && shot.imageUrl ? this.loadImage(shot.imageUrl) : Promise.resolve(null)
@@ -623,9 +871,15 @@ const stripModule = {
     );
 
     slots.forEach((slot, i) => {
-      const img = photoImages[config.slotToPhotoIndex[i]];
+      // previewCfg slots have photoIndex directly; legacy slots use slotToPhotoIndex
+      const photoIdx = (slot.photoIndex !== undefined) ? slot.photoIndex : config.slotToPhotoIndex[i];
+      const img = photoImages[photoIdx];
       if (img) {
-        this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
+        if (slot.angle) {
+          this.drawRotatedCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h, slot.angle);
+        } else {
+          this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
+        }
       } else {
         ctx.save();
         ctx.strokeStyle = "rgba(180,180,180,0.5)";
@@ -639,18 +893,137 @@ const stripModule = {
   },
 
   /*
+   * _getFrameThumbnail — returns the background thumbnail asset path for a
+   * given frame type, used as the bottom layer in preview composites.
+   * Falls back to the 2×6 thumbnail for new frame types that don't have
+   * their own dedicated thumbnail image yet.
+   */
+  _getFrameThumbnail(frameType) {
+    const map = {
+      "2x6":      "assets/designs/thumbnail/2x6_Strip_Thumbnail.png",
+      "4x6":      "assets/designs/thumbnail/4x6_Strip_Thumbnail.png",
+      "long-duo": "assets/designs/thumbnail/Long_Duo_and_Mini_Thumbnail.png",
+      "long-mini":"assets/designs/thumbnail/Long_Duo_and_Mini_Thumbnail.png",
+      "film-duo": "assets/designs/thumbnail/Film_Duo_Thumbnail.png",
+      "wide-mini":"assets/designs/thumbnail/Wide_Mini_Thumbnail.png"
+    };
+    return map[frameType] || "assets/designs/thumbnail/2x6_Strip_Thumbnail.png";
+  },
+
+  /*
+   * _getPreviewConfig — returns the canvas dimensions and photo slot list for
+   * the strip/canvas preview of the four new frame types.
+   *
+   * These frame types have more than 4 slots across multiple sub-frames, but
+   * the preview shows only a cropped region (left half or top half) containing
+   * one representative set of 4 photos at the exact pixel positions specified
+   * for preview output. The full LAYOUT_CONFIGS slots are still used for print.
+   *
+   * Returns null for 2×6 and 4×6 (handled by existing logic).
+   *
+   * Preview specs (px, matching the left/top region of the full canvas):
+   *   long-duo / long-mini  — W=1200, H=3600, left strip (4 slots, x=87)
+   *   film-duo              — W=1200, H=3600, left strip (4 slots, rotated 90°)
+   *   wide-mini             — W=2400, H=1800, top half  (4 slots)
+   *
+   * Photo positions for each frame type come directly from the spec and match
+   * the corresponding slots already defined in LAYOUT_CONFIGS (Frame 1 only).
+   */
+  _getPreviewConfig(frameType) {
+    switch (frameType) {
+      case "long-duo":
+      case "long-mini":
+        return {
+          canvasW: 1200,
+          canvasH: 3600,
+          slots: [
+            { x: 87, y: 178,  w: 1026, h: 808.66, photoIndex: 0 },
+            { x: 87, y: 1030, w: 1026, h: 808.66, photoIndex: 1 },
+            { x: 87, y: 1881, w: 1026, h: 808.66, photoIndex: 2 },
+            { x: 87, y: 2731, w: 1026, h: 808.66, photoIndex: 3 }
+          ]
+        };
+
+      case "film-duo":
+        /*
+         * Film Duo preview is LANDSCAPE — W=3600, H=1200.
+         * The full print canvas is 2400×3600 portrait. The left strip
+         * has 4 photos with angle:90, so when read "upright" each photo is
+         * landscape-oriented. The preview shows these 4 photos in a single
+         * landscape row (left→right) at 3600×1200.
+         *
+         * Coordinate transform: rotate the print canvas 90° clockwise to get
+         * the preview canvas.
+         *   print (x, y, w, h, angle:90)  →  each slot becomes a horizontal
+         *   region in the landscape preview at:
+         *     previewSlot.x = print slot y         (step along landscape width)
+         *     previewSlot.y = print canvas width - print slot x - print slot w
+         *                   = 2400 - 86.47 - 802.21 = 1511.32  → centre vertically
+         *     previewSlot.w = print slot h         (956.08 → landscape slot width)
+         *     previewSlot.h = print slot w         (802.21 → landscape slot height)
+         *     angle: 0 (photos are already upright in the landscape view)
+         *
+         * Vertical centering: centre each slot in the 1200px height.
+         *   slotH = 802.21, centreY = (1200 - 802.21) / 2 ≈ 198.90
+         */
+        return {
+          canvasW: 3600,
+          canvasH: 1200,
+          // previewIsLandscape flag tells _compositeOverlayOnly to clip the overlay differently
+          previewIsLandscape: true,
+          slots: [
+            { x: 121.5,   y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 0 },
+            { x: 972.72,  y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 1 },
+            { x: 1823.91, y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 2 },
+            { x: 2675.13, y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 3 }
+          ]
+        };
+
+      case "wide-mini":
+        // Top half — 2×2 grid of large landscape photos.
+        return {
+          canvasW: 2400,
+          canvasH: 1800,
+          slots: [
+            { x: 87.75,   y: 155.59, w: 1091.89, h: 756.48, photoIndex: 0 },
+            { x: 1223.56, y: 155.59, w: 1091.89, h: 756.48, photoIndex: 1 },
+            { x: 87.75,   y: 951.94, w: 1091.89, h: 756.48, photoIndex: 2 },
+            { x: 1223.56, y: 951.94, w: 1091.89, h: 756.48, photoIndex: 3 }
+          ]
+        };
+
+      default:
+        return null; // 2×6 and 4×6 handled by existing logic
+    }
+  },
+
+  /*
    * _compositeOverlayOnly — renders only the template overlay onto a
    * transparent canvas for the preview column. No photos.
    * Used by render() for the non-filterable top layer.
+   *
+   * For new frame types the overlay covers the full print canvas (2400×3600),
+   * so we draw it at full print scale onto the smaller preview canvas — the
+   * canvas size naturally clips to the preview region (left strip or top half).
    */
   async _compositeOverlayOnly({ frameType, designId }) {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
-    const is2x6 = frameType === "2x6";
-    const copies = is2x6 ? 2 : 1;
-    const canvasW = is2x6 ? Math.round(config.canvasWidth / copies) : config.canvasWidth;
-    const canvasH = config.canvasHeight;
+    const previewCfg = this._getPreviewConfig(frameType); // null for 2×6 and 4×6
+
+    let canvasW, canvasH;
+    if (frameType === "2x6") {
+      canvasW = Math.round(config.canvasWidth / 2);
+      canvasH = config.canvasHeight;
+    } else if (previewCfg) {
+      canvasW = previewCfg.canvasW;
+      canvasH = previewCfg.canvasH;
+    } else {
+      // 4×6
+      canvasW = config.canvasWidth;
+      canvasH = config.canvasHeight;
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width  = canvasW;
@@ -662,13 +1035,12 @@ const stripModule = {
     const design = this.getDesign(overlayDesignId);
     if (!design) return canvas;
 
-    const overlayPath = design.overlays && design.overlays[frameType];
-    if (!overlayPath) return canvas;
-
-    const overlayImg = await this.loadImage(overlayPath);
-    if (!overlayImg) return canvas;
-
-    if (is2x6) {
+    if (frameType === "2x6") {
+      // ── 2×6: left-strip crop of the full overlay ─────────────────────────
+      const overlayPath = design.overlays && design.overlays["2x6"];
+      if (!overlayPath) return canvas;
+      const overlayImg = await this.loadImage(overlayPath);
+      if (!overlayImg) return canvas;
       const isSingle = this._isSingleStripOverlay(overlayImg, "2x6");
       if (isSingle) {
         ctx.drawImage(overlayImg, 0, 0, canvasW, canvasH);
@@ -677,7 +1049,61 @@ const stripModule = {
         const srcH = overlayImg.naturalHeight;
         ctx.drawImage(overlayImg, 0, 0, srcW, srcH, 0, 0, canvasW, canvasH);
       }
+    } else if (previewCfg) {
+      /*
+       * New frame types (long-duo, long-mini, film-duo, wide-mini).
+       *
+       * Priority:
+       *   1. Strip preview overlay (previewOverlays[frameType]) — purpose-built
+       *      at the preview canvas dimensions. Drawn at 1:1 into the preview canvas.
+       *   2. Full-frame overlay (overlays[frameType]) — drawn at full print scale
+       *      so the canvas size clips to the correct region.
+       *
+       * film-duo special case: the preview canvas is LANDSCAPE (3600×1200), so the
+       * portrait full-frame overlay (2400×3600) must be rotated 90° CW to align.
+       */
+      const previewPath = design.previewOverlays && design.previewOverlays[frameType];
+      if (previewPath) {
+        const previewImg = await this.loadImage(previewPath);
+        if (previewImg) {
+          // Preview overlay is sized exactly for this canvas — draw 1:1
+          ctx.drawImage(previewImg, 0, 0, canvasW, canvasH);
+          return canvas;
+        }
+      }
+      // Fallback: use full-frame overlay
+      const overlayPath = design.overlays && design.overlays[frameType];
+      if (!overlayPath) return canvas;
+      const overlayImg = await this.loadImage(overlayPath);
+      if (!overlayImg) return canvas;
+
+      if (previewCfg.previewIsLandscape) {
+        // film-duo landscape preview: rotate the portrait overlay 90° CW so
+        // it aligns with the landscape preview canvas.
+        // The overlay is 2400×3600 (portrait). After 90° CW rotation it becomes
+        // 3600×2400 logically. We draw only the top 1200px of that rotated view,
+        // which corresponds to the left strip of the portrait canvas.
+        ctx.save();
+        ctx.translate(canvasW, 0);      // move origin to top-right of landscape canvas
+        ctx.rotate(Math.PI / 2);        // rotate 90° CW
+        // Now drawing in "rotated portrait space": (0,0)=top-left of portrait canvas
+        // Draw the left-strip region of the overlay (0..1200 wide × full height).
+        // canvasH (landscape) = 1200 = the left-strip width in portrait space.
+        ctx.drawImage(overlayImg,
+          0, 0, 1200, config.canvasHeight,   // src: left 1200px of portrait overlay
+          0, 0, 1200, config.canvasHeight     // dst: same — rotation handles the rest
+        );
+        ctx.restore();
+      } else {
+        // Standard: draw full overlay at print scale, canvas clips to preview region
+        ctx.drawImage(overlayImg, 0, 0, config.canvasWidth, config.canvasHeight);
+      }
     } else {
+      // ── 4×6: full-canvas overlay ──────────────────────────────────────────
+      const overlayPath = design.overlays && design.overlays[frameType];
+      if (!overlayPath) return canvas;
+      const overlayImg = await this.loadImage(overlayPath);
+      if (!overlayImg) return canvas;
       ctx.drawImage(overlayImg, 0, 0, canvasW, canvasH);
     }
 
@@ -706,43 +1132,97 @@ const stripModule = {
     const design = this.getDesign(designId);
     const overlayPath = design && design.overlays && design.overlays[frameType];
 
-    // Always render exactly ONE strip regardless of frame type.
-    // For 2×6 the sheet has two identical strips, but on-screen we only
-    // show the first one (slots 0 through slotsPerCopy-1).
-    const copies = frameType === "2x6" ? 2 : 1;
-    const slotsPerCopy = config.photoSlots.length / copies;
+    // Determine the preview region for this frame type:
+    //   2×6         — left strip only (half canvas width)
+    //   new formats — cropped preview via _getPreviewConfig() (left strip or top half)
+    //   4×6         — full canvas
+    const previewCfg = this._getPreviewConfig(frameType); // null for 2×6 and 4×6
+
+    let previewW, previewH, liveSlots;
+    if (frameType === "2x6") {
+      const copies = 2;
+      previewW   = config.canvasWidth / copies;
+      previewH   = config.canvasHeight;
+      const slotsPerCopy = Math.round(config.photoSlots.length / copies);
+      liveSlots  = config.photoSlots.slice(0, slotsPerCopy);
+    } else if (previewCfg) {
+      previewW  = previewCfg.canvasW;
+      previewH  = previewCfg.canvasH;
+      liveSlots = previewCfg.slots;
+    } else {
+      // 4×6: full canvas
+      previewW  = config.canvasWidth;
+      previewH  = config.canvasHeight;
+      liveSlots = config.photoSlots;
+    }
 
     containerEl.innerHTML = "";
     containerEl.classList.add("live-strip-row");
 
     const wrap = document.createElement("div");
     wrap.className = "live-strip-wrap";
-    // Aspect ratio is that of one single strip, not the full sheet
-    wrap.style.aspectRatio = `${config.canvasWidth / copies} / ${config.canvasHeight}`;
+    wrap.style.aspectRatio = `${previewW} / ${previewH}`;
 
     const videoEls = [];
 
-    for (let i = 0; i < slotsPerCopy; i++) {
-      // Always read from copy 0 (slot indices 0–slotsPerCopy-1)
-      const slotIndex = i;
-      const slot = config.photoSlots[slotIndex];
-      const shot = selectedShots[config.slotToPhotoIndex[slotIndex]];
+    for (let i = 0; i < liveSlots.length; i++) {
+      const slot = liveSlots[i];
+      const photoIdx = (slot.photoIndex !== undefined) ? slot.photoIndex : config.slotToPhotoIndex[i];
+      const shot = selectedShots[photoIdx];
 
-      // Convert absolute px coords into % relative to one strip's own width
-      const stripWidth = config.canvasWidth / copies;
-      const leftPct   = (slot.x / stripWidth) * 100;
-      const topPct    = (slot.y / config.canvasHeight) * 100;
-      const widthPct  = (slot.w / stripWidth) * 100;
-      const heightPct = (slot.h / config.canvasHeight) * 100;
+      // Convert absolute px coords into % relative to the preview canvas dimensions
+      const leftPct   = (slot.x / previewW) * 100;
+      const topPct    = (slot.y / previewH) * 100;
+      const widthPct  = (slot.w / previewW) * 100;
+      const heightPct = (slot.h / previewH) * 100;
 
       const isVideo = shot && shot.videoUrl;
       const media = document.createElement(isVideo ? "video" : "img");
       media.className = "live-strip-media";
-      media.style.left   = `${leftPct}%`;
-      media.style.top    = `${topPct}%`;
-      media.style.width  = `${widthPct}%`;
-      media.style.height = `${heightPct}%`;
       media.style.borderRadius = `${config.slotCornerRadiusPct || 0}%`;
+
+      // Apply CSS rotation for rotated slots (angle: 90).
+      //
+      // COORDINATE CONTRACT: slot.x/y/w/h are the absolute bounding-box
+      // coordinates on the master canvas.  The visual bounding box must remain
+      // exactly w × h at position (x, y) after any rotation.
+      //
+      // CSS transform: rotate() rotates around the element's centre (transform-
+      // origin: 50% 50% by default).  After a 90° rotation the element's visual
+      // size becomes h × w — the dimensions swap on screen.  To keep the visual
+      // box at the spec-exact w × h position we therefore:
+      //   1. Place the element at the rotated-interior size (h × w) so that after
+      //      rotation it visually occupies the spec's w × h box.
+      //   2. Shift left/top so the centre of the element aligns with the centre of
+      //      the spec bounding box: cx = x + w/2, cy = y + h/2.
+      //      Element's top-left (before rotation) = (cx − h/2, cy − w/2).
+      if (slot.angle && slot.angle % 180 !== 0) {
+        // Rotated case (90° or 270°): pre-swap w/h for CSS sizing so the post-
+        // rotation visual box is the spec's w × h.  Reposition so the element
+        // centre equals the spec bounding-box centre.
+        const cx = slot.x + slot.w / 2;
+        const cy = slot.y + slot.h / 2;
+        const cssLeft   = ((cx - slot.h / 2) / previewW) * 100;
+        const cssTop    = ((cy - slot.w / 2) / previewH) * 100;
+        const cssWidth  = (slot.h / previewW) * 100;  // swapped
+        const cssHeight = (slot.w / previewH) * 100;  // swapped
+        media.style.left      = `${cssLeft}%`;
+        media.style.top       = `${cssTop}%`;
+        media.style.width     = `${cssWidth}%`;
+        media.style.height    = `${cssHeight}%`;
+        media.style.transform = `rotate(${slot.angle}deg)`;
+        media.style.objectFit = "cover";
+      } else {
+        // Un-rotated (or 0°/180°): place directly at spec coordinates.
+        media.style.left   = `${leftPct}%`;
+        media.style.top    = `${topPct}%`;
+        media.style.width  = `${widthPct}%`;
+        media.style.height = `${heightPct}%`;
+        if (slot.angle) {
+          media.style.transform = `rotate(${slot.angle}deg)`;
+          media.style.objectFit = "cover";
+        }
+      }
 
       if (isVideo) {
         media.src = shot.videoUrl;
@@ -766,19 +1246,68 @@ const stripModule = {
       overlayImg.src = overlayPath;
       overlayImg.alt = "Frame design";
 
-      // For single-strip uploads the image is already one-strip wide,
-      // so it maps 1:1 to the rendered strip (no CSS width trick needed).
-      // For legacy double-strip overlays, slice the left half by making
-      // the img 200% wide (copies=2 for 2×6) so only copy 0 is visible.
       overlayImg.addEventListener("load", () => {
-        const isSingle = this._isSingleStripOverlay(overlayImg, frameType);
-        if (!isSingle && copies > 1) {
-          overlayImg.style.width  = `${copies * 100}%`;
-          overlayImg.style.left   = "0%";
-          overlayImg.style.height = "100%";
+        if (frameType === "2x6") {
+          // For single-strip uploads the image is already one-strip wide,
+          // so it maps 1:1 to the rendered strip (no CSS width trick needed).
+          // For legacy double-strip overlays, slice the left half by making
+          // the img 200% wide so only copy 0 is visible.
+          const isSingle = this._isSingleStripOverlay(overlayImg, frameType);
+          if (!isSingle) {
+            overlayImg.style.width  = "200%";
+            overlayImg.style.left   = "0%";
+            overlayImg.style.height = "100%";
+            overlayImg.style.top    = "0";
+          }
+          // Single-strip: default 100% width / height is already correct
+        } else if (previewCfg && previewCfg.previewIsLandscape) {
+          /*
+           * film-duo landscape preview:
+           * The overlay PNG is the full 2400×3600 portrait print canvas.
+           * The wrap is 3600×1200 landscape (aspect-ratio applied via CSS).
+           * We need to rotate the overlay 90° CW and show only the left-strip
+           * region (which becomes the top 1200px in portrait space).
+           *
+           * CSS approach: position the img at natural portrait size
+           * (width = previewH = 1200px = 100% of wrap height),
+           * rotate it 90° CW around the top-left corner, then shift.
+           * This is complex with % units. Instead we use a simpler trick:
+           * set width = wrap height (100% of a landscape parent = 1200px tall),
+           * height = wrap width (100% of 3600px landscape width),
+           * rotate transform-origin top-left 90deg CW, then translate.
+           *
+           * Simpler reliable approach: use a rotated absolutely-positioned img.
+           *   - img natural ratio: 2400:3600 = 2:3 portrait.
+           *   - After rotation, it's 3:2 landscape — but we only show the
+           *     left 1200px of the portrait (which becomes the top 1200px of
+           *     the landscape). We use overflow:hidden on the wrap.
+           *
+           * We express sizes relative to the wrap (3600×1200):
+           *   Full portrait width (2400px) as % of wrap-height (1200px) = 200%
+           *   Full portrait height (3600px) as % of wrap-width (3600px)  = 100%
+           * Rotate 90° CW: translate(-100%, 0) rotate(90deg) — standard trick.
+           */
+          overlayImg.style.position        = "absolute";
+          overlayImg.style.width           = `${(config.canvasHeight / previewH) * 100}%`; // 3600/1200=300%
+          overlayImg.style.height          = `${(config.canvasWidth  / previewW) * 100}%`; // 2400/3600≈66.7%
+          overlayImg.style.left            = "0";
+          overlayImg.style.top             = "0";
+          overlayImg.style.transformOrigin = "top left";
+          overlayImg.style.transform       = "rotate(90deg) translateY(-100%)";
+          overlayImg.style.pointerEvents   = "none";
+        } else if (previewCfg) {
+          // New frame types (long-duo, long-mini, wide-mini):
+          // The overlay covers the full print canvas. Scale it so the
+          // preview region fills 100% of the wrap, anchored at top-left.
+          const config = LAYOUT_CONFIGS[frameType];
+          const overlayWPct = (config.canvasWidth  / previewW) * 100;
+          const overlayHPct = (config.canvasHeight / previewH) * 100;
+          overlayImg.style.width  = `${overlayWPct}%`;
+          overlayImg.style.height = `${overlayHPct}%`;
+          overlayImg.style.left   = "0";
           overlayImg.style.top    = "0";
         }
-        // Single-strip: default 100% width / height is already correct
+        // 4×6: default 100% width / height is already correct
       }, { once: true });
 
       wrap.appendChild(overlayImg);
@@ -828,12 +1357,112 @@ const stripModule = {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
+    // film-duo uses a landscape preview canvas (3600×1200) with re-mapped slots.
+    // Use the preview config slots/dimensions so the exported video matches what
+    // the guest sees in the kiosk preview and gallery exactly.
+    const previewCfg = this._getPreviewConfig(frameType);
+    if (previewCfg && previewCfg.previewIsLandscape) {
+      // Landscape film-duo export: 3600×1200 scaled canvas, landscape slots.
+      const canvasW = Math.round(previewCfg.canvasW * scale);
+      const canvasH = Math.round(previewCfg.canvasH * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width  = canvasW;
+      canvas.height = canvasH;
+      const ctx = canvas.getContext("2d");
+
+      const mediaEls = await Promise.all(
+        previewCfg.slots.map((slot) => {
+          const shot = selectedShots[slot.photoIndex];
+          return new Promise((resolve) => {
+            if (shot && shot.videoUrl) {
+              const v = document.createElement("video");
+              v.src = shot.videoUrl; v.muted = true; v.loop = true; v.playsInline = true;
+              v.oncanplay = () => { v.play(); resolve(v); };
+              v.onerror = () => resolve(null);
+            } else if (shot && shot.imageUrl) {
+              const img = new Image();
+              img.onload = () => resolve(img); img.onerror = () => resolve(null);
+              img.src = shot.imageUrl;
+            } else { resolve(null); }
+          });
+        })
+      );
+
+      const design = this.getDesign(designId);
+      const overlayPath = design && design.overlays && design.overlays[frameType];
+      const overlayImg = overlayPath ? await this.loadImage(overlayPath) : null;
+
+      const drawFrame = () => {
+        ctx.clearRect(0, 0, canvasW, canvasH);
+        previewCfg.slots.forEach((slot, i) => {
+          const media = mediaEls[i];
+          if (!media) return;
+          const mw = media.videoWidth || media.width;
+          const mh = media.videoHeight || media.height;
+          const boxRatio = (slot.w * scale) / (slot.h * scale);
+          const mediaRatio = mw / mh;
+          let sx, sy, sw, sh;
+          if (mediaRatio > boxRatio) {
+            sh = mh; sw = sh * boxRatio; sx = (mw - sw) / 2; sy = 0;
+          } else {
+            sw = mw; sh = sw / boxRatio; sx = 0; sy = (mh - sh) / 2;
+          }
+          ctx.drawImage(media, sx, sy, sw, sh,
+            slot.x * scale, slot.y * scale, slot.w * scale, slot.h * scale);
+        });
+        if (overlayImg) {
+          // For the landscape video export, rotate the portrait overlay 90° CW
+          // and clip to the left-strip region, same as the canvas composite.
+          ctx.save();
+          ctx.translate(canvasW, 0);
+          ctx.rotate(Math.PI / 2);
+          ctx.drawImage(overlayImg,
+            0, 0, 1200, config.canvasHeight,
+            0, 0, Math.round(1200 * scale), Math.round(config.canvasHeight * scale)
+          );
+          ctx.restore();
+        }
+      };
+
+      const stream = canvas.captureStream(30);
+      const videoMimeCandidates = [
+        "video/mp4;codecs=h264", "video/mp4",
+        "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"
+      ];
+      const mimeType = videoMimeCandidates.find(
+        (type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)
+      ) || "";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+      return new Promise((resolve) => {
+        recorder.onstop = async () => {
+          mediaEls.forEach((m) => { if (m && m.pause) m.pause(); });
+          const rawBlob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+          const finalBlob = await remuxToMp4(rawBlob);
+          resolve(finalBlob);
+        };
+        let rafId;
+        const tick = () => { drawFrame(); rafId = requestAnimationFrame(tick); };
+        tick();
+        recorder.start();
+        setTimeout(() => { cancelAnimationFrame(rafId); recorder.stop(); }, durationMs);
+      });
+    }
+
     // For 2x6 singleStrip mode, work with one copy's worth of slots only.
-    const copies = (frameType === "2x6" && singleStrip) ? 1 : (frameType === "2x6" ? 2 : 1);
+    // All new frame types (except film-duo handled above) are single-copy.
     const totalCopies = frameType === "2x6" ? 2 : 1;
-    const slotsPerCopy = Math.round(config.photoSlots.length / totalCopies);
-    // Slots to draw: first copy only in singleStrip mode, all slots otherwise.
-    const slotsToRender = singleStrip ? config.photoSlots.slice(0, slotsPerCopy) : config.photoSlots;
+    const copies = (frameType === "2x6" && singleStrip) ? 1 : totalCopies;
+    const slotsPerCopy = frameType === "2x6"
+      ? Math.round(config.photoSlots.length / totalCopies)
+      : config.photoSlots.length;
+    // Slots to draw: first copy only in singleStrip 2x6, all slots otherwise.
+    const slotsToRender = (frameType === "2x6" && singleStrip)
+      ? config.photoSlots.slice(0, slotsPerCopy)
+      : config.photoSlots;
     // Canvas is half-width for singleStrip 2x6, full width otherwise.
     const canvasW = Math.round((config.canvasWidth / totalCopies) * copies * scale);
     const canvasH = Math.round(config.canvasHeight * scale);
@@ -848,7 +1477,8 @@ const stripModule = {
     // In singleStrip mode we only load the first copy's slots.
     const mediaEls = await Promise.all(
       slotsToRender.map((slot, i) => {
-        const shot = selectedShots[config.slotToPhotoIndex[i]];
+        const photoIdx = (slot.photoIndex !== undefined) ? slot.photoIndex : config.slotToPhotoIndex[i];
+        const shot = selectedShots[photoIdx];
         return new Promise((resolve) => {
           if (shot && shot.videoUrl) {
             const v = document.createElement("video");
@@ -962,15 +1592,124 @@ const stripModule = {
     });
   },
 
-/* Full-resolution PNG export — exact 2400x3600, all layers composited. */
+/*
+   * Full-resolution PNG export — 2400×3600 for all frame types except film-duo.
+   *
+   * film-duo gallery export:
+   *   Produces a LANDSCAPE 3600×1200 canvas matching the kiosk preview exactly,
+   *   so the gallery strip and kiosk preview are visually identical.
+   *   The print path (exportPrintPNG) always uses the full 2400×3600 portrait canvas.
+   */
   async exportPNG(opts) {
+    const { frameType, selectedShots, designId } = opts;
+
+    // film-duo: export landscape gallery strip using the same preview composite
+    if (frameType === "film-duo") {
+      return new Promise(async (resolve) => {
+        const previewCfg = this._getPreviewConfig("film-duo");
+        const config     = LAYOUT_CONFIGS["film-duo"];
+
+        const canvas = document.createElement("canvas");
+        canvas.width  = previewCfg.canvasW; // 3600
+        canvas.height = previewCfg.canvasH; // 1200
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Thumbnail background
+        const thumbSrc = this._getFrameThumbnail("film-duo");
+        try {
+          const thumbImg = await this.loadImage(thumbSrc);
+          if (thumbImg) {
+            this.drawCropFill(ctx, thumbImg, 0, 0, canvas.width, canvas.height);
+            ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.restore();
+          }
+        } catch (_) {}
+
+        // Photos in landscape slot positions
+        const photoImages = await Promise.all(
+          (selectedShots || []).map((shot) =>
+            shot && shot.imageUrl ? this.loadImage(shot.imageUrl) : Promise.resolve(null)
+          )
+        );
+        previewCfg.slots.forEach((slot) => {
+          const img = photoImages[slot.photoIndex];
+          if (img) {
+            this.drawCropFill(ctx, img, slot.x, slot.y, slot.w, slot.h);
+          } else {
+            ctx.save(); ctx.strokeStyle = "rgba(180,180,180,0.5)"; ctx.lineWidth = 3;
+            ctx.strokeRect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4); ctx.restore();
+          }
+        });
+
+        // Overlay: rotate portrait overlay 90° CW and clip to left-strip region
+        const design = this.getDesign(designId);
+        if (design) {
+          const previewPath = design.previewOverlays && design.previewOverlays["film-duo"];
+          if (previewPath) {
+            const previewImg = await this.loadImage(previewPath);
+            if (previewImg) {
+              ctx.drawImage(previewImg, 0, 0, canvas.width, canvas.height);
+            }
+          } else {
+            const overlayPath = design.overlays && design.overlays["film-duo"];
+            if (overlayPath) {
+              const overlayImg = await this.loadImage(overlayPath);
+              if (overlayImg) {
+                ctx.save();
+                ctx.translate(canvas.width, 0);
+                ctx.rotate(Math.PI / 2);
+                ctx.drawImage(overlayImg,
+                  0, 0, 1200, config.canvasHeight,
+                  0, 0, 1200, config.canvasHeight
+                );
+                ctx.restore();
+              }
+            }
+          }
+        }
+
+        canvas.toBlob(resolve, "image/png");
+      });
+    }
+
     const canvas = await this.compositeLayout(opts);
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   },
 
+  /*
+   * DEBUG ONLY — same output as exportPNG() but with the exact slot
+   * boundaries (from LAYOUT_CONFIGS) drawn on top in red, plus QR
+   * placements in blue. Use this to verify a design overlay PNG's
+   * transparent windows against the real coordinates before/after
+   * re-exporting the template artwork.
+   *
+   * Console usage (DevTools, kiosk or admin window):
+   *   stripModule.exportDebugPNG({
+   *     frameType: "long-mini",
+   *     selectedShots: sessionState.selectedShots,   // or any 4 shots with .imageUrl
+   *     designId: sessionState.design
+   *   }).then(blob => {
+   *     const a = document.createElement("a");
+   *     a.href = URL.createObjectURL(blob);
+   *     a.download = "long-mini-debug.png";
+   *     a.click();
+   *   });
+   *
+   * REMOVE this method (and the debugSlots branch in compositeLayout)
+   * once overlay templates have been re-aligned and verified.
+   */
+  async exportDebugPNG({ frameType, selectedShots, designId }) {
+    const canvas = await this.compositeLayout({ frameType, selectedShots, designId, debugSlots: true });
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  },
+
   /* Exact pixel placements for the printed QR code(s), per your spec.
-     2x6 has two identical strips side by side, each gets its own QR;
-     4x6 gets a single QR. Units match the 2400x3600 @ 600dpi canvas. */
+     2x6 has two identical strips side by side, each gets its own QR.
+     New frame types use qrPlacements from LAYOUT_CONFIGS when available,
+     falling back to these hardcoded values.
+     Units match the 2400x3600 @ 600dpi canvas.
+     angle: 90 means the QR is rotated 90° clockwise (film-duo only). */
   QR_PLACEMENTS: {
     "2x6": [
       { x: 881,  y: 33.09, w: 250, h: 250 },
@@ -978,7 +1717,13 @@ const stripModule = {
     ],
     "4x6": [
       { x: 2089, y: 34.09, w: 250, h: 250 }
-    ]
+    ],
+    // New frame types — exact positions per spec; sourced from LAYOUT_CONFIGS.qrPlacements at runtime.
+    // These fallbacks are only used if LAYOUT_CONFIGS is not yet loaded.
+    "long-duo":  [{ x: 914.5,   y: 31.59,   w: 250, h: 250 }],
+    "long-mini": [{ x: 914.5,   y: 31.59,   w: 250, h: 250 }],
+    "film-duo":  [{ x: 903.91,  y: 3309.97, w: 250, h: 250, angle: 90 }],
+    "wide-mini": [{ x: 2111.38, y: 47.59,   w: 250, h: 250 }]
   },
 
   /*
@@ -993,26 +1738,44 @@ async exportPrintPNG({ frameType, selectedShots, designId, qrText }) {
 
     if (qrText) {
       const ctx = canvas.getContext("2d");
-      const placements = this.QR_PLACEMENTS[frameType] || [];
+
+      // Prefer per-config qrPlacements (most accurate) over the static table fallback.
+      const config = LAYOUT_CONFIGS[frameType];
+      const placements = (config && config.qrPlacements) || this.QR_PLACEMENTS[frameType] || [];
 
       if (placements.length) {
-        const qrSize = placements[0].w; // all placements use the same 200x200 footprint
+        const qrSize = placements[0].w; // all placements use the same W footprint
         const qrSource = generateQrCanvas(qrText, qrSize, {
           correctLevel: QRCode.CorrectLevel.L,
           quietModules: 2
         });
 
         placements.forEach((p) => {
-          // White backing at the exact QR footprint first — guarantees
-          // full contrast regardless of whatever artwork sits underneath.
           ctx.save();
-          ctx.fillStyle = "#ffffff";
-          ctx.fillRect(p.x, p.y, p.w, p.h);
-          ctx.restore();
 
-          ctx.save();
-          ctx.imageSmoothingEnabled = false; // keep module edges crisp, not blurred
-          ctx.drawImage(qrSource, p.x, p.y, p.w, p.h);
+          if (p.angle) {
+            // Rotated QR (e.g. film-duo bottom QR at 90°).
+            // Rotate around the centre of the QR bounding box.
+            const rad = (p.angle * Math.PI) / 180;
+            const cx  = p.x + p.w / 2;
+            const cy  = p.y + p.h / 2;
+
+            // White backing — draw as a rotated rectangle so it exactly
+            // covers the footprint under the rotated QR code.
+            ctx.translate(cx, cy);
+            ctx.rotate(rad);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(qrSource, -p.w / 2, -p.h / 2, p.w, p.h);
+          } else {
+            // Standard axis-aligned QR.
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(qrSource, p.x, p.y, p.w, p.h);
+          }
+
           ctx.restore();
         });
       }

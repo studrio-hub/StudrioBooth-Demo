@@ -6,9 +6,10 @@
  *
  * What it does:
  *   • Lists all templates from the Supabase `templates` table
- *   • Upload new frame template + thumbnail (both for 2x6 and/or 4x6)
- *   • Edit existing templates — replace 2×6 / 4×6 overlays or thumbnail,
- *     update name and asset type (bumps version so kiosks re-download)
+ *   • Organises templates by CATEGORY (Originals / Designs / Accessories)
+ *     and FORMAT (2×6 / 4×6) — these are independent filters, not tabs
+ *   • Upload new frame template — one file per template, one format per template
+ *   • Edit existing templates — replace overlay file, rename, change category
  *   • Enable / disable templates (kiosk skips disabled ones during sync)
  *   • Rename templates (updates `name` column)
  *   • Reorder templates by drag-handle or up/down buttons (updates `sort_order`)
@@ -16,25 +17,32 @@
  *   • Sync Templates button — triggers the kiosk's local server to re-pull
  *     the latest templates immediately, without waiting for the 3-min poll
  *
- * This module is self-contained — it owns its DOM section and wires
- * everything up internally. admin-dashboard.js calls templateManager.init()
- * once after auth is confirmed.
+ * DATA MODEL (per template):
+ *   id, name, category (stored in asset_type column), format (2x6 or 4x6,
+ *   derived from which overlay_path is set), overlay_path_2x6 or
+ *   overlay_path_4x6, enabled, sort_order, version
  *
- * IMPORTANT — Storage RLS requirement:
- *   Uploading needs INSERT (and UPDATE, since uploads use upsert:true)
- *   policies on storage.objects scoped to the `templates/` path for the
- *   authenticated role. If your bucket only has a session-scoped INSERT
- *   policy, uploads will fail with an RLS violation — see
- *   supabase-storage-templates-policy-patch.sql.
+ *   The `asset_type` column in Supabase is repurposed to store the category
+ *   value ("Originals", "Designs", or "Accessories"). The format is implicit:
+ *   a template with overlay_path_2x6 set is a 2×6; one with overlay_path_4x6
+ *   set is a 4×6. Each template is a single format — they are separate records.
+ *
+ * KIOSK INTEGRATION:
+ *   The kiosk reads `category` (from asset_type) and `format` from each
+ *   template record. It uses its hard-coded rendering configuration for the
+ *   format — the Admin Panel never manages canvas/photo positions.
+ *
+ *   KEYCHAIN TEMPLATES (Accessories category, 4×6 format):
+ *   Keychain templates are uploaded as independent 4×6 templates under the
+ *   Accessories category. The uploaded PNG is the Mini-Strip overlay
+ *   (591×1795 px, 600 DPI) applied to both Mini-Strip frames on the right
+ *   half of the keychain print sheet (2400×3600 px canvas). The left half
+ *   (2×6 strip, 4 photos + QR) uses the standard 2×6 slot positions — no
+ *   separate overlay is needed for it. The kiosk identifies keychain
+ *   templates by asset_type = "Accessories" and format = "4x6".
  *
  * SYNC BUTTON BEHAVIOR:
- *   The kiosk's local server (localhost:3000) exposes a POST endpoint at
- *   /sync/trigger that calls assetSync.forceRefresh() on the running kiosk.
- *   Because Admin runs on studrio.cc and the kiosk is on localhost, the
- *   button POSTs to that endpoint and reports success/failure. If the kiosk
- *   is offline (or the local server isn't running), the button still refreshes
- *   the admin's own template list and shows a clear offline notice.
- *   Templates always auto-sync on the kiosk every 3 minutes regardless.
+ *   See previous comment — same behaviour as before.
  */
 
 const templateManager = (() => {
@@ -47,9 +55,24 @@ const templateManager = (() => {
   let _statusEl      = null; // #templateStatus — loading/empty message
   let _toast         = null; // shared with admin-dashboard.js
 
+  // ── Category / format constants ─────────────────────────────────────────────
+  const CATEGORIES = ["Originals", "Designs", "Accessories"];
+  const FORMATS    = ["2x6", "4x6", "long-duo", "long-mini", "film-duo", "wide-mini"];
+
+  // Human-readable labels for the new frame formats
+  const FORMAT_LABELS = {
+    "2x6":      "2×6 (Long Frame)",
+    "4x6":      "4×6 (Wide Frame)",
+    "long-duo": "Long Duo",
+    "long-mini":"Long Mini",
+    "film-duo": "Film Duo",
+    "wide-mini":"Wide Mini"
+  };
+
   let _templates     = [];
   let _dragSrcIndex  = null; // for drag-and-drop reordering
-  let _activeFormat  = "2x6"; // "2x6" | "4x6" — active template tab
+  let _activeCategory = "all"; // "all" | "Originals" | "Designs" | "Accessories"
+  let _activeFormat   = "all"; // "all" | "2x6" | "4x6"
 
   // ── Toast (reuse admin-dashboard's toast element) ───────────────────────────
 
@@ -71,19 +94,41 @@ const templateManager = (() => {
   function renderTemplateList(templates) {
     _containerEl.innerHTML = "";
 
-    // Filter to only show templates that have an overlay for the active format.
-    // A template with both 2×6 and 4×6 overlays will appear in both tabs.
+    // Helper: derive the format of a template from which overlay path is set
+    function _templateFormat(t) {
+      if (t.overlay_path_2x6)      return "2x6";
+      if (t.overlay_path_4x6)      return "4x6";
+      if (t.overlay_path_long_duo) return "long-duo";
+      if (t.overlay_path_long_mini)return "long-mini";
+      if (t.overlay_path_film_duo) return "film-duo";
+      if (t.overlay_path_wide_mini)return "wide-mini";
+      return null;
+    }
+
+    // Helper: derive the category from asset_type (stored as e.g. "Originals")
+    function _templateCategory(t) {
+      const v = (t.asset_type || "").trim();
+      // Accept exact matches or legacy values mapped to "Originals"
+      if (CATEGORIES.includes(v)) return v;
+      return "Originals"; // default for legacy templates
+    }
+
+    // Filter by category then format
     const filtered = templates.filter((t) => {
-      if (_activeFormat === "2x6") return !!t.overlay_path_2x6;
-      if (_activeFormat === "4x6") return !!t.overlay_path_4x6;
-      return true;
+      const catMatch = _activeCategory === "all" || _templateCategory(t) === _activeCategory;
+      const fmtMatch = _activeFormat   === "all" || _templateFormat(t)   === _activeFormat;
+      return catMatch && fmtMatch;
     });
 
     if (!filtered.length) {
       _statusEl.hidden = false;
-      _statusEl.textContent = templates.length
-        ? `No ${_activeFormat === "2x6" ? "2×6" : "4×6"} templates yet. Click "Upload Template" to add one.`
-        : "No templates yet. Click \"Upload Template\" to add one.";
+      const hasAny = templates.length > 0;
+      const catLabel = _activeCategory !== "all" ? _activeCategory : null;
+      const fmtLabel = _activeFormat   !== "all" ? (_activeFormat === "2x6" ? "2×6" : "4×6") : null;
+      const filterDesc = [catLabel, fmtLabel].filter(Boolean).join(" · ");
+      _statusEl.textContent = hasAny
+        ? `No ${filterDesc || "matching"} templates. Click "Upload Template" to add one.`
+        : 'No templates yet. Click "Upload Template" to add one.';
       return;
     }
     _statusEl.hidden = true;
@@ -94,18 +139,28 @@ const templateManager = (() => {
       card.dataset.id = t.id;
       card.draggable = true;
 
-      // No thumbnail shown in cards (thumbnail upload removed)
-      const frameTypes = [];
-      if (t.overlay_path_2x6) frameTypes.push("2×6");
-      if (t.overlay_path_4x6) frameTypes.push("4×6");
-      const frameLabel = frameTypes.length ? frameTypes.join(" · ") : "—";
+      const category  = _templateCategory(t);
+      const format    = _templateFormat(t);
+      const formatLabel = format ? (FORMAT_LABELS[format] || format) : "—";
+
+      // Thumbnail: prefer thumbnail_url (resolved public URL from adminTemplates.listTemplates)
+      const thumbSrc = t.thumbnail_url || null;
 
       card.innerHTML = `
         <div class="template-card-drag-handle" title="Drag to reorder">⠿</div>
+        <div class="template-card-thumb">
+          ${thumbSrc
+            ? `<img class="template-thumb" src="${escapeHtml(thumbSrc)}" alt="${escapeHtml(t.name)} thumbnail" loading="lazy">`
+            : `<div class="template-thumb template-thumb--empty">No thumbnail</div>`
+          }
+        </div>
         <div class="template-card-body">
           <p class="template-card-name" data-field="name">${escapeHtml(t.name)}</p>
-          <p class="template-card-meta">${escapeHtml(frameLabel)} · v${t.version || 1}</p>
-          <p class="template-card-type">${escapeHtml(t.asset_type || "frame_template")}</p>
+          <div class="template-card-badges">
+            <span class="template-badge template-badge--category">${escapeHtml(category)}</span>
+            <span class="template-badge template-badge--format">${escapeHtml(formatLabel)}</span>
+          </div>
+          <p class="template-card-meta">v${t.version || 1}${t.enabled ? "" : " · Disabled"}</p>
         </div>
         <div class="template-card-actions">
           <button class="btn-admin btn-admin-outline btn-sm" data-action="edit">Edit</button>
@@ -113,6 +168,7 @@ const templateManager = (() => {
           <button class="btn-admin btn-admin-outline btn-sm" data-action="toggle">
             ${t.enabled ? "Disable" : "Enable"}
           </button>
+
           <button class="btn-admin btn-admin-ghost btn-sm" data-action="delete">Delete</button>
         </div>
         <div class="template-card-order">
@@ -232,7 +288,7 @@ const templateManager = (() => {
    * and persists the full _templates array with updated sort_order values.
    */
   async function swapOrderFiltered(filtered, indexA, indexB) {
-    // Swap within the filtered copy
+    // Swap within the filtered (category+format subset) copy
     const filteredCopy = [...filtered];
     [filteredCopy[indexA], filteredCopy[indexB]] = [filteredCopy[indexB], filteredCopy[indexA]];
 
@@ -339,35 +395,132 @@ const templateManager = (() => {
 
     const modal = sel("templateEditModal");
 
-    // Pre-fill name and type
-    const nameEl = sel("editTemplateName");
-    const typeEl = sel("editTemplateAssetType");
-    if (nameEl) nameEl.value = template.name || "";
-    if (typeEl) typeEl.value = template.asset_type || "frame_template";
+    // Derive category and format from the template record
+    const existingCategory = CATEGORIES.includes((template.asset_type || "").trim())
+      ? template.asset_type.trim()
+      : "Originals";
+    const existingFormat = template.overlay_path_2x6       ? "2x6"
+                         : template.overlay_path_4x6       ? "4x6"
+                         : template.overlay_path_long_duo  ? "long-duo"
+                         : template.overlay_path_long_mini ? "long-mini"
+                         : template.overlay_path_film_duo  ? "film-duo"
+                         : template.overlay_path_wide_mini ? "wide-mini"
+                         : "2x6";
+
+    // Pre-fill name, category, format
+    const nameEl     = sel("editTemplateName");
+    const categoryEl = sel("editTemplateCategory");
+    const formatEl   = sel("editTemplateFormat");
+    if (nameEl)     nameEl.value     = template.name || "";
+    if (categoryEl) categoryEl.value = existingCategory;
+    if (formatEl)   formatEl.value   = existingFormat;
 
     // Clear file inputs (they can't be pre-filled for security reasons)
     const f2El = sel("editTemplateFile2x6");
     const f4El = sel("editTemplateFile4x6");
-    if (f2El) f2El.value = "";
-    if (f4El) f4El.value = "";
+    const fPvEl = sel("editTemplateFilePreviewOverlay");
+    if (f2El)  f2El.value  = "";
+    if (f4El)  f4El.value  = "";
+    if (fPvEl) fPvEl.value = "";
 
-    // Show what's currently set for each format
-    const cur2x6El = sel("editCurrent2x6");
-    const cur4x6El = sel("editCurrent4x6");
-    if (cur2x6El) cur2x6El.textContent = template.overlay_path_2x6 ? "✓ Existing file" : "None";
-    if (cur4x6El) cur4x6El.textContent = template.overlay_path_4x6 ? "✓ Existing file" : "None";
+    // Show the existing overlay file status (check all supported format columns)
+    const curFileEl = sel("editCurrentFile");
+    if (curFileEl) {
+      const hasFile = template.overlay_path_2x6       ||
+                      template.overlay_path_4x6       ||
+                      template.overlay_path_long_duo  ||
+                      template.overlay_path_long_mini ||
+                      template.overlay_path_film_duo  ||
+                      template.overlay_path_wide_mini;
+      curFileEl.textContent = hasFile ? "✓ Existing file" : "None";
+    }
 
-    // Show only the active format's file field
-    const field2x6 = sel("editField2x6");
-    const field4x6 = sel("editField4x6");
-    if (field2x6) field2x6.style.display = _activeFormat === "2x6" ? "" : "none";
-    if (field4x6) field4x6.style.display = _activeFormat === "4x6" ? "" : "none";
+    // Show the existing strip preview overlay status
+    const curPreviewOverlayEl = sel("editCurrentPreviewOverlay");
+    if (curPreviewOverlayEl) {
+      const hasPreviewOverlay = template.preview_overlay_path_long_duo  ||
+                                template.preview_overlay_path_long_mini ||
+                                template.preview_overlay_path_film_duo  ||
+                                template.preview_overlay_path_wide_mini;
+      curPreviewOverlayEl.textContent = hasPreviewOverlay ? "✓ Existing preview overlay" : "";
+    }
+
+    // Show the existing thumbnail status
+    const curThumbEl = sel("editCurrentThumb");
+    if (curThumbEl) {
+      curThumbEl.textContent = template.thumbnail_path ? "✓ Existing thumbnail" : "";
+    }
+
+    // Clear thumbnail file input
+    const fThEl = sel("editTemplateFileThumb");
+    if (fThEl) fThEl.value = "";
+
+    // Show only the format's file field (driven by the format select)
+    _syncEditFormatFields(existingFormat);
+
+    // Wire the format select to update the visible file field
+    if (formatEl) {
+      formatEl.onchange = () => _syncEditFormatFields(formatEl.value);
+    }
 
     // Reset progress/error state
     const progressEl = sel("editTemplateProgress");
     if (progressEl) { progressEl.textContent = ""; progressEl.hidden = true; }
 
     if (modal) modal.hidden = false;
+  }
+
+  function _syncEditFormatFields(format) {
+    const field2x6 = sel("editField2x6");
+    const field4x6 = sel("editField4x6");
+    const fieldPreview = sel("editFieldPreviewOverlay");
+    const previewLabel = sel("editPreviewOverlayLabel");
+    const previewHint  = sel("editPreviewOverlayHint");
+
+    // New frame types reuse the 2×6 file field with an updated label
+    const isNew = ["long-duo", "long-mini", "film-duo", "wide-mini"].includes(format);
+
+    if (field2x6) field2x6.style.display = (format === "2x6" || isNew) ? "" : "none";
+    if (field4x6) field4x6.style.display = format === "4x6" ? "" : "none";
+
+    // Update the label inside the 2x6 field when a new format is selected
+    if (field2x6) {
+      const lbl = field2x6.querySelector("label");
+      if (lbl) {
+        lbl.textContent = isNew
+          ? `Replace Frame PNG — ${FORMAT_LABELS[format] || format}`
+          : "Replace Frame PNG — 2×6";
+      }
+      const hint = field2x6.querySelector(".form-hint");
+      if (hint) {
+        hint.textContent = isNew
+          ? `Upload a full 2400×3600 px overlay PNG at 600 DPI for the ${FORMAT_LABELS[format] || format} frame.`
+          : "Leave blank to keep the existing overlay. Single strip at 1200×3600px, 600dpi — kiosk mirrors into two-strip print automatically.";
+      }
+    }
+
+    // Strip preview overlay field — shown only for new frame types
+    if (fieldPreview) fieldPreview.style.display = isNew ? "" : "none";
+    if (isNew) {
+      const dims = PREVIEW_DIMS[format] || "see format spec";
+      if (previewLabel) {
+        // Preserve the <span> for editCurrentPreviewOverlay inside the label
+        const spanEl = previewLabel.querySelector
+          ? previewLabel.querySelector("#editCurrentPreviewOverlay")
+          : sel("editCurrentPreviewOverlay");
+        // Set first text node only, keeping the span
+        if (previewLabel.childNodes.length > 0) {
+          previewLabel.childNodes[0].textContent = `Replace Strip Preview Overlay — ${FORMAT_LABELS[format] || format} `;
+        } else {
+          previewLabel.textContent = `Replace Strip Preview Overlay — ${FORMAT_LABELS[format] || format}`;
+        }
+      }
+      if (previewHint) {
+        previewHint.innerHTML =
+          `Leave blank to keep the existing preview overlay. ` +
+          `Upload a PNG at <strong>${dims}</strong> — sized for the strip preview canvas, not the full print sheet.`;
+      }
+    }
   }
 
   function wireEditModal() {
@@ -391,16 +544,30 @@ const templateManager = (() => {
     submitBtn.addEventListener("click", async () => {
       if (!_editingTemplateId) return;
 
-      const nameEl = sel("editTemplateName");
-      const typeEl = sel("editTemplateAssetType");
-      const f2El   = sel("editTemplateFile2x6");
-      const f4El   = sel("editTemplateFile4x6");
+      const nameEl     = sel("editTemplateName");
+      const categoryEl = sel("editTemplateCategory");
+      const formatEl   = sel("editTemplateFormat");
+      const f2El       = sel("editTemplateFile2x6");
+      const f4El       = sel("editTemplateFile4x6");
+      const fThEl      = sel("editTemplateFileThumb");
+      const fPvEl      = sel("editTemplateFilePreviewOverlay");
 
-      const newName     = nameEl ? nameEl.value.trim() : "";
-      const newType     = typeEl ? typeEl.value : "";
-      // Only update the file for the active format tab
-      const newFile2x6  = (_activeFormat === "2x6" && f2El) ? (f2El.files[0] || null) : null;
-      const newFile4x6  = (_activeFormat === "4x6" && f4El) ? (f4El.files[0] || null) : null;
+      const newName     = nameEl     ? nameEl.value.trim()     : "";
+      const newCategory = categoryEl ? categoryEl.value.trim() : "Originals";
+      const newFormat   = formatEl   ? formatEl.value          : "2x6";
+
+      // Only the file field for the active format is used
+      const newFile2x6     = (newFormat === "2x6"       && f2El) ? (f2El.files[0] || null) : null;
+      const newFile4x6     = (newFormat === "4x6"       && f4El) ? (f4El.files[0] || null) : null;
+      const newFileLongDuo = (newFormat === "long-duo"  && f2El) ? (f2El.files[0] || null) : null;
+      const newFileLongMini= (newFormat === "long-mini" && f2El) ? (f2El.files[0] || null) : null;
+      const newFileFilmDuo = (newFormat === "film-duo"  && f2El) ? (f2El.files[0] || null) : null;
+      const newFileWideMini= (newFormat === "wide-mini" && f2El) ? (f2El.files[0] || null) : null;
+      const newThumb    = fThEl ? (fThEl.files[0] || null) : null;
+
+      // Strip preview overlay — only applicable for new frame types
+      const isNewFormat = ["long-duo", "long-mini", "film-duo", "wide-mini"].includes(newFormat);
+      const newPreviewOverlay = (isNewFormat && fPvEl) ? (fPvEl.files[0] || null) : null;
 
       if (!newName) { showToast("Template name cannot be empty."); return; }
 
@@ -409,41 +576,122 @@ const templateManager = (() => {
       if (progressEl) { progressEl.hidden = false; progressEl.textContent = "Saving…"; }
 
       try {
-        // Fetch current template record so we know the slug/prefix for storage paths
         const current = _templates.find((t) => t.id === _editingTemplateId);
         if (!current) throw new Error("Template not found — try refreshing.");
 
-        // Derive the storage prefix from the existing overlay path (keeps files together)
+        // Derive storage prefix from whichever overlay path is already set
         let storagePrefix = null;
-        if (current.overlay_path_2x6) {
-          storagePrefix = current.overlay_path_2x6.replace(/\/overlay_2x6\.png$/, "");
-        } else if (current.overlay_path_4x6) {
-          storagePrefix = current.overlay_path_4x6.replace(/\/overlay_4x6\.png$/, "");
+        const firstPath = current.overlay_path_2x6 || current.overlay_path_4x6 ||
+                          current.overlay_path_long_duo || current.overlay_path_long_mini ||
+                          current.overlay_path_film_duo || current.overlay_path_wide_mini;
+        if (firstPath) {
+          storagePrefix = firstPath.replace(/\/overlay_[^/]+\.png$/, "");
         } else if (current.thumbnail_path) {
-          storagePrefix = current.thumbnail_path.replace(/\/thumbnail\.png$/, "");
+          storagePrefix = current.thumbnail_path.replace(/\/thumbnail\.[^/]+$/, "");
         }
-
-        // If no storage prefix can be derived (e.g. very old template), create one
         if (!storagePrefix) {
           const slug = newName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").substring(0, 48);
           storagePrefix = `templates/${slug}-${Date.now()}`;
         }
 
-        const updates = { name: newName, asset_type: newType };
+        // asset_type stores the category value
+        const updates = { name: newName, asset_type: newCategory };
 
-        // Upload any replacement files; upsert:true (authenticated) overwrites the existing path
+        // All overlay path columns not matching the new format are cleared when a
+        // new file is uploaded (format switch). This prevents stale paths persisting.
+        const ALL_OVERLAY_COLS = [
+          "overlay_path_2x6", "overlay_path_4x6",
+          "overlay_path_long_duo", "overlay_path_long_mini",
+          "overlay_path_film_duo", "overlay_path_wide_mini"
+        ];
+
         if (newFile2x6) {
           if (progressEl) progressEl.textContent = "Uploading 2×6 overlay…";
           updates.overlay_path_2x6 = await adminTemplates._uploadFile(
             newFile2x6, `${storagePrefix}/overlay_2x6.png`, "image/png"
           );
+          // Clear other format columns when format changes
+          ALL_OVERLAY_COLS.filter(c => c !== "overlay_path_2x6").forEach(c => {
+            if (current[c] && newFormat === "2x6") updates[c] = null;
+          });
         }
         if (newFile4x6) {
           if (progressEl) progressEl.textContent = "Uploading 4×6 overlay…";
           updates.overlay_path_4x6 = await adminTemplates._uploadFile(
             newFile4x6, `${storagePrefix}/overlay_4x6.png`, "image/png"
           );
+          ALL_OVERLAY_COLS.filter(c => c !== "overlay_path_4x6").forEach(c => {
+            if (current[c] && newFormat === "4x6") updates[c] = null;
+          });
         }
+        if (newFileLongDuo) {
+          if (progressEl) progressEl.textContent = "Uploading Long Duo overlay…";
+          updates.overlay_path_long_duo = await adminTemplates._uploadFile(
+            newFileLongDuo, `${storagePrefix}/overlay_long_duo.png`, "image/png"
+          );
+          ALL_OVERLAY_COLS.filter(c => c !== "overlay_path_long_duo").forEach(c => {
+            if (current[c] && newFormat === "long-duo") updates[c] = null;
+          });
+        }
+        if (newFileLongMini) {
+          if (progressEl) progressEl.textContent = "Uploading Long Mini overlay…";
+          updates.overlay_path_long_mini = await adminTemplates._uploadFile(
+            newFileLongMini, `${storagePrefix}/overlay_long_mini.png`, "image/png"
+          );
+          ALL_OVERLAY_COLS.filter(c => c !== "overlay_path_long_mini").forEach(c => {
+            if (current[c] && newFormat === "long-mini") updates[c] = null;
+          });
+        }
+        if (newFileFilmDuo) {
+          if (progressEl) progressEl.textContent = "Uploading Film Duo overlay…";
+          updates.overlay_path_film_duo = await adminTemplates._uploadFile(
+            newFileFilmDuo, `${storagePrefix}/overlay_film_duo.png`, "image/png"
+          );
+          ALL_OVERLAY_COLS.filter(c => c !== "overlay_path_film_duo").forEach(c => {
+            if (current[c] && newFormat === "film-duo") updates[c] = null;
+          });
+        }
+        if (newFileWideMini) {
+          if (progressEl) progressEl.textContent = "Uploading Wide Mini overlay…";
+          updates.overlay_path_wide_mini = await adminTemplates._uploadFile(
+            newFileWideMini, `${storagePrefix}/overlay_wide_mini.png`, "image/png"
+          );
+          ALL_OVERLAY_COLS.filter(c => c !== "overlay_path_wide_mini").forEach(c => {
+            if (current[c] && newFormat === "wide-mini") updates[c] = null;
+          });
+        }
+
+        // Strip preview overlay — upload if provided (new frame types only)
+        if (newPreviewOverlay) {
+          const previewStorageName = {
+            "long-duo":  "preview_overlay_long_duo.png",
+            "long-mini": "preview_overlay_long_mini.png",
+            "film-duo":  "preview_overlay_film_duo.png",
+            "wide-mini": "preview_overlay_wide_mini.png"
+          }[newFormat];
+          const previewColumnName = {
+            "long-duo":  "preview_overlay_path_long_duo",
+            "long-mini": "preview_overlay_path_long_mini",
+            "film-duo":  "preview_overlay_path_film_duo",
+            "wide-mini": "preview_overlay_path_wide_mini"
+          }[newFormat];
+          if (previewStorageName && previewColumnName) {
+            if (progressEl) progressEl.textContent = `Uploading ${FORMAT_LABELS[newFormat] || newFormat} strip preview overlay…`;
+            updates[previewColumnName] = await adminTemplates._uploadFile(
+              newPreviewOverlay, `${storagePrefix}/${previewStorageName}`, "image/png"
+            );
+          }
+        }
+
+        if (newThumb) {
+          if (progressEl) progressEl.textContent = "Uploading thumbnail…";
+          const thumbMime = newThumb.type || "image/png";
+          const thumbExt  = thumbMime.includes("jpeg") ? "jpg" : thumbMime.includes("webp") ? "webp" : "png";
+          updates.thumbnail_path = await adminTemplates._uploadFile(
+            newThumb, `${storagePrefix}/thumbnail.${thumbExt}`, thumbMime
+          );
+        }
+
         if (progressEl) progressEl.textContent = "Updating database…";
         await adminTemplates.updateTemplate(_editingTemplateId, updates);
 
@@ -462,40 +710,79 @@ const templateManager = (() => {
     });
   }
 
-  // ── Format tabs (2×6 / 4×6) ────────────────────────────────────────────────
+  // ── Category filter tabs (Originals / Designs / Accessories / All) ──────────
 
-  function wireFormatTabs() {
-    const tabsEl = document.getElementById("templateFormatTabs");
+  function wireCategoryFilter() {
+    const tabsEl = document.getElementById("templateCategoryTabs");
     if (!tabsEl) return;
 
     tabsEl.addEventListener("click", (ev) => {
-      const tab = ev.target.closest(".template-format-tab");
+      const tab = ev.target.closest(".template-category-tab");
       if (!tab) return;
 
-      const format = tab.dataset.format;
-      if (!format || format === _activeFormat) return;
+      const cat = tab.dataset.category;
+      if (cat === undefined || cat === _activeCategory) return;
 
-      _activeFormat = format;
+      _activeCategory = cat;
 
-      // Update tab styles
-      tabsEl.querySelectorAll(".template-format-tab").forEach((t) => {
-        t.classList.toggle("active", t.dataset.format === format);
+      tabsEl.querySelectorAll(".template-category-tab").forEach((t) => {
+        t.classList.toggle("active", t.dataset.category === cat);
       });
 
-      // Re-render the template grid with the active format filter
       renderTemplateList(_templates);
-
-      // Update count label
-      const countEl = document.getElementById("templateCount");
-      if (countEl) {
-        const visible = _templates.filter((t) =>
-          format === "2x6" ? !!t.overlay_path_2x6 : !!t.overlay_path_4x6
-        );
-        countEl.textContent = visible.length
-          ? `${visible.length} template${visible.length !== 1 ? "s" : ""}`
-          : "";
-      }
+      _updateTemplateCount();
     });
+  }
+
+  // ── Format filter pills (All / 2×6 / 4×6) ──────────────────────────────────
+
+  function wireFormatFilter() {
+    const pillsEl = document.getElementById("templateFormatPills");
+    if (!pillsEl) return;
+
+    pillsEl.addEventListener("click", (ev) => {
+      const pill = ev.target.closest(".template-format-pill");
+      if (!pill) return;
+
+      const fmt = pill.dataset.format;
+      if (fmt === undefined || fmt === _activeFormat) return;
+
+      _activeFormat = fmt;
+
+      pillsEl.querySelectorAll(".template-format-pill").forEach((p) => {
+        p.classList.toggle("active", p.dataset.format === fmt);
+      });
+
+      renderTemplateList(_templates);
+      _updateTemplateCount();
+    });
+  }
+
+  function _updateTemplateCount() {
+    const countEl = document.getElementById("templateCount");
+    if (!countEl) return;
+
+    // Re-use the same format/category helpers used by renderTemplateList
+    function _fmt(t) {
+      if (t.overlay_path_2x6)       return "2x6";
+      if (t.overlay_path_4x6)       return "4x6";
+      if (t.overlay_path_long_duo)  return "long-duo";
+      if (t.overlay_path_long_mini) return "long-mini";
+      if (t.overlay_path_film_duo)  return "film-duo";
+      if (t.overlay_path_wide_mini) return "wide-mini";
+      return null;
+    }
+
+    const visible = _templates.filter((t) => {
+      const fmt = _fmt(t);
+      const cat = CATEGORIES.includes((t.asset_type || "").trim()) ? t.asset_type.trim() : "Originals";
+      const catMatch = _activeCategory === "all" || cat === _activeCategory;
+      const fmtMatch = _activeFormat   === "all" || fmt === _activeFormat;
+      return catMatch && fmtMatch;
+    });
+    countEl.textContent = visible.length
+      ? `${visible.length} template${visible.length !== 1 ? "s" : ""}`
+      : "";
   }
 
   // ── Upload modal ────────────────────────────────────────────────────────────
@@ -520,48 +807,66 @@ const templateManager = (() => {
     openBtn.addEventListener("click", () => {
       console.log("[templateManager] Upload Template button clicked — opening modal.");
       const nameEl     = sel("templateName");
-      const typeEl     = sel("templateAssetType");
+      const categoryEl = sel("templateCategory");
+      const formatEl   = sel("templateFormat");
       const f2El       = sel("templateFile2x6");
       const f4El       = sel("templateFile4x6");
-      const titleEl    = sel("templateUploadModalTitle");
-      const field2x6   = sel("uploadField2x6");
-      const field4x6   = sel("uploadField4x6");
+      const fThEl      = sel("templateFileThumb");
+      const fPvEl      = sel("templateFilePreviewOverlay");
 
-      if (nameEl) nameEl.value = "";
-      if (typeEl) typeEl.value = "frame_template";
-      if (f2El)   f2El.value = "";
-      if (f4El)   f4El.value = "";
+      if (nameEl)     nameEl.value = "";
+      if (categoryEl) categoryEl.value = _activeCategory !== "all" ? _activeCategory : "Originals";
+      if (f2El)       f2El.value = "";
+      if (f4El)       f4El.value = "";
+      if (fThEl)      fThEl.value = "";
+      if (fPvEl)      fPvEl.value = "";
       if (progressEl) { progressEl.textContent = ""; progressEl.hidden = true; }
 
-      // Show only the active format field
-      if (field2x6) field2x6.style.display = _activeFormat === "2x6" ? "" : "none";
-      if (field4x6) field4x6.style.display = _activeFormat === "4x6" ? "" : "none";
-      if (titleEl)  titleEl.textContent = `Upload ${_activeFormat === "2x6" ? "2×6" : "4×6"} Template`;
+      // Default format to the active filter, or 2x6 if "all"
+      const defaultFmt = _activeFormat !== "all" ? _activeFormat : "2x6";
+      if (formatEl) {
+        formatEl.value = defaultFmt;
+        _syncUploadFormatFields(defaultFmt);
+      }
 
       modal.hidden = false;
     });
+
+    // When the format select changes, show the matching file field
+    const formatEl = sel("templateFormat");
+    if (formatEl) {
+      formatEl.addEventListener("change", () => _syncUploadFormatFields(formatEl.value));
+    }
 
     cancelBtn.addEventListener("click", () => { modal.hidden = true; });
 
     submitBtn.addEventListener("click", async () => {
       console.log("[templateManager] Upload submit clicked.");
 
-      let name, assetType, file2x6, file4x6;
+      let name, category, format, file2x6, file4x6, thumbFile;
       try {
-        const nameEl = sel("templateName");
-        const typeEl = sel("templateAssetType");
-        const f2El   = sel("templateFile2x6");
-        const f4El   = sel("templateFile4x6");
+        const nameEl     = sel("templateName");
+        const categoryEl = sel("templateCategory");
+        const formatEl   = sel("templateFormat");
+        const f2El       = sel("templateFile2x6");
+        const f4El       = sel("templateFile4x6");
+        const fThEl      = sel("templateFileThumb");
 
-        if (!nameEl || !typeEl) {
+        if (!nameEl || !categoryEl || !formatEl) {
           throw new Error("Upload form fields not found in the page — try a hard refresh (Ctrl+Shift+R).");
         }
 
         name      = nameEl.value.trim();
-        assetType = typeEl.value;
-        // Only read the file field for the active format tab
-        file2x6   = (_activeFormat === "2x6" && f2El) ? (f2El.files[0] || null) : null;
-        file4x6   = (_activeFormat === "4x6" && f4El) ? (f4El.files[0] || null) : null;
+        category  = categoryEl.value;   // "Originals" | "Designs" | "Accessories"
+        format    = formatEl.value;     // "2x6" | "4x6" | "long-duo" | "long-mini" | "film-duo" | "wide-mini"
+
+        // All formats share a single file field (#templateFile2x6) in the upload modal.
+        // f2El is repurposed to accept the overlay for any format.
+        const uploadFileEl = f2El || f4El;
+        const uploadFile = uploadFileEl ? (uploadFileEl.files[0] || null) : null;
+        file2x6   = (format === "2x6" ) ? uploadFile : null;
+        file4x6   = (format === "4x6" ) ? uploadFile : null;
+        thumbFile = fThEl ? (fThEl.files[0] || null) : null;
       } catch (e) {
         console.error("[templateManager] Could not read upload form:", e);
         showToast(`Could not read upload form: ${e.message}`);
@@ -569,8 +874,12 @@ const templateManager = (() => {
       }
 
       if (!name) { showToast("Please enter a template name."); return; }
-      if (!file2x6 && !file4x6) {
-        showToast(`Please select a ${_activeFormat === "2x6" ? "2×6" : "4×6"} frame PNG file.`);
+
+      // For new formats, the file is still required — check that any file was selected
+      const uploadFileEl2 = sel("templateFile2x6") || sel("templateFile4x6");
+      const uploadedFile  = uploadFileEl2 ? (uploadFileEl2.files[0] || null) : null;
+      if (!file2x6 && !file4x6 && !uploadedFile) {
+        showToast(`Please select a frame PNG file for the ${FORMAT_LABELS[format] || format} format.`);
         return;
       }
 
@@ -579,8 +888,44 @@ const templateManager = (() => {
       if (progressEl) { progressEl.hidden = false; progressEl.textContent = "Uploading files…"; }
 
       try {
-        // thumbFile intentionally omitted — thumbnail upload removed
-        await adminTemplates.uploadTemplate({ name, assetType, file2x6, file4x6, thumbFile: null });
+        // Build the format-specific file payload
+        const formatFileKey = {
+          "2x6":      "file2x6",
+          "4x6":      "file4x6",
+          "long-duo": "fileLongDuo",
+          "long-mini":"fileLongMini",
+          "film-duo": "fileFilmDuo",
+          "wide-mini":"fileWideMini"
+        }[format];
+
+        // Preview overlay payload key for new frame types
+        const previewFormatFileKey = {
+          "long-duo": "previewFileLongDuo",
+          "long-mini":"previewFileLongMini",
+          "film-duo": "previewFileFilmDuo",
+          "wide-mini":"previewFileWideMini"
+        }[format] || null;
+
+        // The upload form uses #templateFile2x6 as the shared file field for all formats.
+        const sharedFileEl = sel("templateFile2x6") || sel("templateFile4x6");
+        const sharedFile   = sharedFileEl ? (sharedFileEl.files[0] || null) : null;
+
+        // Strip preview overlay file (optional, new frame types only)
+        const fPvEl      = sel("templateFilePreviewOverlay");
+        const previewFile = fPvEl ? (fPvEl.files[0] || null) : null;
+
+        const uploadPayload = { name, assetType: category, thumbFile };
+        if (format === "2x6")       uploadPayload.file2x6      = file2x6      || sharedFile;
+        else if (format === "4x6")  uploadPayload.file4x6      = file4x6      || sharedFile;
+        else if (formatFileKey)     uploadPayload[formatFileKey] = sharedFile;
+
+        // Attach preview overlay if provided for a new frame type
+        if (previewFormatFileKey && previewFile) {
+          uploadPayload[previewFormatFileKey] = previewFile;
+        }
+
+        // category is stored in the asset_type column
+        await adminTemplates.uploadTemplate(uploadPayload);
         modal.hidden = true;
         showToast(`Template "${name}" uploaded.`);
         await loadTemplates();
@@ -593,6 +938,61 @@ const templateManager = (() => {
         submitBtn.textContent = "Upload";
       }
     });
+  }
+
+  // ── Upload format field sync helper ────────────────────────────────────────
+
+  // Per-format preview canvas size labels for the upload/edit hints
+  const PREVIEW_DIMS = {
+    "long-duo":  "1200 × 3600 px",
+    "long-mini": "1200 × 3600 px",
+    "film-duo":  "1200 × 3600 px",
+    "wide-mini": "2400 × 1800 px"
+  };
+
+  function _syncUploadFormatFields(format) {
+    const field2x6    = sel("uploadField2x6");
+    const field4x6    = sel("uploadField4x6");
+    const fieldNew    = sel("uploadFieldNew");
+    const fieldNewLabel = sel("uploadFieldNewLabel");
+    const fieldNewHint  = sel("uploadFieldNewHint");
+    const fieldPreview      = sel("uploadFieldPreviewOverlay");
+    const previewLabel      = sel("uploadPreviewOverlayLabel");
+    const previewHint       = sel("uploadPreviewOverlayHint");
+
+    // Standard formats use their own dedicated field; new formats reuse #uploadField2x6
+    // with an updated label/hint via the shared #uploadFieldNew wrapper.
+    const isNew = ["long-duo", "long-mini", "film-duo", "wide-mini"].includes(format);
+
+    if (field2x6) field2x6.style.display = (format === "2x6" || isNew) ? "" : "none";
+    if (field4x6) field4x6.style.display = format === "4x6" ? "" : "none";
+
+    // Update label and hint for new frame types (reuse the 2x6 field)
+    if (isNew && fieldNewLabel) {
+      fieldNewLabel.textContent = `Frame PNG — ${FORMAT_LABELS[format] || format}`;
+    }
+    if (isNew && fieldNewHint) {
+      fieldNewHint.textContent = `Upload a full 2400×3600 px overlay PNG at 600 DPI for the ${FORMAT_LABELS[format] || format} frame.`;
+    } else if (!isNew && field2x6) {
+      // Restore the original 2×6 label/hint when switching back
+      const lbl = field2x6.querySelector("label");
+      if (lbl && format === "2x6") lbl.textContent = "Frame PNG — 2×6";
+    }
+
+    // Strip preview overlay field — shown only for new frame types
+    if (fieldPreview) fieldPreview.style.display = isNew ? "" : "none";
+    if (isNew) {
+      const dims = PREVIEW_DIMS[format] || "see format spec";
+      if (previewLabel) {
+        previewLabel.textContent = `Strip Preview Overlay — ${FORMAT_LABELS[format] || format} (optional)`;
+      }
+      if (previewHint) {
+        previewHint.innerHTML =
+          `Upload a PNG overlay at <strong>${dims}</strong> sized for the <strong>strip preview canvas</strong> — ` +
+          `not the full 2400×3600 print sheet. Shown on Photo Selection and Print &amp; QR screens. ` +
+          `Leave blank to use the full-frame overlay cropped to the preview region instead.`;
+      }
+    }
   }
 
   // ── Sync Templates button ───────────────────────────────────────────────────
@@ -651,14 +1051,7 @@ const templateManager = (() => {
     try {
       _templates = await adminTemplates.listTemplates();
       renderTemplateList(_templates);
-
-      // Update the count label
-      const countEl = sel("templateCount");
-      if (countEl) {
-        countEl.textContent = _templates.length
-          ? `${_templates.length} template${_templates.length !== 1 ? "s" : ""}`
-          : "";
-      }
+      _updateTemplateCount();
     } catch (e) {
       console.error("[templateManager] loadTemplates failed:", e);
       _statusEl.hidden = false;
@@ -788,9 +1181,13 @@ const templateManager = (() => {
     }
     if (status) status.hidden = true;
 
+    // Update the active-filter status banner above the grid
+    _updateActiveFilterBanner();
+
     _filters.forEach((filter, index) => {
       const card = document.createElement("div");
-      card.className = "filter-admin-card";
+      const isActive = !!filter.active;
+      card.className = "filter-admin-card" + (isActive ? " filter-admin-card--active" : "");
       card.dataset.id = filter.id;
 
       card.innerHTML = `
@@ -798,6 +1195,7 @@ const templateManager = (() => {
           <span class="filter-admin-name">${escapeHtml(filter.name)}</span>
           <span class="filter-admin-format">.${filter.format}</span>
         </div>
+        ${isActive ? `<div class="filter-admin-active-badge">● Active on kiosk</div>` : ""}
         <div class="filter-admin-preview-wrap">
           <canvas class="filter-admin-canvas" width="160" height="120" data-filter-id="${filter.id}"></canvas>
           <p class="filter-admin-preview-hint">Upload a preview image below</p>
@@ -814,6 +1212,9 @@ const templateManager = (() => {
           <input type="file" class="filter-preview-file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" data-filter-id="${filter.id}">
         </div>
         <div class="filter-admin-actions">
+          <button class="btn-admin ${isActive ? "btn-admin-primary" : "btn-admin-outline"} btn-sm" data-action="set-active-filter">
+            ${isActive ? "✓ Active" : "Set Active"}
+          </button>
           <button class="btn-admin btn-admin-outline btn-sm" data-action="preview-filter">Preview</button>
           <button class="btn-admin btn-admin-ghost btn-sm" data-action="delete-filter">Delete</button>
         </div>
@@ -854,6 +1255,29 @@ const templateManager = (() => {
         reader.readAsDataURL(file);
       });
 
+      // Set Active button — only one filter active at a time
+      card.querySelector('[data-action="set-active-filter"]').addEventListener("click", () => {
+        if (filter.active) {
+          // Already active — clicking again removes the active flag
+          filter.active = false;
+        } else {
+          // Deactivate all others, activate this one
+          _filters.forEach((f) => { f.active = false; });
+          filter.active = true;
+        }
+        saveFilters();
+        renderFilterList(); // re-render cards to update badge + button state
+        const activeFilter = _filters.find((f) => f.active) || null;
+        showToast(filter.active
+          ? `"${filter.name}" is now active on the kiosk.`
+          : `Filter removed — no filter active.`
+        );
+        // Notify kiosk filter engine with the single active filter (or null)
+        document.dispatchEvent(new CustomEvent("studrio:activeFilterChanged", {
+          detail: { activeFilter }
+        }));
+      });
+
       // Preview button — opens a full-size preview modal
       card.querySelector('[data-action="preview-filter"]').addEventListener("click", () => {
         showFilterPreviewModal(filter);
@@ -862,12 +1286,17 @@ const templateManager = (() => {
       // Delete button
       card.querySelector('[data-action="delete-filter"]').addEventListener("click", () => {
         if (!confirm(`Delete filter "${filter.name}"?`)) return;
+        // If we're deleting the active filter, clear active state
+        const wasActive = !!filter.active;
         _filters.splice(index, 1);
         saveFilters(); // saves locally + pushes to Supabase in background
         renderFilterList();
         showToast(`Filter "${filter.name}" deleted.`);
         // Notify kiosk filter engine
         document.dispatchEvent(new CustomEvent("studrio:filtersUpdated", { detail: { filters: _filters } }));
+        if (wasActive) {
+          document.dispatchEvent(new CustomEvent("studrio:activeFilterChanged", { detail: { activeFilter: null } }));
+        }
         // Update filter count label
         const filterCountEl = document.getElementById("filterCount");
         if (filterCountEl) {
@@ -879,6 +1308,22 @@ const templateManager = (() => {
 
       grid.appendChild(card);
     });
+  }
+
+  // ── Active filter banner helper ─────────────────────────────────────────────
+
+  function _updateActiveFilterBanner() {
+    const bannerEl = document.getElementById("filterActiveStatus");
+    const nameEl   = document.getElementById("filterActiveName");
+    if (!bannerEl || !nameEl) return;
+
+    const active = _filters.find((f) => f.active) || null;
+    if (active) {
+      nameEl.textContent = `Active filter: ${active.name} (.${active.format})`;
+      bannerEl.hidden = false;
+    } else {
+      bannerEl.hidden = true;
+    }
   }
 
   /*
@@ -939,7 +1384,21 @@ const templateManager = (() => {
     modal.hidden = false;
   }
 
+
+
   function wireFilterSection() {
+    // ── "Remove Active" button in the active-filter status banner ─────────────
+    const clearActiveBtn = document.getElementById("btnClearActiveFilter");
+    if (clearActiveBtn) {
+      clearActiveBtn.addEventListener("click", () => {
+        _filters.forEach((f) => { f.active = false; });
+        saveFilters();
+        renderFilterList();
+        showToast("Filter removed — no filter active on kiosk.");
+        document.dispatchEvent(new CustomEvent("studrio:activeFilterChanged", { detail: { activeFilter: null } }));
+      });
+    }
+
     // ── Sync Filters button ──────────────────────────────────────────────────
     const syncBtn = document.getElementById("btnSyncFilters");
     if (syncBtn) {
@@ -959,6 +1418,8 @@ const templateManager = (() => {
 
           // 3. Notify kiosk filter engine so it picks up the merged list
           document.dispatchEvent(new CustomEvent("studrio:filtersUpdated", { detail: { filters: _filters } }));
+          const activeFilter = _filters.find((f) => f.active) || null;
+          document.dispatchEvent(new CustomEvent("studrio:activeFilterChanged", { detail: { activeFilter } }));
 
           // 4. Optionally trigger kiosk-side asset-sync refresh
           if (typeof assetSync !== "undefined" && assetSync.forceRefresh) {
@@ -1006,8 +1467,8 @@ const templateManager = (() => {
       if (!file) { showToast("Please select a .lut or .cube file."); return; }
 
       const format = file.name.split(".").pop().toLowerCase();
-      if (!["lut", "cube"].includes(format)) {
-        showToast("Only .lut and .cube files are supported.");
+      if (!["lut", "cube", "xmp"].includes(format)) {
+        showToast("Only .lut, .cube, and .xmp files are supported.");
         return;
       }
 
@@ -1098,10 +1559,26 @@ const templateManager = (() => {
         </div>
       </div>
 
-      <!-- ── Template format tabs ──────────────────────────────────────── -->
-      <div class="template-format-tabs" id="templateFormatTabs">
-        <button class="template-format-tab active" data-format="2x6" type="button">2×6 Templates</button>
-        <button class="template-format-tab" data-format="4x6" type="button">4×6 Templates</button>
+      <!-- ── Category tabs ─────────────────────────────────────────────── -->
+      <div class="template-category-tabs" id="templateCategoryTabs">
+        <button class="template-category-tab active" data-category="all"         type="button">All</button>
+        <button class="template-category-tab"        data-category="Originals"   type="button">Originals</button>
+        <button class="template-category-tab"        data-category="Designs"     type="button">Designs</button>
+        <button class="template-category-tab"        data-category="Accessories" type="button">Accessories</button>
+      </div>
+
+      <!-- ── Format pills ──────────────────────────────────────────────── -->
+      <div class="template-filter-row">
+        <span class="template-filter-label">Format:</span>
+        <div class="template-format-pills" id="templateFormatPills">
+          <button class="template-format-pill active" data-format="all"       type="button">All</button>
+          <button class="template-format-pill"        data-format="2x6"       type="button">2×6</button>
+          <button class="template-format-pill"        data-format="4x6"       type="button">4×6</button>
+          <button class="template-format-pill"        data-format="long-duo"  type="button">Long Duo</button>
+          <button class="template-format-pill"        data-format="long-mini" type="button">Long Mini</button>
+          <button class="template-format-pill"        data-format="film-duo"  type="button">Film Duo</button>
+          <button class="template-format-pill"        data-format="wide-mini" type="button">Wide Mini</button>
+        </div>
       </div>
 
       <p class="admin-status" id="templateStatus">Loading templates…</p>
@@ -1133,37 +1610,76 @@ const templateManager = (() => {
             </div>
 
             <div class="form-field">
-              <label for="editTemplateAssetType">Asset type</label>
-              <select id="editTemplateAssetType">
-                <option value="frame_template">Frame Template</option>
-                <option value="sticker">Sticker</option>
-                <option value="background">Background</option>
-                <option value="gif_video">GIF / Video</option>
-                <option value="logo">Logo</option>
+              <label for="editTemplateCategory">Frame Category</label>
+              <select id="editTemplateCategory">
+                <option value="Originals">Originals</option>
+                <option value="Designs">Designs</option>
+                <option value="Accessories">Accessories</option>
               </select>
             </div>
 
-            <!-- Edit modal shows only the relevant format file field based on active tab -->
-            <div class="form-field" id="editField2x6">
-              <label for="editTemplateFile2x6">
-                Replace Frame PNG — 2×6 (Long Frame)
-                <span class="edit-current-label" id="editCurrent2x6"></span>
-              </label>
-              <input type="file" id="editTemplateFile2x6" accept=".png,image/png">
-              <p class="form-hint">Leave blank to keep the existing 2×6 overlay. Upload a <strong>single strip</strong> at 1200×3600px, 600dpi — the kiosk mirrors it into a two-strip print layout automatically.</p>
+            <div class="form-field">
+              <label for="editTemplateFormat">Frame Format</label>
+              <select id="editTemplateFormat">
+                <option value="2x6">2×6 (Long Frame)</option>
+                <option value="4x6">4×6 (Wide Frame)</option>
+                <option value="long-duo">Long Duo</option>
+                <option value="long-mini">Long Mini</option>
+                <option value="film-duo">Film Duo</option>
+                <option value="wide-mini">Wide Mini</option>
+              </select>
+              <p class="form-hint">Changing the format and uploading a new file will switch this template to the new format. The old overlay file will be cleared.</p>
             </div>
 
-            <div class="form-field" id="editField4x6">
+            <!-- Shown when format = 2x6 -->
+            <div class="form-field" id="editField2x6">
+              <label for="editTemplateFile2x6">
+                Replace Frame PNG — 2×6
+                <span class="edit-current-label" id="editCurrentFile"></span>
+              </label>
+              <input type="file" id="editTemplateFile2x6" accept=".png,image/png">
+              <p class="form-hint">Leave blank to keep the existing overlay. Single strip at 1200×3600px, 600dpi — kiosk mirrors into two-strip print automatically.</p>
+            </div>
+
+            <!-- Shown when format = 4x6 -->
+            <div class="form-field" id="editField4x6" style="display:none">
               <label for="editTemplateFile4x6">
-                Replace Frame PNG — 4×6 (Wide Frame)
-                <span class="edit-current-label" id="editCurrent4x6"></span>
+                Replace Frame PNG — 4×6
               </label>
               <input type="file" id="editTemplateFile4x6" accept=".png,image/png">
-              <p class="form-hint">Leave blank to keep the existing 4×6 overlay.</p>
+              <p class="form-hint">
+                Leave blank to keep the existing overlay. Upload at <strong>2400×3600 px, 600 DPI</strong>.<br>
+                <strong>Accessories (Keychain) templates:</strong> upload the
+                <strong>Mini-Strip overlay PNG at 591×1795 px, 600 DPI</strong>.
+                Applied to both Mini-Strip frames on the keychain print sheet automatically.
+              </p>
+            </div>
+
+            <!-- Strip preview overlay — shown for new frame formats only -->
+            <div class="form-field" id="editFieldPreviewOverlay" style="display:none">
+              <label for="editTemplateFilePreviewOverlay" id="editPreviewOverlayLabel">
+                Replace Strip Preview Overlay
+                <span class="edit-current-label" id="editCurrentPreviewOverlay"></span>
+              </label>
+              <input type="file" id="editTemplateFilePreviewOverlay" accept=".png,image/png">
+              <p class="form-hint" id="editPreviewOverlayHint">
+                Leave blank to keep the existing preview overlay. This PNG is shown on the
+                Photo Selection and Print &amp; QR preview screens only — not used for print.
+              </p>
+            </div>
+
+            <!-- Thumbnail field — always visible -->
+            <div class="form-field">
+              <label for="editTemplateFileThumb">
+                Replace Thumbnail
+                <span class="edit-current-label" id="editCurrentThumb"></span>
+              </label>
+              <input type="file" id="editTemplateFileThumb" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp">
+              <p class="form-hint">Leave blank to keep the existing thumbnail. Recommended 300×450px PNG.</p>
             </div>
 
             <p class="form-hint template-edit-version-note">
-              Replacing any file will bump the template's version number so all kiosks re-download the updated assets automatically.
+              Replacing the file will bump the template's version number so all kiosks re-download the updated asset automatically.
             </p>
 
             <p class="template-upload-progress" id="editTemplateProgress" hidden></p>
@@ -1179,39 +1695,74 @@ const templateManager = (() => {
       <!-- ── Upload modal ───────────────────────────────────────────────── -->
       <div class="admin-modal-overlay" id="templateUploadModal" hidden>
         <div class="admin-modal-box admin-modal-box--wide">
-          <!-- Title updates dynamically to show which format is being uploaded -->
-          <h3 class="admin-modal-title" id="templateUploadModalTitle">Upload Template</h3>
+          <h3 class="admin-modal-title">Upload Template</h3>
 
           <div id="templateUploadForm" class="template-upload-form">
 
             <div class="form-field">
               <label for="templateName">Template name</label>
-              <input type="text" id="templateName" placeholder="e.g. Coastal Cool" maxlength="80">
+              <input type="text" id="templateName" placeholder="e.g. Miffy 2×6" maxlength="80">
             </div>
 
             <div class="form-field">
-              <label for="templateAssetType">Asset type</label>
-              <select id="templateAssetType">
-                <option value="frame_template">Frame Template</option>
-                <option value="sticker">Sticker</option>
-                <option value="background">Background</option>
-                <option value="gif_video">GIF / Video</option>
-                <option value="logo">Logo</option>
+              <label for="templateCategory">Frame Category</label>
+              <select id="templateCategory">
+                <option value="Originals">Originals</option>
+                <option value="Designs">Designs</option>
+                <option value="Accessories">Accessories</option>
               </select>
             </div>
 
-            <!-- 2×6 upload field — shown when 2×6 tab is active -->
-            <div class="form-field" id="uploadField2x6">
-              <label for="templateFile2x6">Frame PNG — 2×6 (Long Frame)</label>
-              <input type="file" id="templateFile2x6" accept=".png,image/png">
-              <p class="form-hint">Upload a <strong>single strip</strong> at 1200×3600px, 600dpi. The kiosk automatically mirrors it into a two-strip print layout.</p>
+            <div class="form-field">
+              <label for="templateFormat">Frame Format</label>
+              <select id="templateFormat">
+                <option value="2x6">2×6 (Long Frame)</option>
+                <option value="4x6">4×6 (Wide Frame)</option>
+                <option value="long-duo">Long Duo</option>
+                <option value="long-mini">Long Mini</option>
+                <option value="film-duo">Film Duo</option>
+                <option value="wide-mini">Wide Mini</option>
+              </select>
             </div>
 
-            <!-- 4×6 upload field — shown when 4×6 tab is active -->
+            <!-- Overlay upload field — shown for 2×6 and all new frame formats -->
+            <div class="form-field" id="uploadField2x6">
+              <label for="templateFile2x6" id="uploadFieldNewLabel">Frame PNG — 2×6</label>
+              <input type="file" id="templateFile2x6" accept=".png,image/png">
+              <p class="form-hint" id="uploadFieldNewHint">Upload a <strong>single strip</strong> at 1200×3600px, 600dpi. The kiosk mirrors it into a two-strip print layout automatically.</p>
+            </div>
+
+            <!-- 4×6 upload field — shown when format = 4x6 -->
             <div class="form-field" id="uploadField4x6" style="display:none">
-              <label for="templateFile4x6">Frame PNG — 4×6 (Wide Frame)</label>
+              <label for="templateFile4x6">Frame PNG — 4×6</label>
               <input type="file" id="templateFile4x6" accept=".png,image/png">
-              <p class="form-hint">Upload at 2400×3600px (4×6 format), 600dpi.</p>
+              <p class="form-hint">
+                Upload at <strong>2400×3600 px, 600 DPI</strong>.<br>
+                <strong>Accessories (Keychain) templates:</strong> upload the
+                <strong>Mini-Strip overlay PNG at 591×1795 px, 600 DPI</strong>.
+                The kiosk uses this overlay for both Mini-Strip frames on the right half
+                of the keychain print sheet. The left half (2×6 strip) always uses the
+                standard 2×6 photo slot positions — no separate overlay needed for it.
+              </p>
+            </div>
+
+            <!-- Strip preview overlay — shown for new frame formats only -->
+            <div class="form-field" id="uploadFieldPreviewOverlay" style="display:none">
+              <label for="templateFilePreviewOverlay" id="uploadPreviewOverlayLabel">Strip Preview Overlay (optional)</label>
+              <input type="file" id="templateFilePreviewOverlay" accept=".png,image/png">
+              <p class="form-hint" id="uploadPreviewOverlayHint">
+                Upload a PNG overlay sized to the <strong>strip preview canvas</strong> only —
+                not the full 2400×3600 print sheet. This overlay is shown on the Photo Selection
+                and Print &amp; QR preview screens. Leave blank to use the full-frame overlay
+                cropped to the preview region instead.
+              </p>
+            </div>
+
+            <!-- Thumbnail upload field — always visible -->
+            <div class="form-field" id="uploadFieldThumb">
+              <label for="templateFileThumb">Thumbnail (optional)</label>
+              <input type="file" id="templateFileThumb" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp">
+              <p class="form-hint">Small preview image shown in the kiosk design picker. Recommended 300×450px PNG. Leave blank to skip.</p>
             </div>
 
             <p class="template-upload-progress" id="templateUploadProgress" hidden></p>
@@ -1221,6 +1772,40 @@ const templateManager = (() => {
             <button class="btn-admin btn-admin-outline" id="btnTemplateUploadCancel" type="button">Cancel</button>
             <button class="btn-admin btn-admin-primary" id="btnTemplateUploadSubmit" type="button">Upload</button>
           </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <!-- ── Accessories: Mini-Strip Keychain ──────────────────────────── -->
+      <!-- ══════════════════════════════════════════════════════════════════ -->
+      <div class="keychain-admin-section" style="margin-top:2rem;">
+        <div class="gallery-section-head">
+          <div class="gallery-section-head-left">
+            <h2>Accessories — Mini-Strip Keychain</h2>
+          </div>
+        </div>
+        <p class="form-hint" style="margin-bottom:1rem;">
+          Keychain templates are uploaded independently under the
+          <strong>Accessories</strong> category — no linking to a regular template is needed.
+          Each keychain template is a standalone 4×6 frame (2400×3600 px) that the kiosk
+          renders as: <strong>1pc 2×6 strip</strong> (left half) +
+          <strong>2pcs Mini-Strip frames</strong> (right half).
+        </p>
+        <div class="keychain-admin-info-box" style="background:#fffbee;border:1.5px solid #F0C231;border-radius:12px;padding:1rem 1.2rem;font-size:0.92rem;color:#555;">
+          <strong style="color:#1a1200;">How to add a Keychain template:</strong>
+          <ol style="margin:0.5rem 0 0 1.2rem;padding:0;line-height:1.8;">
+            <li>Click <strong>+ Upload Template</strong> above.</li>
+            <li>Set <strong>Frame Category</strong> to <em>Accessories</em>.</li>
+            <li>Set <strong>Frame Format</strong> to <em>4×6</em>.</li>
+            <li>Upload the Mini-Strip overlay PNG — <strong>591×1795 px at 600 DPI</strong>. One file is used for both Mini-Strip frames automatically.</li>
+            <li>Click <strong>Upload</strong>. The kiosk will sync automatically.</li>
+          </ol>
+          <p style="margin:0.6rem 0 0;">
+            <strong>Canvas layout (2400×3600 px @ 600 DPI):</strong><br>
+            Left half — 2×6 strip: 4 photos at the standard 2×6 slot positions + QR code.<br>
+            Right half — 2× Mini-Strip frames side by side, each composited with the uploaded overlay.<br>
+            The 2×6 strip on the left uses the same photo layout as a standard 2×6 template.
+          </p>
         </div>
       </div>
 
@@ -1238,7 +1823,12 @@ const templateManager = (() => {
             <button class="btn-admin btn-admin-primary btn-sm" id="btnUploadFilter" type="button">+ Upload Filter</button>
           </div>
         </div>
-        <p class="form-hint" style="margin-bottom:1rem;">Upload <code>.lut</code> or <code>.cube</code> colour-grading files. Adjust each filter's strength with the opacity slider. Filters are saved to Supabase and sync to the kiosk automatically.</p>
+        <p class="form-hint" style="margin-bottom:0.75rem;">Upload <code>.lut</code>, <code>.cube</code>, or <code>.xmp</code> colour-grading files. Adjust each filter's strength with the opacity slider. Only one filter can be active for the kiosk at a time. Filters are saved to Supabase and sync to the kiosk automatically.</p>
+        <div class="filter-active-status" id="filterActiveStatus" hidden>
+          <span class="filter-active-dot"></span>
+          <span id="filterActiveName">No active filter</span>
+          <button class="btn-admin btn-admin-ghost btn-sm" id="btnClearActiveFilter" type="button">Remove Active</button>
+        </div>
         <p class="admin-status" id="filterStatus">No filters yet.</p>
         <div class="filter-admin-grid" id="filterGrid"></div>
       </div>
@@ -1253,9 +1843,9 @@ const templateManager = (() => {
               <input type="text" id="filterName" placeholder="e.g. Warm Sunset" maxlength="60">
             </div>
             <div class="form-field">
-              <label for="filterFile">Filter file (.lut or .cube)</label>
-              <input type="file" id="filterFile" accept=".lut,.cube">
-              <p class="form-hint">Supports standard 1D/3D LUT files in .lut or .cube format.</p>
+              <label for="filterFile">Filter file (.lut, .cube, or .xmp)</label>
+              <input type="file" id="filterFile" accept=".lut,.cube,.xmp">
+              <p class="form-hint">Supports standard 1D/3D LUT files in .lut or .cube format, and Adobe Camera Raw colour presets in .xmp format.</p>
             </div>
           </div>
           <div class="admin-modal-actions">
@@ -1304,7 +1894,8 @@ const templateManager = (() => {
         console.error("[templateManager] init: #templateGrid or #templateStatus missing after injectHTML — aborting init.");
         return;
       }
-      wireFormatTabs();
+      wireCategoryFilter();
+      wireFormatFilter();
       wireUploadModal();
       wireEditModal();
       wireDeleteModal();

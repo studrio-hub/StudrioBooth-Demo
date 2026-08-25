@@ -578,6 +578,7 @@ document.addEventListener("DOMContentLoaded", () => {
      * 10. BOOT STATUS STAGGER
      * ─────────────────────────────────────────────────────────────────────── */
     const bootList = document.getElementById("bootStatusList");
+
     if (bootList && !reducedMotion) {
       new MutationObserver((mutations) => {
         mutations.forEach((m) =>
@@ -609,5 +610,333 @@ document.addEventListener("DOMContentLoaded", () => {
   }, "#kiosk"); // gsap.context scope
 
   window.addEventListener("beforeunload", () => ctx.revert());
+
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * REDESIGN LAYER — Pages 3 & 4 visual improvements
+   *
+   * Merged from animations-redesign.js spec. Integrates with the existing
+   * HTML structure (no DOM restructuring required):
+   *
+   *  A. PIXEL-GRID TRANSITION — left-to-right cell fill (setup→shooting)
+   *  B. NEXT BUTTON WHITE→YELLOW FILL — 1.5s animation before navigation
+   *  C. PAGE 3 SHOOTING THUMBNAILS — polls sessionState.shots, injects
+   *     taken-photo thumbnails into the existing .shooting-side-right panel
+   *  D. PAGE 3 TAKEN-LABEL — injects a "Photos Taken" label above thumbnails
+   *  E. PAGE 4 ALL-SELECTED GLOW — watches selection grid for 4 selected photos
+   *  F. NAV INTERCEPTOR — wraps goToPage for setup→shooting pixel-grid anim
+   * ═══════════════════════════════════════════════════════════════════════ */
+
+  (function _redesignLayer() {
+
+    /* ── A. PIXEL-GRID TRANSITION ─────────────────────────────────────────
+     * Creates a grid of 40px squares that fill left-to-right, fires a
+     * midpoint callback to switch page, then clears right-to-left.
+     * Aligns with the --grid-size CSS variable (40px). */
+
+    const CELL_SIZE        = 40;   // matches --grid-size in style-redesign.css
+    const WAVE_DURATION_MS = 650;  // total left-to-right sweep time
+    const CELL_STAGGER_MS  = 18;   // extra stagger per column (fractional use)
+
+    let _pgOverlay = null;
+
+    function _ensurePixelOverlay() {
+      if (_pgOverlay) return _pgOverlay;
+      _pgOverlay = document.createElement("div");
+      _pgOverlay.id = "pixelGridTransitionOverlay";
+      // CSS from style-redesign.css handles .active show/hide
+      Object.assign(_pgOverlay.style, {
+        position: "absolute", inset: "0",
+        zIndex: "80", pointerEvents: "none",
+        display: "none", overflow: "hidden",
+      });
+      document.getElementById("kiosk").appendChild(_pgOverlay);
+      return _pgOverlay;
+    }
+
+    function playPixelGridTransition(onMidpoint, onComplete) {
+      const overlay = _ensurePixelOverlay();
+      overlay.innerHTML = "";
+      overlay.style.display = "block";
+
+      const kiosk = document.getElementById("kiosk");
+      const W = kiosk.offsetWidth  || 1920;
+      const H = kiosk.offsetHeight || 1080;
+      const cols = Math.ceil(W / CELL_SIZE);
+      const rows = Math.ceil(H / CELL_SIZE);
+
+      const fragment = document.createDocumentFragment();
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = document.createElement("div");
+          cell.style.cssText = [
+            "position:absolute",
+            `left:${c * CELL_SIZE}px`,
+            `top:${r * CELL_SIZE}px`,
+            `width:${CELL_SIZE + 1}px`,
+            `height:${CELL_SIZE + 1}px`,
+            "opacity:0",
+            "background:#ffffff",
+            "will-change:opacity",
+          ].join(";");
+          fragment.appendChild(cell);
+        }
+      }
+      overlay.appendChild(fragment);
+
+      const allCells = overlay.children;
+      let midpointFired = false;
+
+      for (let c = 0; c < cols; c++) {
+        const delay = (c / cols) * WAVE_DURATION_MS + c * CELL_STAGGER_MS * 0.05;
+        for (let r = 0; r < rows; r++) {
+          const cell = allCells[r * cols + c];
+          if (!cell) continue;
+          cell.style.transitionDuration      = "90ms";
+          cell.style.transitionProperty      = "opacity";
+          cell.style.transitionTimingFunction = "ease-in";
+          setTimeout(() => { cell.style.opacity = "1"; }, delay + r * 2);
+        }
+        if (!midpointFired && c / cols > 0.58) {
+          midpointFired = true;
+          setTimeout(() => { if (typeof onMidpoint === "function") onMidpoint(); }, delay);
+        }
+      }
+
+      const fillTime = WAVE_DURATION_MS + cols * CELL_STAGGER_MS * 0.05 + rows * 2;
+      setTimeout(() => {
+        for (let c = cols - 1; c >= 0; c--) {
+          const delay = ((cols - 1 - c) / cols) * (WAVE_DURATION_MS * 0.65);
+          for (let r = 0; r < rows; r++) {
+            const cell = allCells[r * cols + c];
+            if (!cell) continue;
+            cell.style.transitionDuration      = "120ms";
+            cell.style.transitionTimingFunction = "ease-out";
+            setTimeout(() => { cell.style.opacity = "0"; }, delay + r * 1.5);
+          }
+        }
+        setTimeout(() => {
+          overlay.style.display = "none";
+          overlay.innerHTML = "";
+          if (typeof onComplete === "function") onComplete();
+        }, WAVE_DURATION_MS * 0.65 + 200);
+      }, fillTime + 160);
+    }
+
+
+    /* ── B. NEXT BUTTON WHITE→YELLOW FILL ────────────────────────────────
+     * Plays a 1.5-second left-to-right yellow fill wash on the NEXT button
+     * before navigating to the next page. */
+
+    function playNextBtnFill(btn, onComplete) {
+      if (!btn) { if (onComplete) onComplete(); return; }
+
+      let fillLayer = btn.querySelector(".btn-next-fill");
+      if (!fillLayer) {
+        fillLayer = document.createElement("span");
+        fillLayer.className = "btn-next-fill";
+        Object.assign(fillLayer.style, {
+          position: "absolute", inset: "0",
+          background: "linear-gradient(90deg,#ffffff 0%,#ffdd66 100%)",
+          transform: "scaleX(0)", transformOrigin: "left center",
+          borderRadius: "inherit", pointerEvents: "none",
+          zIndex: "1", opacity: "0",
+        });
+        if (getComputedStyle(btn).position === "static") btn.style.position = "relative";
+        btn.appendChild(fillLayer);
+      }
+
+      // Use GSAP if available, otherwise plain CSS
+      if (typeof gsap !== "undefined") {
+        gsap.set(fillLayer, { scaleX: 0, opacity: 0.9 });
+        gsap.to(fillLayer, {
+          scaleX: 1, duration: 0.9, ease: "power2.inOut",
+          onComplete: () => {
+            gsap.to(fillLayer, {
+              opacity: 0, duration: 0.4, ease: "power1.in",
+              onComplete: () => {
+                gsap.set(fillLayer, { scaleX: 0, opacity: 0 });
+                if (typeof onComplete === "function") onComplete();
+              },
+            });
+          },
+        });
+      } else {
+        setTimeout(() => { if (typeof onComplete === "function") onComplete(); }, 1500);
+      }
+    }
+
+
+    /* ── C. PAGE 3 SHOOTING THUMBNAILS ───────────────────────────────────
+     * Polls sessionState.shots every 300 ms and injects thumbnails of
+     * taken photos into the existing .shooting-side-right dark panel,
+     * above the existing photos-taken counter.
+     * Does NOT restructure the HTML — works with the current layout. */
+
+    function _injectShootingTakenLabel() {
+      const panel = document.querySelector("#page-shooting .shooting-side-right");
+      if (!panel || panel.querySelector(".shooting-side-taken-label")) return;
+      const label = document.createElement("div");
+      label.className = "shooting-side-taken-label";
+      label.textContent = "Photos Taken";
+      // Insert as the very first child (above future thumbnails)
+      panel.insertBefore(label, panel.firstChild);
+    }
+
+    function _addShootingThumbnail(imageUrl, number) {
+      const panel = document.querySelector("#page-shooting .shooting-side-right");
+      if (!panel) return;
+
+      const thumb = document.createElement("div");
+      thumb.className = "shooting-taken-thumb";
+      thumb.innerHTML = `
+        <img src="${imageUrl}" alt="Photo ${number}" loading="lazy">
+        <span class="shooting-taken-thumb-num">${number}</span>`;
+
+      // Insert before the .shooting-photos-taken counter block
+      const counter = panel.querySelector(".shooting-photos-taken");
+      if (counter) {
+        panel.insertBefore(thumb, counter);
+      } else {
+        panel.appendChild(thumb);
+      }
+
+      // Gentle entrance animation with GSAP if available
+      if (typeof gsap !== "undefined" && !reducedMotion) {
+        gsap.fromTo(thumb,
+          { opacity: 0, scale: 0.85, y: -8 },
+          { opacity: 1, scale: 1, y: 0, duration: 0.28, ease: "expo.out" }
+        );
+      }
+    }
+
+    function _hookShootingThumbnails() {
+      let _lastShotCount = 0;
+
+      const _pollId = setInterval(() => {
+        if (!window.sessionState) return;
+        const shots = window.sessionState.shots || [];
+        if (shots.length > _lastShotCount) {
+          for (let i = _lastShotCount; i < shots.length; i++) {
+            const shot = shots[i];
+            if (shot && shot.imageUrl) {
+              _addShootingThumbnail(shot.imageUrl, i + 1);
+            }
+          }
+          _lastShotCount = shots.length;
+        }
+      }, 300);
+
+      // Reset thumbnails when shooting page becomes active again
+      const shootPage = document.getElementById("page-shooting");
+      if (shootPage) {
+        new MutationObserver(() => {
+          if (!shootPage.classList.contains("active")) return;
+          _lastShotCount = 0;
+          // Remove all injected thumbnails but keep the label and counter
+          const panel = shootPage.querySelector(".shooting-side-right");
+          if (panel) {
+            panel.querySelectorAll(".shooting-taken-thumb").forEach((t) => t.remove());
+          }
+        }).observe(shootPage, { attributes: true, attributeFilter: ["class"] });
+      }
+    }
+
+
+    /* ── D. PAGE 3 LABEL INJECTION ───────────────────────────────────────
+     * Waits for the shooting page to be in the DOM, then injects label. */
+
+    function _initShootingEnhancements() {
+      _injectShootingTakenLabel();
+      _hookShootingThumbnails();
+    }
+
+
+    /* ── E. PAGE 4 ALL-SELECTED GLOW ─────────────────────────────────────
+     * Watches the selection grid for the moment all 4 photos are chosen
+     * and temporarily adds .all-selected for the CSS glow animation. */
+
+    function _watchSelectionCompletion() {
+      const grid = document.getElementById("selectionGrid");
+      if (!grid) return;
+
+      new MutationObserver(() => {
+        const selected = grid.querySelectorAll(".photo-card.selected");
+        if (selected.length >= 4) {
+          grid.classList.add("all-selected");
+          setTimeout(() => grid.classList.remove("all-selected"), 1300);
+        }
+      }).observe(grid, { subtree: true, attributes: true, attributeFilter: ["class"] });
+    }
+
+
+    /* ── F. NAV INTERCEPTOR ───────────────────────────────────────────────
+     * Wraps window.goToPage (which animations.js has already wrapped with
+     * GSAP flash logic) to layer in:
+     *   – setup/frame → shooting: NEXT fill then pixel-grid transition
+     *   – printing → home/ticket: pixel-grid transition
+     * All other routes fall through to the existing GSAP flash handler. */
+
+    function _installNavInterceptor() {
+      // Run after animations.js's own DOMContentLoaded + rAF wrapper
+      setTimeout(() => {
+        if (typeof window.goToPage !== "function") return;
+
+        const _prevGoToPage = window.goToPage;
+
+        window.goToPage = function (pageName) {
+          const currentPage = document.querySelector(".page.active");
+          const currentName = currentPage ? (currentPage.dataset.page || "") : "";
+
+          // setup/frame → shooting: fill then pixel-grid
+          const isSetupToShooting =
+            (currentName === "setup" || currentName === "frame") && pageName === "shooting";
+
+          // printing → home/ticket: pixel-grid
+          const isPrintingToHome =
+            currentName === "printing" && (pageName === "home" || pageName === "ticket");
+
+          if (isSetupToShooting) {
+            const nextBtn =
+              document.getElementById("btnNextFromSetup") ||
+              document.getElementById("btnNextFromFrame");
+            playNextBtnFill(nextBtn, () => {
+              playPixelGridTransition(
+                () => { _prevGoToPage(pageName); },
+                () => { /* sweep complete */ }
+              );
+            });
+            return;
+          }
+
+          if (isPrintingToHome) {
+            playPixelGridTransition(
+              () => { _prevGoToPage(pageName); },
+              () => { /* sweep complete */ }
+            );
+            return;
+          }
+
+          // Default: use existing GSAP flash transition
+          _prevGoToPage(pageName);
+        };
+      }, 50); // small delay so animations.js rAF wrapper has already installed
+    }
+
+
+    /* ── INIT ─────────────────────────────────────────────────────────────*/
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => {
+        _initShootingEnhancements();
+        _watchSelectionCompletion();
+        _installNavInterceptor();
+      });
+    } else {
+      _initShootingEnhancements();
+      _watchSelectionCompletion();
+      _installNavInterceptor();
+    }
+
+  })(); // end _redesignLayer
 
 }); // end DOMContentLoaded

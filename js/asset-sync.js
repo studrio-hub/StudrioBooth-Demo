@@ -182,9 +182,14 @@ const assetSync = (() => {
 
   function getCachedVersion(storagePath, cachedMeta) {
     for (const t of cachedMeta) {
-      if (t.overlay_path_2x6 === storagePath && t._overlay_version_2x6 !== undefined) return t._overlay_version_2x6;
-      if (t.overlay_path_4x6 === storagePath && t._overlay_version_4x6 !== undefined) return t._overlay_version_4x6;
-      if (t.thumbnail_path    === storagePath && t._thumbnail_version    !== undefined) return t._thumbnail_version;
+      if (t.overlay_path_2x6       === storagePath && t._overlay_version_2x6 !== undefined) return t._overlay_version_2x6;
+      if (t.overlay_path_4x6       === storagePath && t._overlay_version_4x6 !== undefined) return t._overlay_version_4x6;
+      if (t.thumbnail_path          === storagePath && t._thumbnail_version    !== undefined) return t._thumbnail_version;
+      // New frame type overlay paths — all share the same version number
+      if (t.overlay_path_long_duo  === storagePath) return t._overlay_version_2x6 || -1;
+      if (t.overlay_path_long_mini === storagePath) return t._overlay_version_2x6 || -1;
+      if (t.overlay_path_film_duo  === storagePath) return t._overlay_version_2x6 || -1;
+      if (t.overlay_path_wide_mini === storagePath) return t._overlay_version_2x6 || -1;
     }
     return -1;
   }
@@ -235,15 +240,35 @@ const assetSync = (() => {
     console.log(`[assetSync] Offline — loading ${cachedMeta.length} templates from cache.`);
     const resolved = [];
     for (const t of cachedMeta) {
-      const overlayBlob2x6 = t.overlay_path_2x6 ? await idbGet(t.overlay_path_2x6) : null;
-      const overlayBlob4x6 = t.overlay_path_4x6 ? await idbGet(t.overlay_path_4x6) : null;
-      const thumbBlob      = t.thumbnail_path    ? await idbGet(t.thumbnail_path)    : null;
+      const overlayBlob2x6                = t.overlay_path_2x6                ? await idbGet(t.overlay_path_2x6)                : null;
+      const overlayBlob4x6                = t.overlay_path_4x6                ? await idbGet(t.overlay_path_4x6)                : null;
+      const thumbBlob                     = t.thumbnail_path                   ? await idbGet(t.thumbnail_path)                   : null;
+      const keychainOverlayBlob           = t.keychain_overlay_path            ? await idbGet(t.keychain_overlay_path)            : null;
+      const overlayBlobLongDuo            = t.overlay_path_long_duo            ? await idbGet(t.overlay_path_long_duo)            : null;
+      const overlayBlobLongMini           = t.overlay_path_long_mini           ? await idbGet(t.overlay_path_long_mini)           : null;
+      const overlayBlobFilmDuo            = t.overlay_path_film_duo            ? await idbGet(t.overlay_path_film_duo)            : null;
+      const overlayBlobWideMini           = t.overlay_path_wide_mini           ? await idbGet(t.overlay_path_wide_mini)           : null;
+      // Strip preview overlays (new frame types, preview canvas only)
+      const previewOverlayBlobLongDuo     = t.preview_overlay_path_long_duo    ? await idbGet(t.preview_overlay_path_long_duo)    : null;
+      const previewOverlayBlobLongMini    = t.preview_overlay_path_long_mini   ? await idbGet(t.preview_overlay_path_long_mini)   : null;
+      const previewOverlayBlobFilmDuo     = t.preview_overlay_path_film_duo    ? await idbGet(t.preview_overlay_path_film_duo)    : null;
+      const previewOverlayBlobWideMini    = t.preview_overlay_path_wide_mini   ? await idbGet(t.preview_overlay_path_wide_mini)   : null;
 
       resolved.push({
         ...t,
-        overlayUrl2x6: overlayBlob2x6 ? makeObjectUrl(overlayBlob2x6, t.overlay_path_2x6) : null,
-        overlayUrl4x6: overlayBlob4x6 ? makeObjectUrl(overlayBlob4x6, t.overlay_path_4x6) : null,
-        thumbnailUrl:  thumbBlob       ? makeObjectUrl(thumbBlob,       t.thumbnail_path)   : null
+        overlayUrl2x6:              overlayBlob2x6             ? makeObjectUrl(overlayBlob2x6,             t.overlay_path_2x6)               : null,
+        overlayUrl4x6:              overlayBlob4x6             ? makeObjectUrl(overlayBlob4x6,             t.overlay_path_4x6)               : null,
+        thumbnailUrl:               thumbBlob                  ? makeObjectUrl(thumbBlob,                  t.thumbnail_path)                  : null,
+        keychainOverlayUrl:         keychainOverlayBlob        ? makeObjectUrl(keychainOverlayBlob,        t.keychain_overlay_path)           : null,
+        overlayUrlLongDuo:          overlayBlobLongDuo         ? makeObjectUrl(overlayBlobLongDuo,         t.overlay_path_long_duo)           : null,
+        overlayUrlLongMini:         overlayBlobLongMini        ? makeObjectUrl(overlayBlobLongMini,        t.overlay_path_long_mini)          : null,
+        overlayUrlFilmDuo:          overlayBlobFilmDuo         ? makeObjectUrl(overlayBlobFilmDuo,         t.overlay_path_film_duo)           : null,
+        overlayUrlWideMini:         overlayBlobWideMini        ? makeObjectUrl(overlayBlobWideMini,        t.overlay_path_wide_mini)          : null,
+        // Strip preview overlay blob: URLs (null if not uploaded)
+        previewOverlayUrlLongDuo:   previewOverlayBlobLongDuo  ? makeObjectUrl(previewOverlayBlobLongDuo,  t.preview_overlay_path_long_duo)  : null,
+        previewOverlayUrlLongMini:  previewOverlayBlobLongMini ? makeObjectUrl(previewOverlayBlobLongMini, t.preview_overlay_path_long_mini) : null,
+        previewOverlayUrlFilmDuo:   previewOverlayBlobFilmDuo  ? makeObjectUrl(previewOverlayBlobFilmDuo,  t.preview_overlay_path_film_duo)  : null,
+        previewOverlayUrlWideMini:  previewOverlayBlobWideMini ? makeObjectUrl(previewOverlayBlobWideMini, t.preview_overlay_path_wide_mini) : null
       });
     }
     return resolved.filter((t) => t.enabled !== false);
@@ -254,9 +279,18 @@ const assetSync = (() => {
   async function pruneDeletedAssets(serverTemplates) {
     const activePaths = new Set();
     for (const t of serverTemplates) {
-      if (t.overlay_path_2x6) activePaths.add(t.overlay_path_2x6);
-      if (t.overlay_path_4x6) activePaths.add(t.overlay_path_4x6);
-      if (t.thumbnail_path)   activePaths.add(t.thumbnail_path);
+      if (t.overlay_path_2x6)                activePaths.add(t.overlay_path_2x6);
+      if (t.overlay_path_4x6)                activePaths.add(t.overlay_path_4x6);
+      if (t.thumbnail_path)                  activePaths.add(t.thumbnail_path);
+      if (t.keychain_overlay_path)           activePaths.add(t.keychain_overlay_path);
+      if (t.overlay_path_long_duo)           activePaths.add(t.overlay_path_long_duo);
+      if (t.overlay_path_long_mini)          activePaths.add(t.overlay_path_long_mini);
+      if (t.overlay_path_film_duo)           activePaths.add(t.overlay_path_film_duo);
+      if (t.overlay_path_wide_mini)          activePaths.add(t.overlay_path_wide_mini);
+      if (t.preview_overlay_path_long_duo)   activePaths.add(t.preview_overlay_path_long_duo);
+      if (t.preview_overlay_path_long_mini)  activePaths.add(t.preview_overlay_path_long_mini);
+      if (t.preview_overlay_path_film_duo)   activePaths.add(t.preview_overlay_path_film_duo);
+      if (t.preview_overlay_path_wide_mini)  activePaths.add(t.preview_overlay_path_wide_mini);
     }
     const allKeys = await idbGetAllKeys();
     for (const key of allKeys) {
@@ -305,10 +339,54 @@ const assetSync = (() => {
       for (const template of serverTemplates) {
         if (!template.enabled) continue;
 
-        const [overlayUrl2x6, overlayUrl4x6, thumbnailUrl] = await Promise.all([
-          syncAsset(template.overlay_path_2x6, template.version || 1, cachedMeta),
-          syncAsset(template.overlay_path_4x6, template.version || 1, cachedMeta),
-          syncAsset(template.thumbnail_path,   template.version || 1, cachedMeta)
+        const [
+          overlayUrl2x6,
+          overlayUrl4x6,
+          thumbnailUrl,
+          keychainOverlayUrl,
+          overlayUrlLongDuo,
+          overlayUrlLongMini,
+          overlayUrlFilmDuo,
+          overlayUrlWideMini,
+          // Strip preview overlays — sized for preview canvas, not full print
+          previewOverlayUrlLongDuo,
+          previewOverlayUrlLongMini,
+          previewOverlayUrlFilmDuo,
+          previewOverlayUrlWideMini
+        ] = await Promise.all([
+          syncAsset(template.overlay_path_2x6,       template.version || 1, cachedMeta),
+          syncAsset(template.overlay_path_4x6,       template.version || 1, cachedMeta),
+          syncAsset(template.thumbnail_path,          template.version || 1, cachedMeta),
+          // Linked keychain overlay — optional (null when not set)
+          template.keychain_overlay_path
+            ? syncAsset(template.keychain_overlay_path, template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          // New frame type overlays — optional (null when not set)
+          template.overlay_path_long_duo
+            ? syncAsset(template.overlay_path_long_duo,  template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.overlay_path_long_mini
+            ? syncAsset(template.overlay_path_long_mini, template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.overlay_path_film_duo
+            ? syncAsset(template.overlay_path_film_duo,  template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.overlay_path_wide_mini
+            ? syncAsset(template.overlay_path_wide_mini, template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          // Strip preview overlays (optional — null when not uploaded)
+          template.preview_overlay_path_long_duo
+            ? syncAsset(template.preview_overlay_path_long_duo,  template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.preview_overlay_path_long_mini
+            ? syncAsset(template.preview_overlay_path_long_mini, template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.preview_overlay_path_film_duo
+            ? syncAsset(template.preview_overlay_path_film_duo,  template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.preview_overlay_path_wide_mini
+            ? syncAsset(template.preview_overlay_path_wide_mini, template.version || 1, cachedMeta)
+            : Promise.resolve(null)
         ]);
 
         resolved.push({
@@ -316,6 +394,18 @@ const assetSync = (() => {
           overlayUrl2x6,
           overlayUrl4x6,
           thumbnailUrl,
+          // Resolved blob: URL for the linked keychain overlay (or null)
+          keychainOverlayUrl,
+          // Resolved blob: URLs for new frame type overlays (or null)
+          overlayUrlLongDuo,
+          overlayUrlLongMini,
+          overlayUrlFilmDuo,
+          overlayUrlWideMini,
+          // Resolved blob: URLs for strip preview overlays (or null)
+          previewOverlayUrlLongDuo,
+          previewOverlayUrlLongMini,
+          previewOverlayUrlFilmDuo,
+          previewOverlayUrlWideMini,
           _overlay_version_2x6: template.version || 1,
           _overlay_version_4x6: template.version || 1,
           _thumbnail_version:   template.version || 1
@@ -410,11 +500,72 @@ const assetSync = (() => {
 
     _filters = _mergeFilters(cloudFilters, localFilters);
 
-    // Persist the merged result locally for offline use
+    // ── Download XMP/filter asset files and cache them in IDB ──────────────
+    // Each filter entry may carry a `filePath` (Supabase Storage path to the
+    // .xmp file) and a `version` number.  We download the file once and store
+    // it in IDB under the path key; on subsequent boots the file is served
+    // from the local cache without touching the network.
+    // After loading, `fileData` is set to the base64-encoded XMP text so the
+    // rest of the app (cameraFilterManager) can use it without another fetch.
+    for (const filter of _filters) {
+      if (!filter.filePath) continue;   // no storage path — skip download
+
+      const storagePath  = filter.filePath;
+      const serverVer    = filter.version || 1;
+      // Check IDB for a cached copy
+      const cachedBlob   = await idbGet(storagePath);
+      // Determine if we already have the right version in IDB
+      // We track filter versions in localStorage alongside template metadata.
+      let cachedVer = -1;
+      try {
+        const cachedFilterMeta = JSON.parse(localStorage.getItem(FILTERS_LS_KEY) || "[]");
+        const cachedEntry = cachedFilterMeta.find(f => f.filePath === storagePath);
+        if (cachedEntry) cachedVer = cachedEntry._localVersion || -1;
+      } catch (_) {}
+
+      let xmpText = null;
+      if (cachedBlob && cachedVer >= serverVer) {
+        // Use the cached file — no network call
+        xmpText = await cachedBlob.text().catch(() => null);
+        console.log(`[assetSync] Filter ${filter.name}: using local cache (v${serverVer}).`);
+      } else {
+        // Download from Supabase Storage
+        try {
+          const client = getSupabaseClient();
+          const { data: urlData } = client.storage
+            .from(CLOUD_CONFIG.bucketName)
+            .getPublicUrl(storagePath);
+          const fileRes = await fetch(urlData.publicUrl);
+          if (fileRes.ok) {
+            const blob = await fileRes.blob();
+            xmpText = await blob.text();
+            // Store blob in IDB for future offline use
+            await idbPut(storagePath, blob);
+            console.log(`[assetSync] Filter ${filter.name}: downloaded and cached (v${serverVer}).`);
+          }
+        } catch (dlErr) {
+          console.warn(`[assetSync] Could not download filter ${filter.name}:`, dlErr.message || dlErr);
+          // Fall back to stale cached blob
+          if (cachedBlob) {
+            xmpText = await cachedBlob.text().catch(() => null);
+          }
+        }
+      }
+
+      if (xmpText) {
+        // Store base64 of the XMP text so cameraFilterManager can parse it
+        try { filter.fileData = btoa(unescape(encodeURIComponent(xmpText))); } catch (_) {}
+        // Track the locally cached version
+        filter._localVersion = serverVer;
+      }
+    }
+    // ── End filter asset download ─────────────────────────────────────────
+
+    // Persist the merged result (including _localVersion) locally for offline use
     try { localStorage.setItem(FILTERS_LS_KEY, JSON.stringify(_filters)); } catch (e) {}
     console.log(`[assetSync] Filters synced — ${cloudFilters.length} from cloud, ${_filters.length} after merge.`);
 
-    // Notify any listening modules (e.g. strip.js filter picker)
+    // Notify any listening modules (e.g. cameraFilterManager, strip.js filter picker)
     document.dispatchEvent(new CustomEvent("studrio:filtersUpdated", { detail: { filters: _filters } }));
   }
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: electron: http://localhost:5513 https://oismyjlhnlfavrdfvabg.supabase.co; media-src 'self' blob:; connect-src 'self' http://localhost:5513 https://oismyjlhnlfavrdfvabg.supabase.co;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: electron: http://localhost:5513 https://oismyjlhnlfavrdfvabg.supabase.co; media-src 'self' blob:; connect-src 'self' http://localhost:5513 https://oismyjlhnlfavrdfvabg.supabase.co wss://localhost:8181 wss://localhost:8182;">
 <title>Studrio Booth — Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -242,6 +242,11 @@
   <div class="admin-toast" id="adminToast" hidden></div>
 
   <!-- ── Scripts ───────────────────────────────────────────────────────────── -->
+  <!-- QZ Tray — browser→thermal-printer bridge for POS-58 and similar ESC/POS printers.
+       QZ Tray must be installed and running on the PC connected to the printer.
+       Download: https://qz.io/download/
+       If QZ Tray is not running, admin-queue-manager.js falls back to canvas PNG printing. -->
+  <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="../js/cloud-storage.js"></script>

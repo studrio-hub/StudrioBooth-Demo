@@ -50,6 +50,13 @@ async function remuxToMp4(inputBlob) {
       video.currentTime = timestamp;
       await new Promise(r => { video.onseeked = r; });
       ctx.drawImage(video, 0, 0, width, height);
+      // Apply photobooth.cube LUT after drawing each frame — this is the
+      // post-capture / pre-save step for video colour grading. The GL path
+      // is preferred (~10-20× faster than software); falls back to software
+      // trilinear if the offscreen WebGL context is unavailable.
+      if (typeof cameraFilterManager !== 'undefined' && cameraFilterManager.isActive()) {
+        cameraFilterManager.applyLutToCanvasGL(canvas);
+      }
       const frame = new VideoFrame(canvas, { timestamp: Math.round(timestamp * 1_000_000) });
       encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
       frame.close();
@@ -284,6 +291,9 @@ const realCameraBridge = {
         }
         this._recordCtx.drawImage(imgEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
         this._recordCtx.restore();
+        // LUT is NOT applied here — filter is baked into the final video
+        // during remuxToMp4 (per-frame, after recording stops) so the live
+        // preview is never affected by filter processing.
       }
       this._recordRafId = requestAnimationFrame(draw);
     };
@@ -416,6 +426,9 @@ const mockCameraBridge = {
         }
         this._recordCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
         this._recordCtx.restore();
+        // LUT is NOT applied here — filter is baked into the final video
+        // during remuxToMp4 (per-frame, after recording stops) so the live
+        // preview is never affected by filter processing.
       }
       this._recordRafId = requestAnimationFrame(draw);
     };

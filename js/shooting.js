@@ -16,6 +16,7 @@ const shootingModule = {
   countdownSeconds: 8,
   videoStartsAt: 4,
   running: false,
+  PREP_SECONDS: 10, // preparation countdown before the first shot
 
   els: {
     counter: document.getElementById("shotCounter"),
@@ -29,7 +30,9 @@ const shootingModule = {
     intervalPreviewImg: document.getElementById("intervalPreviewImg"),
     intervalNumber: document.getElementById("intervalNumber"),
     headsUpOverlay: document.getElementById("headsUpOverlay"),
-    headsUpText: document.getElementById("headsUpText")
+    headsUpText: document.getElementById("headsUpText"),
+    prepCountdownOverlay: document.getElementById("prepCountdownOverlay"),
+    prepCountdownNumber: document.getElementById("prepCountdownNumber")
   },
 
   async startSession() {
@@ -40,6 +43,9 @@ const shootingModule = {
 
     cameraController.attachPreview(this.els.video, this.els.img);
 
+    // 10-second preparation countdown before the first shot
+    await this.runPrepCountdown();
+
     await this.runHeadsUp();
 
     for (let i = 1; i <= this.totalShots; i++) {
@@ -49,6 +55,37 @@ const shootingModule = {
 
     this.running = false;
     document.dispatchEvent(new CustomEvent("shooting:complete", { detail: sessionState.shots }));
+  },
+
+  /*
+   * 10-second preparation countdown shown right when the shooting page loads,
+   * before the per-shot countdowns begin. The overlay displays a large
+   * ticking number so guests can set up their pose.
+   */
+  async runPrepCountdown() {
+    const overlay = this.els.prepCountdownOverlay;
+    const numEl   = this.els.prepCountdownNumber;
+    if (!overlay || !numEl) {
+      // Fallback: just wait the prep time silently
+      await this.wait(this.PREP_SECONDS * 1000);
+      return;
+    }
+
+    overlay.classList.add("show");
+    for (let s = this.PREP_SECONDS; s >= 1; s--) {
+      numEl.textContent = s;
+      // Pop animation: remove + re-add class to retrigger
+      numEl.classList.remove("prep-pop");
+      void numEl.offsetWidth;
+      numEl.classList.add("prep-pop");
+
+      // Play a softer tick on 3, 2, 1 using the existing beep
+      if (s <= 3 && typeof audioManager !== "undefined") {
+        audioManager.playCountdownBeep();
+      }
+      await this.wait(1000);
+    }
+    overlay.classList.remove("show");
   },
 
   /* Static "Get Ready!" message shown for exactly 3 seconds right

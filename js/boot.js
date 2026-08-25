@@ -128,13 +128,20 @@
 
   await playBootAnimation();
 
-  // Now show the lock screen
-  if (typeof authLock !== "undefined") {
-    authLock.init();
-  } else {
-    console.warn("[boot] authLock not found — skipping lock screen.");
-    goToPage("home");
-  }
+  // ── AUTH BYPASS (temporary — re-enable by reverting this block) ─────────
+  // Staff authentication is disabled for testing. To re-enable, replace this
+  // block with the original authLock.init() call below.
+  //
+  // ORIGINAL (re-enable when ready):
+  // if (typeof authLock !== "undefined") {
+  //   authLock.init();
+  // } else {
+  //   console.warn("[boot] authLock not found — skipping lock screen.");
+  //   goToPage("home");
+  // }
+  console.log("[boot] AUTH BYPASS ACTIVE — skipping lock screen for testing.");
+  goToPage("home");
+  // ── END AUTH BYPASS ───────────────────────────────────────────────────────
 
   // Retry logic
   document.getElementById("btnBootRetry")?.addEventListener("click", () => {

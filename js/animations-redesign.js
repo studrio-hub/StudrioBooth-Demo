@@ -636,17 +636,12 @@
       btnMirrorToggle:{ src: 'assets/designs/icons/mirror.png',   label: 'Mirror' },
     };
 
-    Object.entries(ICONS).forEach(([id, cfg]) => {
+    Object.entries(ICONS).forEach(([id]) => {
       const btn = document.getElementById(id);
       if (!btn || btn.dataset.iconInjected) return;
       btn.dataset.iconInjected = '1';
-
-      const img = document.createElement('img');
-      img.className = 'ctrl-icon';
-      img.src = cfg.src;
-      img.alt = cfg.label;
-      img.onerror = () => { img.style.display = 'none'; };
-      btn.prepend(img);
+      // The HTML already contains <img> + <span> for each button.
+      // No additional icon elements are injected to avoid duplicates.
     });
   }
 
@@ -703,14 +698,29 @@
     const grid = document.getElementById('selectionGrid');
     if (!grid) return;
 
+    // Guard: only fire the glow once per completed selection, not on every DOM mutation.
+    // selection.js wipes innerHTML on each tap, which floods the observer with dozens
+    // of simultaneous mutations. Combined with the class changes from .all-selected
+    // itself, this creates a feedback loop that freezes the page on the 4th photo.
+    // Fix: debounce all mutations into one deferred check, and use a lock to prevent
+    // re-entry while the animation + setTimeout removal are still in flight.
+    let _glowPending = false;
+    let _debounceTimer = null;
+
     new MutationObserver(() => {
-      const selected = grid.querySelectorAll('.photo-card.selected');
-      const required = window.sessionState && window.sessionState.frameType === '2x6' ? 4 : 4;
-      if (selected.length >= required) {
-        grid.classList.add('all-selected');
-        // Remove after animation
-        setTimeout(() => grid.classList.remove('all-selected'), 1300);
-      }
+      clearTimeout(_debounceTimer);
+      _debounceTimer = setTimeout(() => {
+        if (_glowPending) return;
+        const selected = grid.querySelectorAll('.photo-card.selected');
+        if (selected.length >= 4) {
+          _glowPending = true;
+          grid.classList.add('all-selected');
+          setTimeout(() => {
+            grid.classList.remove('all-selected');
+            _glowPending = false;
+          }, 1300);
+        }
+      }, 80); // coalesces the full innerHTML-wipe mutation burst
     }).observe(grid, { subtree: true, attributes: true, attributeFilter: ['class'] });
   }
 
@@ -810,6 +820,323 @@
 
 
   /* ═══════════════════════════════════════════════════════════════════════
+   * TEMPLATE CAROUSEL: touch/pointer swipe + selection-animation suppression
+   *
+   * The template track-outer is made scrollable via CSS
+   * (overflow-x: auto; scroll-snap-type: x mandatory in style-redesign.css).
+   * This function adds pointer-drag support so click-and-drag also scrolls,
+   * mirroring the design-carousel drag behaviour (_addDragScroll).
+   *
+   * Selection-animation suppression:
+   *   app.js _selectTemplate() calls _renderCarousel() which adds .animating
+   *   to the track.  To suppress the slide-in animation on selection (but keep
+   *   it for category-change / arrow navigation), we intercept clicks on
+   *   .template-card elements and briefly set data-selecting on the track.
+   *   CSS rule  `.template-carousel-track[data-selecting] > .template-card`
+   *   sets animation:none, so the fade-slide does not play.
+   * ═══════════════════════════════════════════════════════════════════════ */
+
+  function _initTemplateCarouselSwipe() {
+    const outer = document.querySelector('.template-carousel-track-outer');
+    if (!outer || outer.dataset.swipeReady) return;
+    outer.dataset.swipeReady = '1';
+
+    /* ── Arrow buttons: one card at a time, smooth scrollBy ─────────────────
+     *
+     * app.js wires Prev/Next to _scroll(±VISIBLE_COUNT) which re-renders the
+     * whole carousel.  We intercept those clicks in the capture phase and
+     * cancel them, then do a smooth single-card scrollBy instead.
+     * Arrow disabled state is kept accurate via a scroll listener.
+     */
+    const prevBtn = document.getElementById('templateCarouselPrev');
+    const nextBtn = document.getElementById('templateCarouselNext');
+
+    function _getCardWidth() {
+      // Width of the first rendered card, including its right gap.
+      const track = outer.firstElementChild;
+      if (!track) return 0;
+      const card  = track.querySelector('.template-card');
+      if (!card) return 0;
+      // Use the card's offsetWidth plus the computed column-gap on the track.
+      const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
+      return card.offsetWidth + gap;
+    }
+
+    function _syncArrows() {
+      if (!prevBtn || !nextBtn) return;
+      const atStart = outer.scrollLeft <= 1;
+      const atEnd   = outer.scrollLeft >= outer.scrollWidth - outer.clientWidth - 1;
+      prevBtn.disabled = atStart;
+      nextBtn.disabled = atEnd;
+    }
+
+    // Smooth single-card scroll — intercept app.js's batch _scroll() entirely.
+    function _arrowScroll(dir, e) {
+      e.stopImmediatePropagation();   // cancel app.js's click handler
+      e.preventDefault();
+      const cardW = _getCardWidth();
+      if (!cardW) return;
+      outer.scrollBy({ left: dir * cardW, behavior: 'smooth' });
+      // Re-sync arrows after the smooth scroll settles (~350ms is enough)
+      setTimeout(_syncArrows, 360);
+    }
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', (e) => _arrowScroll(-1, e), { capture: true });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener('click', (e) => _arrowScroll(+1, e), { capture: true });
+    }
+
+    // Keep arrows synced to native scroll position (touch / programmatic)
+    outer.addEventListener('scroll', _syncArrows, { passive: true });
+
+    // Initial state after first render
+    requestAnimationFrame(_syncArrows);
+
+    /* ── Pointer drag: momentum-based, 1:1 tracking then deceleration ───────
+     *
+     * For mouse/stylus drag (touch is handled natively by the browser with its
+     * own momentum physics — we do not override touch events).
+     *
+     * Velocity is sampled over the last ~80ms of movement so a short fast
+     * flick produces a long coast, and a slow deliberate drag stops quickly.
+     *
+     * Threshold: drag only begins after 6px movement, so taps always reach
+     * the card's own click listener.
+     */
+    const DRAG_THRESHOLD = 6;
+    const DECEL_FACTOR   = 0.92;   // multiply velocity each frame (0.9=fast stop, 0.95=long coast)
+    const MIN_VELOCITY   = 0.5;    // px/frame below which momentum stops
+
+    // Ring buffer for velocity sampling
+    const VEL_SAMPLES    = 5;
+    let _velBuf          = [];
+
+    let _startX     = 0;
+    let _lastX      = 0;
+    let _lastTime   = 0;
+    let _scrollLeft = 0;
+    let _dragging   = false;
+    let _pendingId  = null;
+    let _rafId      = null;
+
+    function _cancelMomentum() {
+      if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null; }
+    }
+
+    function _applyMomentum(vx) {
+      // Exponential deceleration loop
+      function step() {
+        if (Math.abs(vx) < MIN_VELOCITY) {
+          _syncArrows();
+          return;
+        }
+        outer.scrollLeft += vx;
+        vx *= DECEL_FACTOR;
+        _rafId = requestAnimationFrame(step);
+      }
+      _rafId = requestAnimationFrame(step);
+    }
+
+    outer.addEventListener('pointerdown', (e) => {
+      // Ignore touch pointers — the browser's native touch-momentum handles those
+      if (e.pointerType === 'touch') return;
+
+      _cancelMomentum();
+      _startX     = e.pageX;
+      _lastX      = e.pageX;
+      _lastTime   = performance.now();
+      _scrollLeft = outer.scrollLeft;
+      _dragging   = false;
+      _pendingId  = e.pointerId;
+      _velBuf     = [];
+    });
+
+    outer.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return;
+      if (_pendingId === null) return;
+
+      const dx   = e.pageX - _startX;
+      const now  = performance.now();
+
+      if (!_dragging) {
+        if (Math.abs(dx) < DRAG_THRESHOLD) return;
+        _dragging = true;
+        try { outer.setPointerCapture(_pendingId); } catch (_) {}
+      }
+
+      // 1:1 scroll tracking — no multiplier, feels natural
+      outer.scrollLeft = _scrollLeft - dx;
+
+      // Sample velocity (px/ms → convert to px/frame at 60fps later)
+      const dt = now - _lastTime;
+      if (dt > 0) {
+        _velBuf.push({ v: (e.pageX - _lastX) / dt, t: now });
+        if (_velBuf.length > VEL_SAMPLES) _velBuf.shift();
+      }
+      _lastX    = e.pageX;
+      _lastTime = now;
+    });
+
+    function _end(e) {
+      if (e && e.pointerType === 'touch') return;
+      if (!_dragging) { _dragging = false; _pendingId = null; return; }
+      _dragging  = false;
+      _pendingId = null;
+
+      // Compute average velocity from the sample buffer (px/ms)
+      if (_velBuf.length) {
+        const now    = performance.now();
+        // Weight recent samples — keep only last 80ms
+        const recent = _velBuf.filter(s => now - s.t < 80);
+        const avgV   = recent.length
+          ? recent.reduce((sum, s) => sum + s.v, 0) / recent.length
+          : 0;
+        // Convert px/ms → px/frame (16.67ms per frame at 60fps)
+        const vxFrame = -avgV * 16.67;
+        if (Math.abs(vxFrame) > MIN_VELOCITY) _applyMomentum(vxFrame);
+      }
+
+      _velBuf = [];
+      _syncArrows();
+    }
+
+    outer.addEventListener('pointerup',     _end);
+    outer.addEventListener('pointercancel', _end);
+  }
+
+  function _initTemplateSelectionAnimSuppression() {
+    const track = document.getElementById('templateCarouselTrack');
+    if (!track || track.dataset.selGuardReady) return;
+    track.dataset.selGuardReady = '1';
+
+    // Intercept clicks that land on a .template-card (selection action).
+    // Set data-selecting before app.js's click handler fires (which calls
+    // _renderCarousel → requestAnimationFrame → classList.add("animating")).
+    //
+    // Timing chain inside _renderCarousel after a selection click:
+    //   capture click → data-selecting = '1'
+    //   card click handler → _selectTemplate() → _renderCarousel()
+    //     → rAF(A): track.classList.remove("animating"); reflow; classList.add("animating")
+    //   rAF(B) [our guard]: delete data-selecting  ← MUST fire AFTER rAF(A)
+    //
+    // Two rAFs are not sufficient because rAF(A) is queued before our rAF
+    // and both run in the same frame batch, meaning rAF(B) can fire before
+    // the .animating class is added.  Using setTimeout(fn, 0) defers past
+    // the current animation frame batch entirely, guaranteeing data-selecting
+    // is still present when .animating is applied.
+    track.addEventListener('click', (e) => {
+      const card = e.target.closest('.template-card');
+      if (!card) return;
+      track.dataset.selecting = '1';
+      // Clear the flag after a full event-loop turn so it outlives the rAF
+      // that _renderCarousel uses to add .animating.
+      setTimeout(() => { delete track.dataset.selecting; }, 0);
+    }, true); // capture phase so we fire before the card's own click listener
+  }
+
+  // Re-run swipe init whenever page-template becomes active (first render
+  // of .template-carousel-track-outer may not have happened on DOMContentLoaded).
+  function _watchTemplatePage() {
+    const templatePage = document.getElementById('page-template');
+    if (!templatePage) return;
+    new MutationObserver(() => {
+      if (templatePage.classList.contains('active')) {
+        // Small delay so app.js _renderCarousel() has run and inserted cards
+        setTimeout(() => {
+          _initTemplateCarouselSwipe();
+          _initTemplateSelectionAnimSuppression();
+        }, 80);
+      }
+    }).observe(templatePage, { attributes: true, attributeFilter: ['class'] });
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * PRINTING ANIMATION RESTORE
+   *
+   * animations.js _animatePrinterFeed() is triggered by a MutationObserver
+   * on #printingVideoFrame watching for child-node additions (childList).
+   * printing.js injects the strip content via `await printingModule.init()`
+   * BEFORE goToPage("printing") is called — so the GSAP animation starts
+   * while the page is still invisible (opacity:0 during the flash transition).
+   *
+   * By the time the printing page fades in (~0.5s flash), the animation is
+   * already ~0.5s into its ~2s run.  Depending on timing, guests may only
+   * catch the tail end of the slide-in, or miss it entirely if GSAP finished
+   * before the page became visible.
+   *
+   * Fix: when page-printing receives the .active class, check whether
+   * #printingVideoFrame already has a child.  If so, and if GSAP is available,
+   * re-run the printer-feed animation fresh so guests always see it from the
+   * beginning on the now-visible page.  A guard flag prevents double-firing
+   * if the MutationObserver in animations.js fires at the same moment.
+   * ═══════════════════════════════════════════════════════════════════════ */
+
+  function _restorePrinterFeedAnim() {
+    const printPage = document.getElementById('page-printing');
+    const frame     = document.getElementById('printingVideoFrame');
+    const qrCol     = document.querySelector('.printing-qr-col');
+    if (!printPage || !frame) return;
+
+    new MutationObserver(() => {
+      if (!printPage.classList.contains('active')) return;
+      if (typeof gsap === 'undefined') return;
+
+      const child = frame.firstElementChild;
+      if (!child) return;
+
+      // Guard: only re-trigger once per page activation
+      if (frame.dataset.animPlayed === '1') return;
+      frame.dataset.animPlayed = '1';
+
+      // Hide QR col until strip is seated (matches animations.js behaviour)
+      if (qrCol) gsap.set(qrCol, { opacity: 0, x: 20 });
+
+      // Printer-feed slide: stepwise descent matching animations.js STEPS
+      gsap.killTweensOf(child); // cancel any in-progress animation from animations.js
+      gsap.set(child, { y: '-110%', opacity: 1 });
+
+      const STEPS = [
+        { y: '-80%', dur: 0.20 },
+        { y: '-58%', dur: 0.15 },
+        { y: '-36%', dur: 0.18 },
+        { y: '-18%', dur: 0.14 },
+        { y: '-5%',  dur: 0.20 },
+        { y:  '0%',  dur: 0.24 },
+      ];
+
+      const tl = gsap.timeline();
+      STEPS.forEach(({ y, dur }, i) => {
+        tl.to(child, { y, duration: dur, ease: i === STEPS.length - 1 ? 'expo.out' : 'power2.out' });
+        if (i < STEPS.length - 1) {
+          tl.to(child, { y: `+=${1.2}`, duration: 0.04, ease: 'power1.in' });
+          tl.to(child, { y: `-=${1.2}`, duration: 0.04, ease: 'power1.out' });
+        }
+      });
+
+      // Elastic settle
+      tl.to(child, { y: '-1.5%', duration: 0.10, ease: 'power1.in' });
+      tl.to(child, { y:   '0%',  duration: 0.22, ease: 'expo.out' });
+
+      // QR col slides in after strip is seated
+      if (qrCol) {
+        tl.to(qrCol, { opacity: 1, x: 0, duration: 0.42, ease: 'expo.out' }, '+=0.12');
+      }
+    }).observe(printPage, { attributes: true, attributeFilter: ['class'] });
+
+    // Reset the guard when the printing page is left so the animation
+    // can replay on the next session.
+    new MutationObserver(() => {
+      if (!printPage.classList.contains('active')) {
+        frame.dataset.animPlayed = '';
+      }
+    }).observe(printPage, { attributes: true, attributeFilter: ['class'] });
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════════════
    * INIT — run after DOMContentLoaded
    * ═══════════════════════════════════════════════════════════════════════ */
 
@@ -824,6 +1151,15 @@
     _watchSelectionCompletion();
     _watchDesignPage();
     _ensurePoseOverlay();
+
+    // Template carousel: swipe support + selection-animation suppression
+    _watchTemplatePage();
+    // Also run immediately in case page-template is already active
+    _initTemplateCarouselSwipe();
+    _initTemplateSelectionAnimSuppression();
+
+    // Printing animation restore
+    _restorePrinterFeedAnim();
 
     // Shooting page layout
     // Wait for shooting page to be structurally ready before injecting

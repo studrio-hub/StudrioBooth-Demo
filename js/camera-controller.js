@@ -132,8 +132,39 @@ const cameraController = {
     else if (this.mode === 'mock') blob = await mockCameraBridge.capturePhoto(this.mirrorEnabled);
     else throw new Error('Camera not connected');
 
-    if (this.zoomLevel <= 1.001) return blob;
-    return this._cropToZoom(blob, this.zoomLevel);
+    // If zoom crop is needed we go through _cropToZoom which already has a
+    // canvas — apply the LUT there in one pass.
+    if (this.zoomLevel > 1.001) return this._cropToZoom(blob, this.zoomLevel);
+
+    // No zoom: apply LUT on a temporary canvas if filter is active.
+    if (typeof cameraFilterManager !== 'undefined' && cameraFilterManager.isActive()) {
+      blob = await this._applyFilterToBlob(blob);
+    }
+    return blob;
+  },
+
+  /* Decode blob → canvas → LUT → re-encode as JPEG. */
+  async _applyFilterToBlob(blob) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload  = () => resolve(el);
+        el.onerror = reject;
+        el.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width  = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      if (typeof cameraFilterManager !== 'undefined') {
+        cameraFilterManager.applyLutToCanvas(canvas);
+      }
+      return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   },
 
   async _cropToZoom(blob, zoom) {
@@ -154,6 +185,10 @@ const cameraController = {
       const sx    = (img.naturalWidth  - cropW) / 2;
       const sy    = (img.naturalHeight - cropH) / 2;
       ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, canvas.width, canvas.height);
+      // Apply LUT after drawing — same canvas, one getImageData round-trip.
+      if (typeof cameraFilterManager !== 'undefined') {
+        cameraFilterManager.applyLutToCanvas(canvas);
+      }
       return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
     } finally {
       URL.revokeObjectURL(url);

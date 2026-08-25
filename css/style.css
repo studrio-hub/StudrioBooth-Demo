@@ -1684,6 +1684,58 @@ button {
   max-width: 100% !important;
 }
 
+/*
+ * New frame types — strip/canvas preview.
+ *
+ * long-duo / long-mini: preview canvas is 1200×3600 (aspect 1:3, portrait strip).
+ * film-duo:             preview canvas is 3600×1200 (aspect 3:1, landscape strip).
+ * wide-mini:            preview canvas is 2400×1800 (aspect 4:3, landscape).
+ *
+ * The canvas is already cropped to the correct preview region by strip.js,
+ * so no CSS clipping is needed — these rules just make the clip wrapper fill
+ * its column correctly and let the canvas scale naturally.
+ */
+.single-strip-clip[data-frame="long-duo"],
+.single-strip-clip[data-frame="long-mini"] {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.single-strip-clip[data-frame="long-duo"] .layout-canvas,
+.single-strip-clip[data-frame="long-mini"] .layout-canvas {
+  width: auto !important;
+  height: 100% !important;
+  max-height: 72vh !important;
+  max-width: 100% !important;
+}
+
+/*
+ * film-duo: preview canvas is 3600×1200 LANDSCAPE (aspect 3:1).
+ * Width-constrained so the landscape strip fills the column without overflowing.
+ */
+.single-strip-clip[data-frame="film-duo"] {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.single-strip-clip[data-frame="film-duo"] .layout-canvas {
+  width: 100% !important;
+  height: auto !important;
+  max-height: 40vh !important;
+  max-width: 100% !important;
+}
+
+.single-strip-clip[data-frame="wide-mini"] {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.single-strip-clip[data-frame="wide-mini"] .layout-canvas {
+  width: 100% !important;
+  height: auto !important;
+  max-height: 72vh !important;
+}
+
 .layout-canvas {
   max-width: 100%;
   max-height: 72vh;
@@ -1980,6 +2032,20 @@ button {
 /* 4×6 wide frame */
 .printing-video-frame[data-frame="4x6"] {
   aspect-ratio: 4 / 6;
+}
+/* New frame types — aspect ratios match their preview canvas dimensions */
+/* long-duo / long-mini: preview 1200×3600 → 1:3 (portrait strip) */
+.printing-video-frame[data-frame="long-duo"],
+.printing-video-frame[data-frame="long-mini"] {
+  aspect-ratio: 1200 / 3600;
+}
+/* film-duo: preview 3600×1200 → 3:1 (landscape strip) */
+.printing-video-frame[data-frame="film-duo"] {
+  aspect-ratio: 3600 / 1200;
+}
+/* wide-mini: preview 2400×1800 → 4:3 */
+.printing-video-frame[data-frame="wide-mini"] {
+  aspect-ratio: 2400 / 1800;
 }
 
 /* Photo overlay layer removed — video strip shows directly, no photo fade */
@@ -2550,6 +2616,65 @@ button {
   letter-spacing: 0.05em;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 3 — SHOOTING: taken-photo thumbnails inside the right side panel
+ * These slot into the existing .shooting-side-right panel so no HTML
+ * restructuring is needed — app.js already drives photosTakenCount.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* Thumbnail cards stacked inside the right dark panel */
+.shooting-taken-thumb {
+  width: calc(100% - 0.8vw);
+  aspect-ratio: 3 / 2;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+  border: 1.5px solid rgba(255,255,255,0.18);
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  margin: 0 0.4vw;
+}
+
+.shooting-taken-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.shooting-taken-thumb-num {
+  position: absolute;
+  bottom: 0.4vh;
+  left: 0.4vw;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 1vh;
+  font-weight: 700;
+  padding: 0.2vh 0.5vw;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Wrap thumbnails above the existing counter inside the right side panel */
+#page-shooting .shooting-side-right {
+  overflow-y: auto;
+  scrollbar-width: none;
+  gap: 0.7vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+#page-shooting .shooting-side-right::-webkit-scrollbar { display: none; }
+
+/* Ensure the photos-taken block stays at the bottom of the right panel */
+#page-shooting .shooting-side-right .shooting-photos-taken {
+  margin-top: auto;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+
 /* ── Boot Status Rows ─────────────────────────────────────────────────────── */
 .boot-status-row {
   font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
@@ -2561,4 +2686,68 @@ button {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ================= PAGE: CAMERA CHECK ================= */
+/*
+ * Inserted between page-boot and the kiosk guest flow.
+ * Layout is identical to page-shooting so the preview dimensions match
+ * exactly — reuses .shooting-fullscreen-layout, .shooting-side-panel,
+ * .shooting-preview-frame, and related classes.
+ */
+
+/* Left info panel: dark, same background as shooting side panels */
+.camera-check-info-panel {
+  flex-direction: column;
+  gap: 0.8vh;
+  padding: 3vh 2vw;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Right panel: purely structural — same dark background, no content */
+.camera-check-right-panel {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Info group stacked vertically */
+.camera-check-info-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5vh;
+}
+
+.camera-check-label {
+  font-size: 1.2vh;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+
+.camera-check-model {
+  font-size: 1.8vh;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.camera-check-conn {
+  font-size: 1.2vh;
+  font-weight: 500;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Video and img inside the camera check preview frame — same as #shootingVideo */
+#cameraCheckVideo,
+#cameraCheckImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
 }

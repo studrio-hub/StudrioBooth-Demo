@@ -19,22 +19,32 @@
  * single point of failure to unstick a guest — _onQrReady() is also
  * force-called by a hard failsafe timer below if it hasn't already fired.
  *
- * KEYCHAIN TEMPLATE PRINT LOGIC (driven by sessionState._isKeychain)
- * ─────────────────────────────────────────────────────────────────────
- * When the guest selects a Keychain template from the Accessories category
- * on Page 2 (Template Selection), templateModule sets sessionState._isKeychain
- * = true and overrides frameType to "2x6" for the shooting session (so the
- * same 8-shot flow is used). On arrival at Page 6:
+ * ADD-ON PRINT LOGIC (driven by sessionState.addonChoice set by addon-page.js)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * addonChoice === "none" (or falsy)
+ *   → Standard: prints sessionState.quantity copies of the main 2-up sheet.
+ *     Behaviour is identical to the original code.
  *
- *   sessionState._isKeychain === true
- *     → Sends 1 copy of the keychain export sheet via keychainAddon.exportPrintPNG().
- *       Layout: left half = 1× 2×6 strip, right half = 2× Mini-Strip Keychain frames.
- *       The selected keychain template's overlay (keychainOverlayUrl from the design)
- *       is applied to both keychain frames. No standard 2-up sheet is printed.
+ * addonChoice === "replace"  [2×6 only]
+ *   → Replaces the second strip with 2 Mini-Strip Keychain frames.
+ *   → Sends 1 copy of the keychain export sheet (left strip + 2 mini frames)
+ *     via keychainAddon.exportPrintPNG().
+ *   → The normal 2-up sheet is NOT printed (the guest chose the keychain
+ *     format in its place, at no extra cost).
  *
- *   sessionState._isKeychain === false (or undefined)
- *     → Standard print: quantity copies of the main strip sheet (2-up for 2×6,
- *       single for 4×6). Behaviour is identical to the original code.
+ * addonChoice === "add"  [2×6 only]
+ *   → Full standard print PLUS the keychain sheet as a second job.
+ *   → Sends sessionState.quantity copies of the standard 2-up sheet, then
+ *     1 additional copy of the keychain sheet.
+ *   → Corresponds to the "+₱25 Add a Keychain Print" option.
+ *
+ * For backward compatibility, sessionState.keychainAddonSelected continues
+ * to be set alongside addonChoice:
+ *   false         → no add-on (addonChoice: "none")
+ *   "replace"     → replace mode (addonChoice: "replace")
+ *   "add"         → additive mode (addonChoice: "add")
+ * Any code that only checks the boolean truthiness of keychainAddonSelected
+ * will activate for "replace" and "add" and skip only "false" / undefined.
  */
 
 const printingModule = {
@@ -157,21 +167,30 @@ const printingModule = {
   },
 
   _renderQtyNote() {
-    const qty = sessionState.quantity;
+    const qty    = sessionState.quantity;
+    const choice = sessionState.addonChoice || "none";
 
-    if (sessionState._isKeychain) {
-      // Keychain template: 1 strip + 2 keychain frames on a single sheet
-      this.els.qtyNote.textContent = `1 strip · 2 keychains`;
-    } else if (sessionState.frameType === "2x6") {
-      this.els.qtyNote.textContent =
-        `${qty} sheet${qty !== 1 ? "s" : ""} · ${qty * 2} strips`;
+    if (sessionState.frameType === "2x6") {
+      if (choice === "replace") {
+        // Replace: 1 strip + 2 keychain frames (no standard 2-up sheet)
+        this.els.qtyNote.textContent = `1 strip · 2 keychains`;
+      } else if (choice === "add") {
+        // Add: standard sheets + 1 extra keychain sheet
+        this.els.qtyNote.textContent =
+          `${qty} sheet${qty !== 1 ? "s" : ""} · ${qty * 2} strips + keychain`;
+      } else {
+        // None: standard 2-up sheet(s)
+        this.els.qtyNote.textContent =
+          `${qty} sheet${qty !== 1 ? "s" : ""} · ${qty * 2} strips`;
+      }
     } else {
       this.els.qtyNote.textContent = `${qty} sheet${qty !== 1 ? "s" : ""}`;
     }
   },
 
   async _autoPrint() {
-    const prefs = printAlignment.loadPrefs();
+    const prefs  = printAlignment.loadPrefs();
+    const choice = sessionState.addonChoice || "none";
 
     // Wait for the gallery URL so the QR baked into the print output is
     // always correct, even if the upload is still in flight.
@@ -179,13 +198,8 @@ const printingModule = {
       ? await sessionState.galleryUrlPromise
       : sessionState.galleryUrl;
 
-    // ── KEYCHAIN TEMPLATE: send keychain sheet only ───────────────────────────
-    // Fires when the guest selected a Keychain template from the Accessories
-    // category on Page 2. The keychain sheet uses the KEYCHAIN_LAYOUT:
-    //   Left half  — 1× 2×6 strip (photos + design overlay + QR)
-    //   Right half — 2× Mini-Strip Keychain frames (photos + keychain overlay)
-    // No standard 2-up strip sheet is printed.
-    if (sessionState._isKeychain && typeof keychainAddon !== "undefined") {
+    // ── REPLACE mode: skip standard sheet, send keychain sheet only ───────────
+    if (choice === "replace" && typeof keychainAddon !== "undefined") {
       let keychainUrl = null;
       try {
         this._setStatus("🖨", "Printing keychain…");
@@ -199,15 +213,15 @@ const printingModule = {
         this._setStatus("✅", "Keychain printed!");
         cloudStorage.logPrintEvent(sessionState.id, 1);
       } catch (e) {
-        console.error("[printing] Keychain print failed:", e);
+        console.error("[printing] Keychain (replace) print failed:", e);
         this._setStatus("⚠", "Print failed — ask staff");
       } finally {
         if (keychainUrl) URL.revokeObjectURL(keychainUrl);
       }
-      return; // Done — keychain template never prints the standard sheet.
+      return; // Done — no standard sheet in "replace" mode.
     }
 
-    // ── STANDARD sheet ────────────────────────────────────────────────────────
+    // ── STANDARD sheet (used for "none" and first job of "add") ──────────────
     let pngUrl = null;
     try {
       const pngBlob = await stripModule.exportPrintPNG({
@@ -230,6 +244,29 @@ const printingModule = {
       this._setStatus("⚠", "Print failed — ask staff");
     } finally {
       if (pngUrl) URL.revokeObjectURL(pngUrl);
+    }
+
+    // ── ADD mode: second print job — keychain sheet ───────────────────────────
+    // Fires only for "add" choice. Runs after the main job (success or failure)
+    // so a print error on the main job doesn't silently block the keychain print.
+    if (choice === "add" && typeof keychainAddon !== "undefined") {
+      let keychainUrl = null;
+      try {
+        this._setStatus("🖨", "Printing keychain…");
+        const keychainBlob = await keychainAddon.exportPrintPNG({
+          selectedShots: sessionState.selectedShots,
+          designId:      sessionState.design,
+          qrText:        galleryUrl
+        });
+        keychainUrl = URL.createObjectURL(keychainBlob);
+        await printAlignment.sendPrintJob(keychainUrl, 1, prefs);
+        this._setStatus("✅", "Keychain printed!");
+      } catch (e) {
+        console.error("[printing] Keychain (add) print failed:", e);
+        this._setStatus("⚠", "Keychain print failed — ask staff");
+      } finally {
+        if (keychainUrl) URL.revokeObjectURL(keychainUrl);
+      }
     }
   },
 

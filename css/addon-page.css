@@ -1,0 +1,554 @@
+/*
+ * ADDON-PAGE.CSS
+ * ──────────────────────────────────────────────────────────────────────────
+ * Styles for the Print Preview / Add-On page (#page-addon).
+ * Driven by addon-page.js and addon-page.html.
+ *
+ * Follows Studrio Booth's existing design language:
+ *   • Primary accent:  #F0C231 (Studrio yellow)
+ *   • Dark text:       var(--text, #1c1e21)
+ *   • Muted text:      var(--text-dim, #666b73)
+ *   • All sizing in vh/vw for kiosk full-screen use
+ *   • Rounded corners, subtle shadows, smooth transitions
+ *
+ * LOAD ORDER: after style.css, before or after keychain-addon.css.
+ * ──────────────────────────────────────────────────────────────────────────
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PAGE WRAPPER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  height: 100%;
+  padding: 3vh 3vw 2vh;
+  gap: 2.4vh;
+  box-sizing: border-box;
+  background: var(--bg, #f5f6f8);
+  overflow: hidden; /* kiosk — no scroll */
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-header {
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.addon-header-eyebrow {
+  font-size: 1.35vh;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #F0C231;
+  margin-bottom: 0.6vh;
+}
+
+.addon-header-title {
+  font-size: 3.6vh;
+  font-weight: 800;
+  color: var(--text, #1c1e21);
+  margin: 0 0 0.5vh;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.addon-header-sub {
+  font-size: 1.65vh;
+  font-weight: 500;
+  color: var(--text-dim, #666b73);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARDS ROW
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-cards-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 1.8vw;
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0; /* allow flex children to shrink */
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INDIVIDUAL CARD
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.2vh;
+  background: #ffffff;
+  border: 2.5px solid #e4e6ea;
+  border-radius: 22px;
+  padding: 2vh 2vw 1.6vh;
+  cursor: pointer;
+  position: relative;
+  transition:
+    border-color 0.18s ease,
+    box-shadow   0.18s ease,
+    transform    0.12s ease;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* Hide the native radio visually — the card IS the control */
+  user-select: none;
+}
+
+.addon-card:hover {
+  border-color: #d4c44a;
+  box-shadow: 0 6px 28px rgba(240, 194, 49, 0.18);
+  transform: translateY(-2px);
+}
+
+.addon-card:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* ── Selected state ───────────────────────────────────────────────────── */
+
+.addon-card--selected {
+  border-color: #F0C231;
+  box-shadow:
+    0 0 0 3px rgba(240, 194, 49, 0.22),
+    0 8px 32px rgba(240, 194, 49, 0.22);
+  background: #fffdf0;
+}
+
+.addon-card--selected .addon-card-check {
+  color: #F0C231;
+  background: #fff9d6;
+  border-color: #F0C231;
+}
+
+.addon-card--selected .addon-card-check svg circle {
+  fill: #F0C231;
+  stroke: #F0C231;
+}
+
+.addon-card--selected .addon-card-check svg path {
+  stroke: #1a1200;
+}
+
+/* ── Hidden radio input ───────────────────────────────────────────────── */
+
+.addon-card-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARD TOP ROW: badge + check circle
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+/* ── Badges ───────────────────────────────────────────────────────────── */
+
+.addon-card-badge {
+  font-size: 1.25vh;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 50px;
+  padding: 0.4vh 1.1vw;
+}
+
+.addon-card-badge--neutral {
+  background: #f0f1f3;
+  color: #5a5f6a;
+}
+
+.addon-card-badge--yellow {
+  background: #fff6cc;
+  color: #8a6a00;
+}
+
+.addon-card-badge--gold {
+  background: #F0C231;
+  color: #1a1200;
+}
+
+/* ── Check circle ─────────────────────────────────────────────────────── */
+
+.addon-card-check {
+  width: 3.2vh;
+  height: 3.2vh;
+  border-radius: 50%;
+  border: 2px solid #d0d3da;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;        /* icon hidden until selected */
+  background: #f5f6f8;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.addon-card-check svg {
+  width: 60%;
+  height: 60%;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARD TITLE + DESCRIPTION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-card-title {
+  font-size: 2.05vh;
+  font-weight: 800;
+  color: var(--text, #1c1e21);
+  margin: 0;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  flex-shrink: 0;
+}
+
+.addon-card-desc {
+  font-size: 1.45vh;
+  font-weight: 500;
+  color: var(--text-dim, #666b73);
+  margin: 0;
+  line-height: 1.45;
+  flex-shrink: 0;
+}
+
+.addon-card-desc em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--text, #1c1e21);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PREVIEW AREA
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-preview {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2vw;
+  background: #f8f9fb;
+  border-radius: 14px;
+  padding: 1.4vh 1.4vw;
+  overflow: hidden;
+  border: 1.5px solid #ebedf0;
+}
+
+/* ── Strip image (standard 2×6, portrait) ─────────────────────────────── */
+
+.addon-strip-img {
+  height: 100%;
+  max-height: 100%;
+  width: auto;
+  /* Maintain the 2×6 portrait aspect (approx 1:3) */
+  aspect-ratio: 1 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+  flex-shrink: 0;
+}
+
+/* ── Mini keychain image (narrower, 2:3-ish) ──────────────────────────── */
+
+.addon-mini-img {
+  height: 55%;
+  max-height: 55%;
+  width: auto;
+  aspect-ratio: 1 / 2;
+  object-fit: cover;
+  border-radius: 6px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.13);
+  flex-shrink: 0;
+}
+
+/* ── Column wrappers injected by JS ───────────────────────────────────── */
+
+.addon-preview-strip-col {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8vw;
+  height: 100%;
+}
+
+.addon-preview-mini-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8vh;
+  height: 100%;
+}
+
+/* ── Separator between strip col and mini col ─────────────────────────── */
+
+.addon-preview-strip-col + .addon-preview-mini-col::before {
+  content: "";
+  display: block;
+  width: 1.5px;
+  height: 60%;
+  background: #d9dce1;
+  border-radius: 2px;
+  /* Sit between the two cols — achieved via margin on the mini col */
+  margin-right: 0.4vw;
+  align-self: center;
+}
+
+/* Card C: strip col has 2 strips, still one mini col */
+.addon-preview--add .addon-preview-strip-col .addon-strip-img {
+  height: 96%;
+}
+
+/* ── Loading placeholder (shown before JS populates the preview) ──────── */
+
+.addon-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8vh;
+  color: #adb1ba;
+  text-align: center;
+}
+
+.addon-preview-placeholder-icon {
+  font-size: 3.2vh;
+  line-height: 1;
+}
+
+.addon-preview-placeholder-text {
+  font-size: 1.3vh;
+  font-weight: 500;
+}
+
+/* Hide placeholder once JS has injected real content */
+.addon-preview:not(:empty) .addon-preview-placeholder:not(:only-child) {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARD FOOTER: qty + price
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-top: 0.8vh;
+  border-top: 1.5px solid #ebedf0;
+  gap: 0.6vw;
+}
+
+.addon-card-qty {
+  font-size: 1.4vh;
+  font-weight: 500;
+  color: var(--text-dim, #666b73);
+  line-height: 1.3;
+}
+
+.addon-card-qty strong {
+  font-weight: 800;
+  color: var(--text, #1c1e21);
+}
+
+.addon-card-price {
+  font-size: 1.5vh;
+  font-weight: 800;
+  border-radius: 50px;
+  padding: 0.35vh 0.9vw;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.addon-card-price--included {
+  background: #eef7ee;
+  color: #2e7d32;
+}
+
+.addon-card-price--add {
+  background: #fff3cd;
+  color: #7d5a00;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOOTER / ACTION BAR
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-footer {
+  flex-shrink: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 0.5vh;
+}
+
+.addon-btn-next {
+  display: flex;
+  align-items: center;
+  gap: 1.2vw;
+  background: #F0C231;
+  border: 2px solid #d4a800;
+  border-radius: 16px;
+  color: #1a1200;
+  font-size: 1.85vh;
+  font-weight: 800;
+  padding: 1.6vh 3.2vw;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(240, 194, 49, 0.38);
+  transition:
+    background  0.15s ease,
+    box-shadow  0.15s ease,
+    transform   0.1s  ease;
+  letter-spacing: -0.01em;
+}
+
+.addon-btn-next:hover:not(:disabled) {
+  background: #d4aa20;
+  box-shadow: 0 6px 24px rgba(240, 194, 49, 0.52);
+  transform: translateY(-1px);
+}
+
+.addon-btn-next:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.addon-btn-next:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.addon-btn-next-arrow {
+  font-size: 2.4vh;
+  line-height: 1;
+  font-weight: 400;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARD ACCENT LINES (left border highlight when selected)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.addon-card::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 0;
+  width: 4px;
+  height: calc(100% - 28px);
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+  transition: background 0.18s ease;
+}
+
+.addon-card--selected::before {
+  background: #F0C231;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARD-SPECIFIC SELECTED TINTS
+   (subtle background accent for each option variant)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Card B selected → warm amber tint */
+.addon-card--replace.addon-card--selected {
+  background: #fffbee;
+}
+
+/* Card C selected → slightly richer gold tint */
+.addon-card--add.addon-card--selected {
+  background: #fffce5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STRIP SIZE TUNING PER CARD LAYOUT
+   (keeps previews proportional regardless of how many items are shown)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Card A: 2 strips side by side → each strip takes 45% of the preview height */
+.addon-preview--twostrip .addon-strip-img {
+  height: 94%;
+}
+
+/* Card B: 1 strip + 2 mini → strip is taller, minis share the right space */
+.addon-preview--replace .addon-preview-strip-col .addon-strip-img {
+  height: 96%;
+}
+
+.addon-preview--replace .addon-mini-img {
+  height: 45%;
+}
+
+/* Card C: 2 strips + 2 minis → all items slightly smaller to fit 4 items */
+.addon-preview--add .addon-mini-img {
+  height: 43%;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KIOSK TIMER INTEGRATION
+   (kioskTimer injects a countdown bar; place it below the header)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#page-addon .kiosk-timer-bar {
+  order: -1; /* push above the cards row if it appears inside .addon-page */
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ENTRY ANIMATION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes addon-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(2.5vh) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.addon-card {
+  animation: addon-card-in 0.35s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+
+.addon-card:nth-child(1) { animation-delay: 0.00s; }
+.addon-card:nth-child(2) { animation-delay: 0.06s; }
+.addon-card:nth-child(3) { animation-delay: 0.12s; }
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .addon-card {
+    animation: none;
+  }
+}

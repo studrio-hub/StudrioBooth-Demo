@@ -487,9 +487,20 @@ const adminTemplates = {
     // Resolve public storage URLs for display in the admin panel
     return (data || []).map((t) => ({
       ...t,
-      thumbnail_url:    t.thumbnail_path    ? this._publicUrl(t.thumbnail_path)    : null,
-      overlay_url_2x6:  t.overlay_path_2x6  ? this._publicUrl(t.overlay_path_2x6)  : null,
-      overlay_url_4x6:  t.overlay_path_4x6  ? this._publicUrl(t.overlay_path_4x6)  : null
+      thumbnail_url:             t.thumbnail_path          ? this._publicUrl(t.thumbnail_path)          : null,
+      overlay_url_2x6:           t.overlay_path_2x6        ? this._publicUrl(t.overlay_path_2x6)        : null,
+      overlay_url_4x6:           t.overlay_path_4x6        ? this._publicUrl(t.overlay_path_4x6)        : null,
+      keychain_overlay_url:      t.keychain_overlay_path   ? this._publicUrl(t.keychain_overlay_path)   : null,
+      overlay_url_long_duo:               t.overlay_path_long_duo              ? this._publicUrl(t.overlay_path_long_duo)              : null,
+      overlay_url_long_mini:              t.overlay_path_long_mini             ? this._publicUrl(t.overlay_path_long_mini)             : null,
+      overlay_url_film_duo:               t.overlay_path_film_duo              ? this._publicUrl(t.overlay_path_film_duo)              : null,
+      overlay_url_wide_mini:              t.overlay_path_wide_mini             ? this._publicUrl(t.overlay_path_wide_mini)             : null,
+      // Strip preview overlays — used only on the selection/printing preview canvas,
+      // never for the final print output. Each is sized to the preview region.
+      preview_overlay_url_long_duo:       t.preview_overlay_path_long_duo      ? this._publicUrl(t.preview_overlay_path_long_duo)      : null,
+      preview_overlay_url_long_mini:      t.preview_overlay_path_long_mini     ? this._publicUrl(t.preview_overlay_path_long_mini)     : null,
+      preview_overlay_url_film_duo:       t.preview_overlay_path_film_duo      ? this._publicUrl(t.preview_overlay_path_film_duo)      : null,
+      preview_overlay_url_wide_mini:      t.preview_overlay_path_wide_mini     ? this._publicUrl(t.preview_overlay_path_wide_mini)     : null
     }));
   },
 
@@ -502,18 +513,40 @@ const adminTemplates = {
   /*
    * Uploads a new template.
    * Parameters:
-   *   name        — display name (string)
-   *   assetType   — "frame_template" | "sticker" | "background" | "gif_video" | "logo"
-   *   file2x6     — File object for the 2×6 overlay PNG (or null)
-   *   file4x6     — File object for the 4×6 overlay PNG (or null)
-   *   thumbFile   — File object for the thumbnail image (or null)
+   *   name          — display name (string)
+   *   assetType     — "Originals" | "Designs" | "Accessories"
+   *   file2x6                — File object for the 2×6 overlay PNG (or null)
+   *   file4x6                — File object for the 4×6 overlay PNG (or null)
+   *   fileLongDuo            — File object for the Long Duo overlay PNG (or null)
+   *   fileLongMini           — File object for the Long Mini overlay PNG (or null)
+   *   fileFilmDuo            — File object for the Film Duo overlay PNG (or null)
+   *   fileWideMini           — File object for the Wide Mini overlay PNG (or null)
+   *   thumbFile              — File object for the thumbnail image (or null)
+   *   previewFileLongDuo     — File object for the Long Duo STRIP PREVIEW overlay (or null)
+   *   previewFileLongMini    — File object for the Long Mini STRIP PREVIEW overlay (or null)
+   *   previewFileFilmDuo     — File object for the Film Duo STRIP PREVIEW overlay (or null)
+   *   previewFileWideMini    — File object for the Wide Mini STRIP PREVIEW overlay (or null)
+   *
+   * Strip preview overlays are used ONLY on the selection/printing preview canvas
+   * (not for final print). They are sized to the preview region:
+   *   long-duo / long-mini / film-duo → 1200 × 3600 px
+   *   wide-mini                       → 2400 × 1800 px
    *
    * Storage layout in the photobooth bucket:
    *   templates/<slug>/overlay_2x6.png
    *   templates/<slug>/overlay_4x6.png
+   *   templates/<slug>/overlay_long_duo.png
+   *   templates/<slug>/overlay_long_mini.png
+   *   templates/<slug>/overlay_film_duo.png
+   *   templates/<slug>/overlay_wide_mini.png
+   *   templates/<slug>/preview_overlay_long_duo.png
+   *   templates/<slug>/preview_overlay_long_mini.png
+   *   templates/<slug>/preview_overlay_film_duo.png
+   *   templates/<slug>/preview_overlay_wide_mini.png
    *   templates/<slug>/thumbnail.png
    */
-  async uploadTemplate({ name, assetType, file2x6, file4x6, thumbFile }) {
+  async uploadTemplate({ name, assetType, file2x6, file4x6, fileLongDuo, fileLongMini, fileFilmDuo, fileWideMini, thumbFile,
+                         previewFileLongDuo, previewFileLongMini, previewFileFilmDuo, previewFileWideMini }) {
     const client = getSupabaseClient();
 
     // Derive a URL-safe slug from the name for the storage prefix
@@ -525,10 +558,30 @@ const adminTemplates = {
     // Append a short timestamp to avoid collisions on same-name uploads
     const prefix = `templates/${slug}-${Date.now()}`;
 
-    const [overlayPath2x6, overlayPath4x6, thumbnailPath] = await Promise.all([
-      file2x6    ? this._uploadFile(file2x6,    `${prefix}/overlay_2x6.png`, "image/png") : Promise.resolve(null),
-      file4x6    ? this._uploadFile(file4x6,    `${prefix}/overlay_4x6.png`, "image/png") : Promise.resolve(null),
-      thumbFile  ? this._uploadFile(thumbFile,  `${prefix}/thumbnail.png`,   thumbFile.type || "image/png") : Promise.resolve(null)
+    const [
+      overlayPath2x6,
+      overlayPath4x6,
+      overlayPathLongDuo,
+      overlayPathLongMini,
+      overlayPathFilmDuo,
+      overlayPathWideMini,
+      thumbnailPath,
+      previewOverlayPathLongDuo,
+      previewOverlayPathLongMini,
+      previewOverlayPathFilmDuo,
+      previewOverlayPathWideMini
+    ] = await Promise.all([
+      file2x6             ? this._uploadFile(file2x6,             `${prefix}/overlay_2x6.png`,              "image/png") : Promise.resolve(null),
+      file4x6             ? this._uploadFile(file4x6,             `${prefix}/overlay_4x6.png`,              "image/png") : Promise.resolve(null),
+      fileLongDuo         ? this._uploadFile(fileLongDuo,         `${prefix}/overlay_long_duo.png`,         "image/png") : Promise.resolve(null),
+      fileLongMini        ? this._uploadFile(fileLongMini,        `${prefix}/overlay_long_mini.png`,        "image/png") : Promise.resolve(null),
+      fileFilmDuo         ? this._uploadFile(fileFilmDuo,         `${prefix}/overlay_film_duo.png`,         "image/png") : Promise.resolve(null),
+      fileWideMini        ? this._uploadFile(fileWideMini,        `${prefix}/overlay_wide_mini.png`,        "image/png") : Promise.resolve(null),
+      thumbFile           ? this._uploadFile(thumbFile,           `${prefix}/thumbnail.png`,                 thumbFile.type || "image/png") : Promise.resolve(null),
+      previewFileLongDuo  ? this._uploadFile(previewFileLongDuo,  `${prefix}/preview_overlay_long_duo.png`, "image/png") : Promise.resolve(null),
+      previewFileLongMini ? this._uploadFile(previewFileLongMini, `${prefix}/preview_overlay_long_mini.png`,"image/png") : Promise.resolve(null),
+      previewFileFilmDuo  ? this._uploadFile(previewFileFilmDuo,  `${prefix}/preview_overlay_film_duo.png`, "image/png") : Promise.resolve(null),
+      previewFileWideMini ? this._uploadFile(previewFileWideMini, `${prefix}/preview_overlay_wide_mini.png`,"image/png") : Promise.resolve(null)
     ]);
 
     // Get the current max sort_order and place the new template at the end
@@ -542,13 +595,21 @@ const adminTemplates = {
 
     const { data, error } = await client.from("templates").insert({
       name,
-      asset_type:       assetType || "frame_template",
-      overlay_path_2x6: overlayPath2x6,
-      overlay_path_4x6: overlayPath4x6,
-      thumbnail_path:   thumbnailPath,
-      enabled:          true,
-      sort_order:       nextOrder,
-      version:          1
+      asset_type:                        assetType || "frame_template",
+      overlay_path_2x6:                  overlayPath2x6,
+      overlay_path_4x6:                  overlayPath4x6,
+      overlay_path_long_duo:             overlayPathLongDuo,
+      overlay_path_long_mini:            overlayPathLongMini,
+      overlay_path_film_duo:             overlayPathFilmDuo,
+      overlay_path_wide_mini:            overlayPathWideMini,
+      preview_overlay_path_long_duo:     previewOverlayPathLongDuo,
+      preview_overlay_path_long_mini:    previewOverlayPathLongMini,
+      preview_overlay_path_film_duo:     previewOverlayPathFilmDuo,
+      preview_overlay_path_wide_mini:    previewOverlayPathWideMini,
+      thumbnail_path:                    thumbnailPath,
+      enabled:                           true,
+      sort_order:                        nextOrder,
+      version:                           1
     }).select().single();
 
     if (error) throw error;
@@ -573,8 +634,13 @@ const adminTemplates = {
   async updateTemplate(id, updates) {
     const client = getSupabaseClient();
 
-    // If any overlay/thumbnail path changed, bump the version
-    const bumpVersion = updates.overlay_path_2x6 || updates.overlay_path_4x6 || updates.thumbnail_path;
+    // If any overlay/thumbnail path changed, bump the version so kiosks re-download
+    const bumpVersion = updates.overlay_path_2x6              || updates.overlay_path_4x6              ||
+                        updates.overlay_path_long_duo         || updates.overlay_path_long_mini         ||
+                        updates.overlay_path_film_duo         || updates.overlay_path_wide_mini         ||
+                        updates.preview_overlay_path_long_duo || updates.preview_overlay_path_long_mini ||
+                        updates.preview_overlay_path_film_duo || updates.preview_overlay_path_wide_mini ||
+                        updates.thumbnail_path;
     if (bumpVersion) {
       // Fetch current version first
       const { data: current } = await client
@@ -589,6 +655,69 @@ const adminTemplates = {
       .from("templates")
       .update(updates)
       .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /*
+   * Uploads a keychain overlay PNG and links it to the specified 2×6 template.
+   * Parameters:
+   *   templateId    — the id of the 2×6 template to link
+   *   keychainFile  — File object (PNG) for the keychain overlay
+   *
+   * The keychain overlay is stored at:
+   *   templates/<existing-prefix>/keychain_overlay.png
+   *
+   * Passing keychainFile = null clears the link (sets keychain_overlay_path to null).
+   */
+  async uploadKeychainOverlay(templateId, keychainFile) {
+    const client = getSupabaseClient();
+
+    // Fetch the template to derive the storage prefix from its existing overlay path
+    const { data: current, error: fetchErr } = await client
+      .from("templates")
+      .select("overlay_path_2x6, overlay_path_4x6, thumbnail_path, version")
+      .eq("id", templateId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    // Clear link if no file provided
+    if (!keychainFile) {
+      const { data, error } = await client
+        .from("templates")
+        .update({ keychain_overlay_path: null })
+        .eq("id", templateId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }
+
+    // Derive storage prefix from existing paths
+    let storagePrefix = null;
+    if (current.overlay_path_2x6) {
+      storagePrefix = current.overlay_path_2x6.replace(/\/overlay_2x6\.[^/]+$/, "");
+    } else if (current.overlay_path_4x6) {
+      storagePrefix = current.overlay_path_4x6.replace(/\/overlay_4x6\.[^/]+$/, "");
+    } else if (current.thumbnail_path) {
+      storagePrefix = current.thumbnail_path.replace(/\/thumbnail\.[^/]+$/, "");
+    }
+    if (!storagePrefix) {
+      throw new Error("Cannot derive storage prefix — template has no existing overlay or thumbnail.");
+    }
+
+    const keychainPath = `${storagePrefix}/keychain_overlay.png`;
+    await this._uploadFile(keychainFile, keychainPath, "image/png");
+
+    // Bump version so kiosk re-downloads updated assets
+    const newVersion = ((current.version) || 1) + 1;
+
+    const { data, error } = await client
+      .from("templates")
+      .update({ keychain_overlay_path: keychainPath, version: newVersion })
+      .eq("id", templateId)
       .select()
       .single();
     if (error) throw error;
@@ -630,6 +759,14 @@ const adminTemplates = {
     const pathsToRemove = [
       template.overlay_path_2x6,
       template.overlay_path_4x6,
+      template.overlay_path_long_duo,
+      template.overlay_path_long_mini,
+      template.overlay_path_film_duo,
+      template.overlay_path_wide_mini,
+      template.preview_overlay_path_long_duo,
+      template.preview_overlay_path_long_mini,
+      template.preview_overlay_path_film_duo,
+      template.preview_overlay_path_wide_mini,
       template.thumbnail_path
     ].filter(Boolean);
 

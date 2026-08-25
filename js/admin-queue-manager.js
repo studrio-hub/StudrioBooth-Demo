@@ -610,226 +610,58 @@ const queueManager = (() => {
     if (btnClose) btnClose.addEventListener("click", _hideQrModal);
 
     // QR Modal: print (58mm thermal layout)
+    // ─────────────────────────────────────────────────────────────────────────
+    // ROOT CAUSE OF "random text" / garbage output:
+    //   window.open() + window.print() sends a Chromium-rendered PDF/raster to
+    //   the Windows print spooler. The POS-58 11.2.0.0 driver installs as a
+    //   generic text-only driver by default. When it receives a binary PDF
+    //   stream it interprets the raw bytes as ASCII text and prints them
+    //   literally — the "random text" you see.
+    //
+    // FIX — QZ Tray (primary path):
+    //   QZ Tray is a free Java service that runs locally on the PC connected
+    //   to the POS-58. The browser sends ESC/POS commands over WebSocket;
+    //   QZ Tray forwards them raw to the driver, bypassing the PDF pipeline
+    //   entirely. This is the industry-standard browser→thermal-printer solution.
+    //   Download: https://qz.io/download/
+    //
+    // FALLBACK — canvas PNG via window.print():
+    //   If QZ Tray is not running, we render the ticket to a <canvas>, export
+    //   it as a PNG, and print that PNG in a popup window. A raster image
+    //   avoids the "generic text" driver misinterpreting HTML/PDF, though the
+    //   operator may still need to set the POS-58 driver to "POS Printer" (not
+    //   "Generic Text Only") in Windows for images to print correctly.
+    // ─────────────────────────────────────────────────────────────────────────
     const btnPrint = document.getElementById("btnPrintQr");
     if (btnPrint) {
-      btnPrint.addEventListener("click", () => {
-        const canvas = document.querySelector("#qrModalCanvas canvas");
-        const num    = document.getElementById("qrModalNumber")?.textContent || "";
-        const line   = document.getElementById("qrModalLine")?.textContent || "";
-        const id     = document.getElementById("qrModalId")?.textContent || "";
-        const meta   = document.getElementById("qrModalMeta")?.textContent || "";
+      btnPrint.addEventListener("click", async () => {
+        const qrCanvas = document.querySelector("#qrModalCanvas canvas");
+        const num    = document.getElementById("qrModalNumber")?.textContent?.trim() || "";
+        const line   = document.getElementById("qrModalLine")?.textContent?.trim() || "";
+        const id     = document.getElementById("qrModalId")?.textContent?.trim() || "";
+        const meta   = document.getElementById("qrModalMeta")?.textContent?.trim() || "";
 
-        // Parse meta parts: "X copies · ₱NNN.NN" etc.
         const metaParts  = meta.split(" · ");
         const copiesText = metaParts.find(p => p.includes("cop")) || "";
         const priceText  = metaParts.find(p => p.startsWith("₱")) || "";
         const addonParts = metaParts.filter(p => !p.includes("cop") && !p.startsWith("₱"));
 
-        const imgSrc = canvas ? canvas.toDataURL("image/png") : "";
-        const now    = new Date();
+        const now     = new Date();
         const dateStr = now.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
         const timeStr = now.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
 
-        // 58mm thermal: usable width ≈ 48mm; at 203dpi ≈ 383px but browser units vary.
-        // We use @page size + mm units; iOS AirPrint handles the rest.
-        const win = window.open("", "_blank", "width=320,height=600");
-        win.document.write(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Queue Ticket ${num}</title>
-  <style>
-    /* ── Thermal 58mm page setup ── */
-    @page {
-      size: 58mm auto;
-      margin: 0;
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        // ── Try QZ Tray first ─────────────────────────────────────────────────
+        if (typeof qz !== "undefined" && qz.websocket) {
+          try {
+            await _printViaQzTray({ num, line, id, meta, copiesText, priceText, addonParts, dateStr, timeStr, qrCanvas });
+            return; // success — done
+          } catch (qzErr) {
+            console.warn("[queueManager] QZ Tray print failed, falling back to canvas PNG:", qzErr);
+          }
+        }
 
-    body {
-      font-family: "Courier New", Courier, monospace;
-      font-size: 10pt;
-      color: #000;
-      background: #fff;
-      width: 58mm;
-      padding: 3mm 3mm 6mm;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-
-    /* Header */
-    .t-header {
-      text-align: center;
-      border-bottom: 1px dashed #000;
-      padding-bottom: 3mm;
-      margin-bottom: 3mm;
-    }
-    .t-brand {
-      font-size: 9pt;
-      font-weight: bold;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    .t-subtitle {
-      font-size: 7.5pt;
-      color: #333;
-    }
-
-    /* Line badge */
-    .t-line-badge {
-      display: block;
-      text-align: center;
-      font-size: 8pt;
-      font-weight: bold;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      border: 1.5px solid #000;
-      border-radius: 3mm;
-      padding: 1mm 2mm;
-      margin: 2mm auto;
-      width: fit-content;
-    }
-
-    /* Big queue number */
-    .t-number {
-      text-align: center;
-      font-size: 32pt;
-      font-weight: 900;
-      line-height: 1;
-      letter-spacing: -1px;
-      margin: 2mm 0;
-    }
-
-    /* QR code — centred, max 36mm so it prints cleanly */
-    .t-qr {
-      text-align: center;
-      margin: 3mm 0;
-    }
-    .t-qr img {
-      width: 36mm;
-      height: 36mm;
-      image-rendering: pixelated;
-    }
-
-    /* Detail rows */
-    .t-divider {
-      border: none;
-      border-top: 1px dashed #000;
-      margin: 2.5mm 0;
-    }
-
-    .t-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 2mm;
-      font-size: 8pt;
-      padding: 0.5mm 0;
-    }
-    .t-row-label { color: #444; white-space: nowrap; }
-    .t-row-value { font-weight: bold; text-align: right; word-break: break-all; }
-
-    .t-price-row {
-      font-size: 10pt;
-      font-weight: bold;
-      border-top: 1.5px solid #000;
-      padding-top: 2mm;
-      margin-top: 1mm;
-    }
-
-    /* Ticket ID (monospace, small) */
-    .t-id {
-      font-size: 6.5pt;
-      color: #555;
-      text-align: center;
-      word-break: break-all;
-      margin-top: 2mm;
-    }
-
-    /* Footer */
-    .t-footer {
-      text-align: center;
-      font-size: 7pt;
-      color: #555;
-      margin-top: 3mm;
-      padding-top: 2mm;
-      border-top: 1px dashed #000;
-    }
-
-    @media print {
-      body { width: 58mm; }
-    }
-  </style>
-</head>
-<body>
-
-  <!-- Header -->
-  <div class="t-header">
-    <div class="t-brand">Studrio Booth</div>
-    <div class="t-subtitle">Queue Ticket</div>
-  </div>
-
-  <!-- Line badge -->
-  <span class="t-line-badge">${line}</span>
-
-  <!-- Queue number -->
-  <div class="t-number">${num}</div>
-
-  <!-- QR code -->
-  <div class="t-qr">
-    ${imgSrc ? `<img src="${imgSrc}" alt="Ticket QR">` : `<div style="font-size:7pt;color:#999">QR unavailable</div>`}
-  </div>
-
-  <hr class="t-divider">
-
-  <!-- Details -->
-  ${copiesText ? `
-  <div class="t-row">
-    <span class="t-row-label">Copies</span>
-    <span class="t-row-value">${copiesText}</span>
-  </div>` : ""}
-
-  ${addonParts.length ? `
-  <div class="t-row">
-    <span class="t-row-label">Add-ons</span>
-    <span class="t-row-value">${addonParts.join(", ")}</span>
-  </div>` : ""}
-
-  ${priceText ? `
-  <div class="t-row t-price-row">
-    <span class="t-row-label">Total</span>
-    <span class="t-row-value">${priceText}</span>
-  </div>` : ""}
-
-  <hr class="t-divider">
-
-  <div class="t-row">
-    <span class="t-row-label">Date</span>
-    <span class="t-row-value">${dateStr}</span>
-  </div>
-  <div class="t-row">
-    <span class="t-row-label">Time</span>
-    <span class="t-row-value">${timeStr}</span>
-  </div>
-
-  <!-- Ticket ID -->
-  <p class="t-id">${id}</p>
-
-  <!-- Footer -->
-  <div class="t-footer">Thank you! Please wait for your number to be called.</div>
-
-  <script>
-    window.onload = function () {
-      // Small delay lets the QR image fully render before printing
-      setTimeout(function () { window.print(); }, 400);
-    };
-  <\/script>
-</body>
-</html>
-        `);
-        win.document.close();
+        // ── Fallback: canvas PNG in popup ─────────────────────────────────────
+        _printViaCanvasPng({ num, line, id, copiesText, priceText, addonParts, dateStr, timeStr, qrCanvas });
       });
     }
 
@@ -840,6 +672,383 @@ const queueManager = (() => {
         if (e.target === modal) _hideQrModal();
       });
     }
+  }
+
+  // ── Ticket print helpers ────────────────────────────────────────────────────
+
+  /*
+   * _printViaQzTray({ num, line, id, copiesText, priceText, addonParts,
+   *                   dateStr, timeStr, qrCanvas })
+   *
+   * Sends the ticket as ESC/POS commands to the POS-58 via QZ Tray WebSocket.
+   * QZ Tray must be running on the PC that has the POS-58 connected.
+   *
+   * Setup (one-time):
+   *   1. Download and install QZ Tray from https://qz.io/download/
+   *   2. Start QZ Tray (it runs in the system tray).
+   *   3. On first use, QZ Tray will prompt to trust this site — click Allow.
+   *   4. The printer name in qz.printers.find() below must match the exact
+   *      Windows printer name for the POS-58. Adjust the string if needed.
+   *
+   * Why ESC/POS and not window.print():
+   *   The POS-58 driver installs as a generic text/passthrough driver on
+   *   Windows. window.print() sends a Chromium-rendered PDF/raster; that
+   *   driver interprets the binary PDF bytes as literal ASCII text and
+   *   prints them as "random characters". ESC/POS bypasses the PDF pipeline
+   *   and speaks the printer's native command language directly.
+   */
+  async function _printViaQzTray({ num, line, id, copiesText, priceText, addonParts, dateStr, timeStr, qrCanvas }) {
+    // ── Connect ────────────────────────────────────────────────────────────
+    if (!qz.websocket.isActive()) {
+      await qz.websocket.connect();
+    }
+
+    // ── Find the POS-58 ───────────────────────────────────────────────────
+    // qz.printers.find() returns an array of printer names matching the query.
+    // "POS-58" is the typical Windows driver name — adjust if yours differs.
+    let printerName = null;
+    const candidates = ["POS-58", "POS58", "Thermal", "Receipt"];
+    for (const cand of candidates) {
+      const found = await qz.printers.find(cand);
+      if (found && found.length) {
+        printerName = Array.isArray(found) ? found[0] : found;
+        break;
+      }
+    }
+    if (!printerName) {
+      // Last resort: list all printers and pick the first one
+      const all = await qz.printers.find();
+      printerName = Array.isArray(all) ? all[0] : all;
+    }
+    if (!printerName) throw new Error("No printer found via QZ Tray");
+
+    const config = qz.configs.create(printerName, {
+      language: "ESCP",     // ESC/POS passthrough
+      encoding: "Cp437",    // standard IBM PC / thermal codepage
+    });
+
+    // ── Build ESC/POS command sequence ────────────────────────────────────
+    // ESC/POS reference: https://reference.epson-biz.com/modules/ref_escpos/
+    const ESC = "\x1B";
+    const GS  = "\x1D";
+    const LF  = "\x0A";
+
+    const cmds = [];
+
+    // Initialize printer — full reset clears any stale size/align state
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}@` });
+
+    // ── POS-58 geometry ───────────────────────────────────────────────────────
+    // 58mm paper at 203dpi = 464 printable dots.
+    // Normal font (Font A) = 12 dots wide per char → 38 chars/line max.
+    // Double-width font    = 24 dots/char           → 19 chars/line max.
+    // Triple-width (GS!x2) = 36 dots/char           → 12 chars/line max.
+    // Divider at normal size: 32 chars fits comfortably with small side margins.
+    const DIV = "--------------------------------"; // 32 chars — fits 58mm
+
+    // Center align
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}a\x01` });
+
+    // Brand header — double-width + double-height (GS!\x11)
+    // \x11 = 0b00010001 → width bits[0-2]=1 (×2), height bits[4-6]=1 (×2)
+    // "STUDRIO BOOTH" = 13 chars × 2 = 26 — fits 58mm (max 19 double-width chars)
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}E\x01${GS}!\x11` });
+    cmds.push({ type: "raw", format: "plain", data: "STUDRIO BOOTH" + LF });
+
+    // Reset size, then sub-header — bold ON
+    cmds.push({ type: "raw", format: "plain", data: `${GS}!\x00${ESC}E\x01` });
+    cmds.push({ type: "raw", format: "plain", data: "Queue Ticket" + LF });
+    // Divider — bold stays on
+    cmds.push({ type: "raw", format: "plain", data: DIV + LF });
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}E\x00` }); // reset bold
+
+    // Queue line — bold + double-width + double-height (GS!\x11 = ×2 width, ×2 height)
+    cmds.push({ type: "raw", format: "plain", data: `${GS}!\x11${ESC}E\x01` });
+    cmds.push({ type: "raw", format: "plain", data: line.toUpperCase() + LF });
+    cmds.push({ type: "raw", format: "plain", data: `${GS}!\x00${ESC}E\x00` });
+
+    // Big queue number — double-width + triple-height (GS!\x21)
+    // \x21 = 0b00100001 → width ×2, height ×3 — tall and readable, won't overflow.
+    // At ×2 width: "123" = 6 char-widths = 6×24 = 144px — centred on 464px, fine.
+    cmds.push({ type: "raw", format: "plain", data: `${GS}!\x21${ESC}E\x01` });
+    cmds.push({ type: "raw", format: "plain", data: num + LF });
+    // Explicitly reset size AND bold before continuing
+    cmds.push({ type: "raw", format: "plain", data: `${GS}!\x00${ESC}E\x00` });
+
+    // QR code — native ESC/POS QR (Model 2, error level M)
+    // Module size 4 = 4 × (1 dot at 203dpi ≈ 0.125mm) = 0.5mm/module.
+    // UUID is 36 chars → ~Version 3 QR (29×29 modules) → 29 × 0.5mm = ~14.5mm.
+    // That leaves generous margins on 58mm paper. Use size 5 for ~18mm — easier
+    // to scan while still fitting comfortably within the printable width.
+    const qrData   = id; // raw ticket UUID — what the kiosk scans
+    const qrLen    = qrData.length + 3;
+    const qrLenL   = qrLen & 0xFF;
+    const qrLenH   = (qrLen >> 8) & 0xFF;
+
+    cmds.push({ type: "raw", format: "plain", data:
+      `${GS}(k\x04\x00\x31\x41\x32\x00` +   // Select Model 2
+      `${GS}(k\x03\x00\x31\x45\x35` +        // Error level M (0x35)
+      `${GS}(k\x03\x00\x31\x43\x05` +        // Module size 5 (≈18mm — fits 58mm)
+      `${GS}(k` + String.fromCharCode(qrLenL, qrLenH) + `\x31\x50\x30` + qrData +
+      `${GS}(k\x03\x00\x31\x51\x30`          // Print QR
+    });
+    cmds.push({ type: "raw", format: "plain", data: LF });
+
+    // Divider — reset to normal size first (safety reset after QR block), bold ON
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}a\x01${GS}!\x00${ESC}E\x01` });
+    cmds.push({ type: "raw", format: "plain", data: DIV + LF });
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}E\x00` }); // reset bold
+
+    // Details — left-align, double-width + double-height (GS!\x11), bold ON for all rows.
+    // ×2 width keeps lines readable; 58mm at ×2 = 19 chars max — short labels fit fine.
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}a\x00${GS}!\x11${ESC}E\x01` });
+    if (copiesText) {
+      cmds.push({ type: "raw", format: "plain", data: `Copies: ${copiesText}` + LF });
+    }
+    if (addonParts.length) {
+      cmds.push({ type: "raw", format: "plain", data: `Add-ons: ${addonParts.join(", ")}` + LF });
+    }
+    if (priceText) {
+      // Price is already bold — just print it
+      cmds.push({ type: "raw", format: "plain", data: `Total: ${priceText}` + LF });
+    }
+    cmds.push({ type: "raw", format: "plain", data: `Date: ${dateStr}` + LF });
+    cmds.push({ type: "raw", format: "plain", data: `Time: ${timeStr}` + LF });
+    cmds.push({ type: "raw", format: "plain", data: `${GS}!\x00${ESC}E\x00` }); // reset size + bold
+
+    // Divider — bold ON
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}a\x01${ESC}E\x01` });
+    cmds.push({ type: "raw", format: "plain", data: DIV + LF });
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}E\x00` }); // reset bold
+
+    // Ticket ID — normal size, bold ON for legibility
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}E\x01` });
+    cmds.push({ type: "raw", format: "plain", data: id + LF });
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}E\x00` }); // reset bold
+
+    // Footer — bold ON
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}E\x01` });
+    cmds.push({ type: "raw", format: "plain", data: "Thank you! Please wait" + LF });
+    cmds.push({ type: "raw", format: "plain", data: "for your number to be called." + LF });
+    cmds.push({ type: "raw", format: "plain", data: `${ESC}E\x00` });
+
+    // Feed and cut
+    cmds.push({ type: "raw", format: "plain", data: LF + LF + LF });
+    cmds.push({ type: "raw", format: "plain", data: `${GS}V\x41\x03` }); // partial cut
+
+    // ── Send ──────────────────────────────────────────────────────────────
+    await qz.print(config, cmds);
+    console.log("[queueManager] Ticket sent to POS-58 via QZ Tray ✓");
+  }
+
+  /*
+   * _printViaCanvasPng({ num, line, id, copiesText, priceText, addonParts,
+   *                      dateStr, timeStr, qrCanvas })
+   *
+   * Renders the ticket onto a <canvas> at 203dpi equivalent (576px wide for
+   * 58mm paper), exports it as a PNG, and opens a print popup with that image.
+   *
+   * This avoids the HTML→PDF→text-driver garbage issue because the popup
+   * contains only a single <img> — no HTML text for the driver to misread.
+   *
+   * The operator still needs to:
+   *   - Set the POS-58 driver type to "POS Printer" (not "Generic Text Only")
+   *     in Windows Device Manager / Add Printer wizard.
+   *   - Set paper size to 58mm × continuous in the driver's own preferences.
+   *
+   * QZ Tray is the preferred path — this is only the fallback.
+   */
+  function _printViaCanvasPng({ num, line, id, copiesText, priceText, addonParts, dateStr, timeStr, qrCanvas }) {
+    // ── Canvas geometry ────────────────────────────────────────────────────
+    // 58mm at 203dpi = 464 printable dots.
+    // We render at 2× pixel density (928px wide) so text is crisp when the
+    // browser scales the PNG down to fit the 58mm @page rule.
+    // All layout values are expressed in logical pixels (half of canvas px).
+    const SCALE = 2;
+    const LOGICAL_W = 464;           // logical width = 58mm worth of dots
+    const CW = LOGICAL_W * SCALE;    // actual canvas pixel width = 928
+    const PAD  = 10 * SCALE;         // side padding (logical 10px ≈ 1.3mm)
+    const MID  = CW / 2;
+    const INNER_W = CW - PAD * 2;    // drawable width inside padding
+
+    // ── Fonts — all sized relative to SCALE so they scale correctly ───────
+    // All sizes bumped +25% from previous values and all weights set to bold
+    // so every line is crisp and readable on the printed 58mm slip.
+    const fBrand  = `bold ${Math.round(18 * 1.25) * SCALE}px "Courier New", monospace`; // "STUDRIO BOOTH" — 18→23
+    const fSub    = `bold ${Math.round(17 * 1.25) * SCALE}px "Courier New", monospace`; // "Queue Ticket"  — 17→21
+    const fLine   = `bold ${Math.round(20 * 1.25) * SCALE}px "Courier New", monospace`; // queue line name — 20→25
+    const fBigNum = `900 ${Math.round(56 * 1.25) * SCALE}px "Courier New", monospace`;  // queue number   — 56→70
+    const fDetail = `bold ${Math.round(15 * 1.25) * SCALE}px "Courier New", monospace`; // details rows   — 15→19
+    const fDetailB= `bold ${Math.round(16 * 1.25) * SCALE}px "Courier New", monospace`; // bold details   — 16→20
+    const fId     = `bold ${Math.round(12 * 1.25) * SCALE}px "Courier New", monospace`; // ticket UUID    — 12→15
+
+    // ── Divider — measured to fit exactly within INNER_W ──────────────────
+    // drawDivider uses fDetail font + measureText so the dash count auto-adjusts
+    // to whatever font size fDetail is — no hardcoded repeat count.
+    function drawDivider(ctx, y) {
+      ctx.font = fDetail;
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#000";
+      const dash = "- ";
+      const dashW = ctx.measureText(dash).width;
+      const count = Math.floor(INNER_W / dashW);
+      ctx.fillText(dash.repeat(count), MID, y);
+      return y + 26 * SCALE; // line height matches fDetail at 19px logical
+    }
+
+    const QR_SIZE = 160 * SCALE; // 160 logical px → ~22mm at 203dpi — unchanged
+
+    // Estimate total height — row heights updated to match new +25% font sizes
+    let estimatedH = PAD;
+    estimatedH += 30 * SCALE;  // brand  (23px logical)
+    estimatedH += 28 * SCALE;  // sub    (21px logical)
+    estimatedH += 28 * SCALE;  // divider
+    estimatedH += 32 * SCALE;  // line name (25px logical)
+    estimatedH += 88 * SCALE;  // big number (70px logical)
+    estimatedH += 12 * SCALE;  // gap before QR
+    estimatedH += QR_SIZE;
+    estimatedH += 14 * SCALE;  // gap after QR
+    estimatedH += 28 * SCALE;  // divider
+    if (copiesText)        estimatedH += 26 * SCALE;
+    if (addonParts.length) estimatedH += 26 * SCALE;
+    if (priceText)         estimatedH += 28 * SCALE;
+    estimatedH += 26 * SCALE;  // date
+    estimatedH += 26 * SCALE;  // time
+    estimatedH += 28 * SCALE;  // divider
+    estimatedH += 22 * SCALE;  // ID     (15px logical)
+    estimatedH += 26 * SCALE;  // footer line 1
+    estimatedH += 26 * SCALE;  // footer line 2
+    estimatedH += PAD + 24 * SCALE; // bottom margin + cut feed
+
+    // ── Allocate canvas ────────────────────────────────────────────────────
+    const canvas = document.createElement("canvas");
+    canvas.width  = CW;
+    canvas.height = estimatedH;
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, CW, estimatedH);
+    ctx.fillStyle = "#000";
+
+    let y = PAD + 6 * SCALE;
+
+    // ── Brand header ───────────────────────────────────────────────────────
+    ctx.font      = fBrand;
+    ctx.textAlign = "center";
+    ctx.fillText("STUDRIO BOOTH", MID, y + 23 * SCALE); y += 30 * SCALE;
+
+    ctx.font = fSub;
+    ctx.fillText("Queue Ticket", MID, y + 21 * SCALE); y += 28 * SCALE;
+
+    y = drawDivider(ctx, y + 10 * SCALE);
+
+    // ── Queue line ─────────────────────────────────────────────────────────
+    ctx.font = fLine;
+    ctx.fillText(line.toUpperCase(), MID, y + 25 * SCALE); y += 32 * SCALE;
+
+    // ── Big queue number ───────────────────────────────────────────────────
+    // Scale down font if the number is wide (e.g. "999")
+    ctx.font = fBigNum;
+    const numW = ctx.measureText(num).width;
+    if (numW > INNER_W) {
+      const ratio = INNER_W / numW;
+      ctx.font = `900 ${Math.floor(70 * SCALE * ratio)}px "Courier New", monospace`;
+    }
+    ctx.fillText(num, MID, y + 70 * SCALE); y += 88 * SCALE;
+
+    // ── QR image ───────────────────────────────────────────────────────────
+    y += 10 * SCALE;
+    if (qrCanvas) {
+      try {
+        const qrX = MID - QR_SIZE / 2;
+        ctx.drawImage(qrCanvas, qrX, y, QR_SIZE, QR_SIZE);
+      } catch (_) {
+        ctx.font = fDetail;
+        ctx.fillText("[QR code]", MID, y + QR_SIZE / 2);
+      }
+    }
+    y += QR_SIZE + 14 * SCALE;
+
+    // ── Divider ────────────────────────────────────────────────────────────
+    y = drawDivider(ctx, y + 10 * SCALE);
+    y += 6 * SCALE;
+
+    // ── Details (left-aligned) ─────────────────────────────────────────────
+    ctx.textAlign = "left";
+    if (copiesText) {
+      ctx.font = fDetail;
+      ctx.fillText(`Copies: ${copiesText}`, PAD, y + 19 * SCALE); y += 26 * SCALE;
+    }
+    if (addonParts.length) {
+      ctx.font = fDetail;
+      ctx.fillText(`Add-ons: ${addonParts.join(", ")}`, PAD, y + 19 * SCALE); y += 26 * SCALE;
+    }
+    if (priceText) {
+      ctx.font = fDetailB;
+      ctx.fillText(`Total: ${priceText}`, PAD, y + 20 * SCALE); y += 28 * SCALE;
+    }
+    ctx.font = fDetail;
+    ctx.fillText(`Date: ${dateStr}`, PAD, y + 19 * SCALE); y += 26 * SCALE;
+    ctx.fillText(`Time: ${timeStr}`, PAD, y + 19 * SCALE); y += 26 * SCALE;
+
+    // ── Divider ────────────────────────────────────────────────────────────
+    y += 6 * SCALE;
+    y = drawDivider(ctx, y + 10 * SCALE);
+    y += 6 * SCALE;
+
+    // ── Ticket ID (small, centered) ────────────────────────────────────────
+    ctx.font = fId;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#444";
+    ctx.fillText(id, MID, y + 15 * SCALE); y += 22 * SCALE;
+
+    // ── Footer ─────────────────────────────────────────────────────────────
+    ctx.fillStyle = "#000";
+    ctx.font = fDetail;
+    ctx.fillText("Thank you! Please wait", MID, y + 19 * SCALE); y += 26 * SCALE;
+    ctx.fillText("for your number to be called.", MID, y + 19 * SCALE); y += 26 * SCALE;
+
+    // ── Trim to actual content ─────────────────────────────────────────────
+    const finalH = y + PAD;
+    const trimmed = document.createElement("canvas");
+    trimmed.width  = CW;
+    trimmed.height = finalH;
+    trimmed.getContext("2d").drawImage(canvas, 0, 0);
+
+    const imgSrc = trimmed.toDataURL("image/png");
+
+    // ── Open print popup ───────────────────────────────────────────────────
+    // The @page rule requests 58mm × continuous paper with zero margins.
+    // The img is set to 100vw so it spans the full printable width — the
+    // browser then clips at 58mm when the driver honours the @page size.
+    // We also set body width to exactly 58mm so Chrome's print preview
+    // matches the physical paper width.
+    const win = window.open("", "_blank", "width=300,height=700");
+    if (!win) {
+      console.warn("[queueManager] Popup blocked — please allow popups for this page.");
+      return;
+    }
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Queue Ticket ${num}</title>
+  <style>
+    @page { size: 58mm auto; margin: 0mm; }
+    html, body { margin: 0; padding: 0; width: 58mm; background: #fff; }
+    img { display: block; width: 58mm; height: auto; }
+  </style>
+</head>
+<body>
+  <img src="${imgSrc}">
+  <script>
+    window.onload = function () {
+      setTimeout(function () { window.print(); window.close(); }, 400);
+    };
+  <\/script>
+</body>
+</html>`);
+    win.document.close();
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
