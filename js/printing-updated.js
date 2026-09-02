@@ -125,17 +125,41 @@ const printingModule = {
     }, 30000);
   },
 
-  /* Render the looping video strip in the center column.
-     Uses strip.js renderLive() for an animated DOM strip (real <video>
-     elements in slots) — renderLive() handles synchronised playback start
-     internally, so we don't call play() here (doing so would race against
-     the canplay barrier and unsync the clips). */
+  /* Render the Print & QR media preview in the center column.
+     Minor Fix: previously an animated DOM strip via strip.js renderLive()
+     (4 clips playing simultaneously, framed into the print layout's photo
+     slots). Now shows the static photo strip immediately — it's a fast
+     local composite, matching what's physically being printed on this
+     page, unlike a video which has to wait on qr.js's MediaRecorder
+     export — then swaps to the stitched video (Video 1 → 2 → 3 → 4, see
+     stripModule.exportStitchedVideo / qr.js) once it's ready, looping
+     continuously from there. Same artifact/behavior the digital gallery
+     uses for its video. */
   _renderVideoLoop() {
     this.els.videoFrame.innerHTML = "";
-    stripModule.renderLive(this.els.videoFrame, {
+    const myGen = (this._videoRenderGen = (this._videoRenderGen || 0) + 1);
+
+    stripModule.render(this.els.videoFrame, {
       frameType: sessionState.frameType,
       selectedShots: sessionState.selectedShots,
-      designId: sessionState.design
+      designId: sessionState.design,
+      singleStrip: true
+    });
+
+    const videoPromise = sessionState.finalStripVideoPromise;
+    if (!videoPromise) return;
+    videoPromise.then((blob) => {
+      if (!blob || this._videoRenderGen !== myGen) return; // stale/superseded — guest moved on
+      const videoEl = document.createElement("video");
+      videoEl.src = URL.createObjectURL(blob);
+      videoEl.autoplay = true;
+      videoEl.loop = true;
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+      videoEl.className = "live-strip-media";
+      videoEl.addEventListener("canplay", () => { videoEl.play().catch(() => {}); }, { once: true });
+      this.els.videoFrame.innerHTML = "";
+      this.els.videoFrame.appendChild(videoEl);
     });
   },
 

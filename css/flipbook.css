@@ -1,0 +1,449 @@
+/*
+ * FLIPBOOK.CSS
+ * New page (Video Taking, Video Selection, Flipbook Preview) is built on
+ * top of the same shell classes as the photo shooting/selection pages
+ * (shooting-fullscreen-layout, prep-countdown-overlay, countdown-overlay,
+ * interval-preview, recording-badge, selection-grid, photo-card, etc.)
+ * so it inherits that styling for free. This file only covers the bits
+ * that are genuinely new.
+ */
+
+/* ── Video Taking: live preview fit (Page 3 parity) ──────────────────────
+   #shootingVideo/#shootingImg (style.css) are ID-scoped, so they never
+   applied to the flipbook video-taking page — #flipbookVideo had no
+   sizing/object-fit rule at all and fell back to the UA default
+   (object-fit: contain), leaving it small and off-center inside
+   .shooting-preview-frame instead of filling/centering like Page 3. */
+#flipbookVideo, #flipbookImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+/* ── Video Taking: "just recorded" playback fit ──────────────────────────
+   Same bug/fix as #flipbookVideo above, one level down: .interval-preview
+   (style.css) only has a sizing rule for its `img` child
+   (.interval-preview img { width/height:100%; object-fit:cover }) —
+   #flipbookPlaybackVideo is a <video>, so it matched no rule at all and
+   rendered at its raw intrinsic pixel size inside the absolutely
+   positioned (inset:0) .interval-preview overlay: too small/oddly cropped
+   in fullscreen, and overflowing/overlapping the surrounding UI outside
+   fullscreen. */
+#flipbookPlaybackVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Video Taking / Cover Page Photo Taking: right panel layout ──────────
+   #page-flipbook-shoot's right panel previously only ever held the photos-
+   taken counter (base .shooting-side-right just vertically centers it —
+   style.css). Now that flipbook-shooting.js adds a guest-triggered
+   SHUTTER + DONE pair (shared by both phases) to this same panel, it
+   needs the identical "counter (top) → SHUTTER (centered in the
+   remaining space) → DONE (bottom)" arrangement Photo Taking already uses
+   for #page-shooting .shooting-side-right (style.css) — .shooting-
+   shutter-wrap/.shooting-shutter-btn/.shooting-done-btn themselves are
+   already generic/unscoped, so only the panel's own flex layout needs
+   repeating here. */
+#page-flipbook-shoot .shooting-side-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1.4vh;
+}
+#page-flipbook-shoot .shooting-side-right .shooting-photos-taken {
+  flex-shrink: 0;
+  width: 100%;
+  text-align: center;
+}
+
+/* ── Video selection cards ───────────────────────────────────────────── */
+.flipbook-video-card {
+  position: relative;
+  overflow: hidden;
+}
+.flipbook-video-card video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Grid height fix: the base .selection-grid (style.css) uses
+   grid-auto-rows: 1fr, which stretches each cell (and therefore each
+   video) to fill a square-ish row height. Override so each card's height
+   instead follows the video's own aspect ratio — width (the 3-column
+   layout) is untouched. 1060/666 matches the recorded clip aspect used
+   elsewhere in the flipbook flow (FLIPBOOK_LAYOUT_CONFIG.previewFrame). */
+#flipbookSelectionGrid {
+  grid-auto-rows: auto;
+  align-items: start;
+}
+#flipbookSelectionGrid .photo-card.flipbook-video-card {
+  height: auto;
+  aspect-ratio: 1060 / 666;
+}
+/* Minor Fix: moved from top-left to top-right corner, and base color
+   changed from white to black to match the square selection indicator
+   used on Photo Selection (.photo-card-order-badge). */
+.flipbook-select-check {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.35);
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+.flipbook-video-card.selected .flipbook-select-check,
+.flipbook-cover-photo-card.selected .flipbook-select-check {
+  opacity: 1;
+  transform: scale(1);
+  background: #ffe165;
+  color: #1a1a1a;
+}
+.flipbook-video-card.selected,
+.flipbook-cover-photo-card.selected {
+  outline: 4px solid #F0C231;
+  outline-offset: -4px;
+}
+
+/* ── Video Selection / Cover Page Photo Selection: grid column height ────
+   Video Taking / Cover Page Photo Taking can now produce between 2 and 6
+   items (was a fixed 3), so these grids can no longer assume a single row.
+   .selection-grid-col previously used align-self: center to shrink-wrap
+   to the grid's own content height — that only worked while there was
+   always exactly one row (3 cards); with up to 6 cards (two rows in the
+   3-column layout) it let the column grow past its available space
+   instead of scrolling. Reverted to the default (align-items: stretch,
+   inherited from .selection-main-layout) so the column always fills the
+   full row height, matching the Photo Selection grid's own column. Cards
+   keep their true aspect ratio regardless (height: auto + aspect-ratio,
+   set above/below), and #flipbookSelectionGrid / #flipbookCoverSelectionGrid
+   already inherit .selection-grid's height: 100% + overflow-y: auto
+   (style.css) — so a single row still sits flush at the top with no dead
+   space, and once there are more rows than fit, the grid scrolls
+   vertically instead of shrinking or cropping any card. */
+
+/* ── Cover Page Photo Selection: photo cards + preview column ────────
+   Cards reuse .photo-card's base styling from style.css (border,
+   hover/active, selected state); only the check-icon + outline above are
+   shared with the video cards. The preview column mirrors the shape a
+   cover photo will actually print at (FLIPBOOK_LAYOUT_CONFIG's SLOT_W /
+   SLOT_H aspect), so what the guest sees here matches the printed crop. */
+.flipbook-cover-photo-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Grid height fix (same fix as #flipbookSelectionGrid above): the base
+   .selection-grid (style.css) uses grid-auto-rows: 1fr + height: 100%,
+   which force-stretches each cover-photo card to fill the full column
+   height regardless of the photo's real aspect ratio, distorting the
+   crop. Size each card to the actual print-canvas slot aspect ratio
+   (SLOT_W / SLOT_H from FLIPBOOK_LAYOUT_CONFIG) instead. */
+#flipbookCoverSelectionGrid {
+  grid-auto-rows: auto;
+  align-items: start;
+}
+#flipbookCoverSelectionGrid .photo-card.flipbook-cover-photo-card {
+  height: auto;
+  aspect-ratio: 791.01 / 576.02;
+}
+
+.flipbook-cover-preview-wrap {
+  width: 100%;
+  aspect-ratio: 791.01 / 576.02;
+  background: #f4f4f4;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.flipbook-cover-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Frame-extraction loading overlay (video selection page) ────────── */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+}
+.loading-overlay.show { display: flex; }
+.loading-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: #fff;
+}
+.loading-spinner {
+  width: 56px;
+  height: 56px;
+  border: 5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #F0C231;
+  border-radius: 50%;
+  animation: flipbook-spin 0.9s linear infinite;
+}
+@keyframes flipbook-spin {
+  to { transform: rotate(360deg); }
+}
+.loading-text {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+/* ── Flipbook preview stage ──────────────────────────────────────────
+   Page-slot-shaped stage (aspect-ratio set inline by flipbook-preview.js
+   to match SLOT_W/SLOT_H exactly). Two stacked layers, both filling the
+   stage 100% — every tick swaps both `src` attributes at once to the
+   next page's photo + that page's own template crop; neither layer
+   animates on its own (see flipbook-preview.js header). */
+.flipbook-preview-stage {
+  position: relative;
+  width: min(70vh, 90vw);
+  margin: 40px auto;
+  background: #fff;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+.flipbook-preview-template,
+.flipbook-preview-photo {
+  position: absolute;
+  object-fit: cover;
+}
+.flipbook-preview-template {
+  z-index: 2;
+  pointer-events: none;
+}
+.flipbook-preview-photo {
+  z-index: 1;
+}
+.flipbook-preview-frame-count {
+  position: absolute;
+  bottom: -36px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #444;
+}
+
+/* ── Shared page-shaped video preview widget (Video Selection + Print&QR) ──
+   flipbook-preview-frame.js renders this at FLIPBOOK_LAYOUT_CONFIG's
+   previewFrame aspect ratio (1200×666); the video itself sits inside the
+   inner slot rect, leaving a border for any decorative frame graphic. */
+.flipbook-preview-frame-wrap {
+  width: 100%;
+}
+.flipbook-preview-frame-widget {
+  position: relative;
+  width: 100%;
+  background: #f4f4f4;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.flipbook-preview-frame-video {
+  position: absolute;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #000;
+}
+
+/* Decorative admin-uploaded overlay (Flipbook Overlay), drawn full-frame on
+   top of the video — see flipbook-preview-frame.js render(). Should contain
+   a transparent cutout matching the inner video slot; pointer-events off so
+   it never blocks clicks/taps on whatever sits inside the frame. */
+.flipbook-preview-frame-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* ── "Flipbook" template size badge (Choose a Template page) ────────── */
+.template-size-badge--flipbook {
+  background: #F0C231;
+  color: #1a1a1a;
+}
+
+/* ── Print & QR page: flipbook-only preview column ───────────────────
+   Sits alongside .printing-video-col using the same flex layout as
+   .printing-main-layout (style.css) — flex:1 gives it an equal share. */
+.printing-flipbook-preview-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2vh;
+  height: 100%;
+  min-height: 0;
+}
+.printing-flipbook-preview-col[hidden] {
+  display: none;
+}
+/* Minor Fix: preview enlarged 60% (32vh/40vw → 51.2vh/64vw) per spec.
+   max-width: 100% caps it to whatever width printing-flipbook-preview-col
+   actually has (it's a flex:1 sibling of printing-qr-col), so on narrower
+   viewports where 51.2vh/64vw would exceed the column's real estate, the
+   stage shrinks to fit instead of bleeding into the QR column next to it.
+   align-self: center (inherited from the parent's align-items: center)
+   keeps it centered in both cases. */
+.flipbook-preview-stage--small {
+  width: min(51.2vh, 64vw);
+  max-width: 100%;
+  margin: 0;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Admin-uploaded "Cover Page" template preview ────────────────────
+   Shown above the existing preview widget on Video Selection, Cover
+   Page Photo Selection, and Print & QR. Populated from the active
+   design's flipbookCoverUrl (see flipbook-selection.js,
+   flipbook-cover-selection.js, printing.js) — hidden entirely (via the
+   `hidden` attribute) when the active template has no Cover Page asset
+   uploaded, same no-op philosophy as flipbook-preview-frame.js's overlay. */
+.flipbook-cover-page-preview-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6vh;
+  margin-bottom: 1.4vh;
+}
+.flipbook-cover-page-preview-wrap[hidden] {
+  display: none;
+}
+
+/* Minor Fix: the guest-facing photo (selected cover photo on the Cover
+   Page Photo Selection / Print & QR pages) used to render in its own
+   separate box below the template preview — visually disconnected from
+   the "Cover Page" frame it's actually meant to sit inside. It now
+   layers INSIDE this same stage, behind the template graphic, so the
+   photo shows through the template's photo-slot cutout in one unified
+   preview instead of two stacked boxes. The offsets below match the
+   photo-slot position/size baked into the flipbookCoverUrl template
+   artwork itself (same slot aspect ratio used elsewhere — see
+   #flipbookCoverSelectionGrid .photo-card.flipbook-cover-photo-card
+   below, 791.01 / 576.02). */
+.flipbook-cover-page-preview-stage {
+  position: relative;
+  width: 100%;
+}
+/* Minor Fix: same 60% increase + overflow cap as .flipbook-preview-stage--small
+   above — this is the outer wrapper (stage + Cover Page overlay img) used
+   on the Print & QR page, so it needs to grow and stay capped in lockstep
+   with the inner stage or the two would drift out of sync. */
+.flipbook-cover-page-preview-stage--small {
+  width: min(51.2vh, 64vw);
+  max-width: 100%;
+}
+.flipbook-cover-page-preview-stage .flipbook-cover-page-preview {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.flipbook-cover-page-preview-photo {
+  position: absolute;
+  left: 21.3%;
+  top: 6.5%;
+  width: 74.5%;
+  height: 87%;
+  object-fit: cover;
+  z-index: 1;
+  display: block;
+  border-radius: 2px;
+}
+.flipbook-cover-page-preview-photo[hidden],
+.flipbook-cover-page-preview-stage[hidden] {
+  display: none;
+}
+
+/* Minor Fix: the same slot-position treatment above, applied to a video
+   widget instead of a plain <img> — used on Video Selection
+   (#flipbookPreviewFrameContainer) and Print & QR
+   (#flipbookPrintPreviewStage) so the Cover Page template overlays the
+   flipbook video itself rather than the cover photo. Toggled on/off by
+   flipbook-selection.js / printing.js only when the active design
+   actually has a Cover Page template uploaded — otherwise the video
+   keeps filling the full stage as before. Compound selectors (two
+   classes) so they reliably win over each widget's own default sizing
+   regardless of stylesheet order. */
+.flipbook-preview-frame-wrap.flipbook-cover-page-preview-photo,
+.flipbook-preview-stage.flipbook-cover-page-preview-photo {
+  position: absolute;
+  left: 21.3%;
+  top: 6.5%;
+  width: 74.5%;
+  height: 87%;
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+  z-index: 1;
+}
+
+/* Minor Fix: flipbook-preview-frame.js renders the video widget at its own
+   fixed "decorative frame" proportions (1200×666 aspect, with a border gap
+   left around the video for the standalone preview-frame use elsewhere —
+   see the widget/video comment above). When that same widget gets inset
+   into the Cover Page photo slot above, those baked-in proportions don't
+   match the slot's shape, so the widget's own #f4f4f4 background showed
+   through as a gray box instead of the video filling the slot edge-to-edge.
+   Force the widget and video to stretch to 100% of the slot instead —
+   !important is required because flipbook-preview-frame.js sets the
+   widget's aspect ratio and the video's position/size as inline styles. */
+.flipbook-preview-frame-wrap.flipbook-cover-page-preview-photo .flipbook-preview-frame-widget {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: auto !important;
+  background: transparent !important;
+  border-radius: 2px !important;
+}
+.flipbook-preview-frame-wrap.flipbook-cover-page-preview-photo .flipbook-preview-frame-video {
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+}
+
+.flipbook-cover-page-preview {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+.flipbook-cover-page-preview--small {
+  width: min(32vh, 40vw);
+}
+.flipbook-cover-page-preview[hidden] {
+  display: none;
+}

@@ -101,6 +101,7 @@ const stripModule = {
         if (raw === "originals")   return "originals";
         if (raw === "accessories") return "accessories";
         if (raw === "designs")     return "designs";
+        if (raw === "flipbook")    return "flipbook";
         return "originals"; // default for legacy entries with no category
       })(),
       overlays: {
@@ -132,7 +133,19 @@ const stripModule = {
       // Linked keychain template overlay URL — populated when this 2×6 design
       // has a corresponding keychain template (keychain_overlay_path in Supabase,
       // resolved to a blob: URL by asset-sync.js as keychainOverlayUrl).
-      keychainOverlayUrl: t.keychainOverlayUrl || null
+      keychainOverlayUrl: t.keychainOverlayUrl || null,
+      /*
+       * Flipbook — 3 independent template slots (Cover Page, A4 Page 1,
+       * A4 Page 2), resolved to blob: URLs by asset-sync.js. A template
+       * counts as a flipbook template as soon as any one slot is set
+       * (see templateModule._getFrameType() in app.js); this is what makes
+       * it appear under the kiosk's Flipbook category tab and routes
+       * selection into the flipbook video-taking flow instead of a
+       * standard photo strip.
+       */
+      flipbookCoverUrl:   t.flipbookCoverUrl   || null,
+      flipbookA4Page1Url: t.flipbookA4Page1Url || null,
+      flipbookA4Page2Url: t.flipbookA4Page2Url || null
     }));
     console.log(`[stripModule] Loaded ${STRIP_DESIGNS.length} designs from assetSync.`);
     this.preloadDesignOverlays();
@@ -956,11 +969,14 @@ const stripModule = {
          * the preview canvas.
          *   print (x, y, w, h, angle:90)  →  each slot becomes a horizontal
          *   region in the landscape preview at:
-         *     previewSlot.x = print slot y         (step along landscape width)
-         *     previewSlot.y = print canvas width - print slot x - print slot w
-         *                   = 2400 - 86.47 - 802.21 = 1511.32  → centre vertically
-         *     previewSlot.w = print slot h         (956.08 → landscape slot width)
-         *     previewSlot.h = print slot w         (802.21 → landscape slot height)
+         *     previewSlot.x = print slot y   (step along landscape width —
+         *                     print slot y is 44.565 / 895.785 / 1746.975 /
+         *                     2598.195; see LAYOUT_CONFIGS["film-duo"].
+         *                     photoSlots, which are offset by ±(h-w)/2 from
+         *                     x=86.47/y=121.5-etc. to compensate for
+         *                     drawRotatedCropFill's rotation-pivot shift)
+         *     previewSlot.w = print slot h   (956.08 → landscape slot width)
+         *     previewSlot.h = print slot w   (802.21 → landscape slot height)
          *     angle: 0 (photos are already upright in the landscape view)
          *
          * Vertical centering: centre each slot in the 1200px height.
@@ -972,10 +988,10 @@ const stripModule = {
           // previewIsLandscape flag tells _compositeOverlayOnly to clip the overlay differently
           previewIsLandscape: true,
           slots: [
-            { x: 121.5,   y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 0 },
-            { x: 972.72,  y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 1 },
-            { x: 1823.91, y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 2 },
-            { x: 2675.13, y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 3 }
+            { x: 44.565,   y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 0 },
+            { x: 895.785,  y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 1 },
+            { x: 1746.975, y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 2 },
+            { x: 2598.195, y: 198.90, w: 956.08, h: 802.21, angle: 0, photoIndex: 3 }
           ]
         };
 
@@ -1129,6 +1145,15 @@ const stripModule = {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
+    // Stop any previous renderLive()'s per-frame LUT-filter loop before
+    // rebuilding the DOM below — otherwise every re-render (repeat guest,
+    // page revisit) leaks another rAF loop drawing into now-orphaned
+    // canvases forever.
+    if (this._liveFilterRAF) {
+      cancelAnimationFrame(this._liveFilterRAF);
+      this._liveFilterRAF = null;
+    }
+
     const design = this.getDesign(designId);
     const overlayPath = design && design.overlays && design.overlays[frameType];
 
@@ -1164,6 +1189,14 @@ const stripModule = {
     wrap.style.aspectRatio = `${previewW} / ${previewH}`;
 
     const videoEls = [];
+    // { video, canvas, ctx, w, h } — one entry per video slot, drawn +
+    // LUT-filtered every frame by the shared rAF loop below. Every other
+    // shot in Print & QR (the still photos, the printed sheet) is already
+    // filtered at capture time by cameraController.capturePhoto(); the
+    // recorded video clips are NOT (recording has no filter-bake step —
+    // see camera-controller.js), so without this the selected videos shown
+    // here would be the only unfiltered thing on the page.
+    const filteredVideoSlots = [];
 
     for (let i = 0; i < liveSlots.length; i++) {
       const slot = liveSlots[i];
@@ -1227,17 +1260,44 @@ const stripModule = {
       if (isVideo) {
         media.src = shot.videoUrl;
         media.muted      = true;
-        media.loop       = true;
+        // Looping is handled manually by the synced loop ticker set up
+        // below (see _createSyncedLoopTicker) instead of native <video>.loop,
+        // so every clip stays in lockstep instead of drifting apart.
+        media.loop       = false;
         media.playsInline = true;
         media.preload    = "auto";
-        // Do NOT autoplay yet — we start all videos together below
+        // Do NOT autoplay yet — we start all videos together below.
+        // media itself is never shown — it's only a decode source for the
+        // filtered canvas appended below. Kept in the DOM (not detached)
+        // so playback/decoding stays reliable across browsers, just hidden.
+        media.style.display = "none";
         videoEls.push(media);
+
+        // Visible element: a canvas the same size/position as `media` would
+        // have been, redrawn from it every frame by the shared rAF loop
+        // below with the active photobooth.cube LUT baked in — see
+        // filteredVideoSlots comment above.
+        const canvas = document.createElement("canvas");
+        canvas.className = "live-strip-media";
+        canvas.style.cssText = media.style.cssText;
+        canvas.style.display = ""; // undo media's display:none — canvas IS shown
+        // Pixel resolution: the slot's own box size (already the swapped
+        // h×w for rotated slots, matching the cssWidth/cssHeight set above)
+        // — plenty sharp for an on-screen preview, no need to match the
+        // video's native recording resolution.
+        const boxPxW = (slot.angle && slot.angle % 180 !== 0) ? slot.h : slot.w;
+        const boxPxH = (slot.angle && slot.angle % 180 !== 0) ? slot.w : slot.h;
+        canvas.width  = Math.max(1, Math.round(boxPxW));
+        canvas.height = Math.max(1, Math.round(boxPxH));
+
+        wrap.appendChild(media);
+        wrap.appendChild(canvas);
+        filteredVideoSlots.push({ video: media, canvas, ctx: canvas.getContext("2d") });
       } else if (shot && shot.imageUrl) {
         media.src = shot.imageUrl;
         media.alt = "Selected photo";
+        wrap.appendChild(media);
       }
-
-      wrap.appendChild(media);
     }
 
     if (overlayPath) {
@@ -1329,31 +1389,141 @@ const stripModule = {
           })
       );
 
-      Promise.all(readyPromises).then(() => {
+      Promise.all(readyPromises)
+        // Fix MediaRecorder blobs reporting duration:Infinity before the
+        // synced loop ticker below tries to read each clip's real length.
+        .then(() => Promise.all(videoEls.map((v) => this._fixVideoDuration(v))))
+        .then(() => {
         // Seek and play all videos atomically
         videoEls.forEach((v) => { v.currentTime = 0; });
         videoEls.forEach((v) => { v.play().catch(() => {}); });
+
+        // Same smooth, synchronized 9-second-loop system used by the
+        // uploaded/gallery video export (_createSyncedLoopTicker): every
+        // clip loops together instead of drifting apart, and each clip's
+        // trailing still-photo freeze-hold is trimmed so the loop never
+        // shows a static frame. This preview loops indefinitely (no
+        // recorder to stop), so only the loop mechanism is reused here,
+        // not the fixed 9000ms recording length.
+        const loopTick = this._createSyncedLoopTicker(videoEls);
+
+        // Start the shared per-frame draw+filter loop for the visible
+        // canvases now that their source videos are actually playing.
+        if (filteredVideoSlots.length > 0) {
+          const drawFilteredFrame = () => {
+            loopTick();
+            filteredVideoSlots.forEach(({ video, canvas, ctx }) => {
+              if (video.readyState < 2) return; // no frame data yet this tick
+              // Crop-to-fill the video's current frame into the canvas —
+              // same behaviour object-fit:cover gave the plain <video> this
+              // canvas replaced (canvas is already sized to the slot box).
+              const vw = video.videoWidth, vh = video.videoHeight;
+              if (!vw || !vh) return;
+              const boxRatio = canvas.width / canvas.height;
+              const vidRatio = vw / vh;
+              let sx, sy, sw, sh;
+              if (vidRatio > boxRatio) {
+                sh = vh; sw = sh * boxRatio; sx = (vw - sw) / 2; sy = 0;
+              } else {
+                sw = vw; sh = sw / boxRatio; sx = 0; sy = (vh - sh) / 2;
+              }
+              ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+              if (typeof cameraFilterManager !== "undefined") {
+                cameraFilterManager.applyLutToCanvasGL(canvas);
+              }
+            });
+            this._liveFilterRAF = requestAnimationFrame(drawFilteredFrame);
+          };
+          this._liveFilterRAF = requestAnimationFrame(drawFilteredFrame);
+        }
       });
     }
   },
 
   /*
+   * Chromium/Electron MediaRecorder blobs commonly report `.duration` as
+   * Infinity until the browser is forced to re-index the file by seeking
+   * near the end and back to the start. The synced loop below needs each
+   * clip's real length to know where to loop, so every video used by
+   * exportVideoStrip is run through this first.
+   */
+  _fixVideoDuration(v) {
+    return new Promise((resolve) => {
+      if (v.duration && isFinite(v.duration)) { resolve(); return; }
+      const done = () => { v.removeEventListener("timeupdate", done); v.currentTime = 0; resolve(); };
+      v.addEventListener("timeupdate", done);
+      v.currentTime = 1e7;
+      // Safety net in case this browser never fires timeupdate for the seek.
+      setTimeout(resolve, 400);
+    });
+  },
+
+  /*
+   * Keeps every clip in a video-strip export looping together instead of
+   * each one restarting independently the instant IT reaches its own end.
+   * Per-shot clip lengths differ by small amounts (recording start/stop is
+   * async per shot), so native <video>.loop drifts the clips out of sync
+   * with each other over several loop cycles. It also loops straight into
+   * the ~600ms still-photo freeze-hold baked onto the end of every clip
+   * (see shooting.js / cameraController.stopVideoRecording), which showed
+   * up as a static photo inside what should be an all-video strip.
+   *
+   * Fix: disable native loop, trim every clip's usable window to end just
+   * before its freeze-hold tail, and share the SHORTEST trimmed window
+   * across all clips as the loop length — then manually rewind + replay
+   * every clip together whenever that shared length is reached. Call the
+   * returned function once per animation-frame tick.
+   */
+  _createSyncedLoopTicker(mediaEls) {
+    const FREEZE_HOLD_SEC = 0.6; // matches stopVideoRecording's freeze-hold
+    const videos = mediaEls.filter((m) => m && m.tagName === "VIDEO");
+    if (!videos.length) return () => {};
+
+    videos.forEach((v) => { v.loop = false; });
+
+    const loopPoint = Math.max(
+      0.15,
+      Math.min(...videos.map((v) => {
+        const d = (isFinite(v.duration) && v.duration > 0) ? v.duration : (FREEZE_HOLD_SEC + 0.15);
+        return d - FREEZE_HOLD_SEC;
+      }))
+    );
+
+    let resetting = false;
+    return () => {
+      if (resetting) return;
+      if (!videos.some((v) => v.currentTime >= loopPoint)) return;
+      resetting = true;
+      videos.forEach((v) => { v.currentTime = 0; });
+      Promise.all(videos.map((v) => {
+        const p = v.play();
+        return (p && p.then) ? p.catch(() => {}) : Promise.resolve();
+      })).then(() => { resetting = false; });
+    };
+  },
+
+  /*
    * COMBINED VIDEO STRIP EXPORT — records the full composited layout
    * (all 4 videos playing in their exact slots + frame overlay on top)
-   * into ONE downloadable/shareable .webm file, matching the print
+   * into ONE downloadable/shareable .webm/.mp4 file, matching the print
    * layout exactly but animated. Recording length matches durationMs —
-   * default is 8000ms to match the guest's actual ~8s per-shot countdown
-   * (see shooting.js's countdownSeconds) plus stopVideoRecording's ~600ms
-   * freeze-hold; previously this defaulted to 3000ms and no caller
-   * overrode it, so the digital copy was cut down to a fraction of what
-   * was actually recorded regardless of the real clip length.
+   * default is 9000ms so the export plays a full 9-second loop of the
+   * guest's clips.
+   *
+   * Video-only: slots with no recorded clip are left empty rather than
+   * falling back to the still photo (see the `else` branches below), and
+   * every clip's native `.loop` is disabled in favour of
+   * _createSyncedLoopTicker(), which keeps all clips looping together and
+   * trims each clip's trailing still-photo freeze-hold so the loop never
+   * shows a static frame.
    *
    * singleStrip (default false) — when true and frameType is "2x6",
-   * only the first copy's slots are rendered onto a half-width canvas.
-   * Used by the digital gallery export so guests download one clean strip.
-   * Print-preview (Page 6 inline playback) is unaffected.
+   * "long-duo", or "long-mini", only the LEFT strip (Frame 1) is rendered
+   * onto a half-width canvas, matching the still-photo gallery export's
+   * crop exactly. Used by the digital gallery export so guests download
+   * one clean strip. Print-preview (Page 6 inline playback) is unaffected.
    */
-  async exportVideoStrip({ frameType, selectedShots, designId, durationMs = 8000, scale = 0.3, singleStrip = false }) {
+  async exportVideoStrip({ frameType, selectedShots, designId, durationMs = 9000, scale = 0.3, singleStrip = false }) {
     const config = LAYOUT_CONFIGS[frameType];
     if (!config) throw new Error(`Unknown frame type: ${frameType}`);
 
@@ -1378,16 +1548,35 @@ const stripModule = {
             if (shot && shot.videoUrl) {
               const v = document.createElement("video");
               v.src = shot.videoUrl; v.muted = true; v.loop = true; v.playsInline = true;
-              v.oncanplay = () => { v.play(); resolve(v); };
+              // Wait for play() itself to resolve, not just "canplay" — canplay
+              // only means the browser COULD start playing, it fires before any
+              // frame has actually begun decoding/rendering. Resolving here
+              // (right after calling play(), not waiting for it) let drawFrame()
+              // start compositing before the video had a real frame ready,
+              // which is what produced the black screen at the start of the
+              // exported clip.
+              v.oncanplay = () => {
+                const p = v.play();
+                if (p && p.then) p.then(() => resolve(v)).catch(() => resolve(v));
+                else resolve(v);
+              };
               v.onerror = () => resolve(null);
-            } else if (shot && shot.imageUrl) {
-              const img = new Image();
-              img.onload = () => resolve(img); img.onerror = () => resolve(null);
-              img.src = shot.imageUrl;
-            } else { resolve(null); }
+            } else {
+              // Video-only strip: no still-photo fallback for slots
+              // without a recorded clip — leave the slot empty instead.
+              resolve(null);
+            }
           });
         })
       );
+
+      // Fix MediaRecorder blobs reporting duration:Infinity, then start a
+      // manually-synchronized, seamless loop across every clip instead of
+      // relying on native <video>.loop (see _createSyncedLoopTicker above).
+      await Promise.all(
+        mediaEls.filter((m) => m && m.tagName === "VIDEO").map((v) => this._fixVideoDuration(v))
+      );
+      const _loopTick = this._createSyncedLoopTicker(mediaEls);
 
       const design = this.getDesign(designId);
       const overlayPath = design && design.overlays && design.overlays[frameType];
@@ -1411,6 +1600,16 @@ const stripModule = {
           ctx.drawImage(media, sx, sy, sw, sh,
             slot.x * scale, slot.y * scale, slot.w * scale, slot.h * scale);
         });
+        // Bake in the active photobooth.cube LUT, matching the filtered
+        // clips already shown live on the Print & QR page (renderLive) —
+        // recorded video has no filter baked in at capture time (see the
+        // renderLive doc comment), so without this the uploaded/gallery
+        // video would be the one unfiltered copy of the session. Applied
+        // only to the photo/video content, before the (unfiltered) frame
+        // overlay is drawn on top, same as the live preview.
+        if (typeof cameraFilterManager !== "undefined") {
+          cameraFilterManager.applyLutToCanvasGL(canvas);
+        }
         if (overlayImg) {
           // For the landscape video export, rotate the portrait overlay 90° CW
           // and clip to the left-strip region, same as the canvas composite.
@@ -1445,26 +1644,48 @@ const stripModule = {
           resolve(finalBlob);
         };
         let rafId;
-        const tick = () => { drawFrame(); rafId = requestAnimationFrame(tick); };
+        const tick = () => { _loopTick(); drawFrame(); rafId = requestAnimationFrame(tick); };
+
+        // Draw a first real frame (the media elements are already playing —
+        // see the play()-promise wait above), then give the browser two
+        // animation frames to actually paint it before starting the
+        // recorder. Starting the recorder against a canvas that technically
+        // has drawImage() calls queued but hasn't been composited yet is
+        // what produced the ~1s black screen at the start of every export.
         tick();
-        recorder.start();
-        setTimeout(() => { cancelAnimationFrame(rafId); recorder.stop(); }, durationMs);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            recorder.start();
+            setTimeout(() => { cancelAnimationFrame(rafId); recorder.stop(); }, durationMs);
+          });
+        });
       });
     }
 
-    // For 2x6 singleStrip mode, work with one copy's worth of slots only.
-    // All new frame types (except film-duo handled above) are single-copy.
+    // For 2x6 singleStrip mode, and for the Long Duo / Long Mini gallery
+    // video, only the LEFT strip (Frame 1) is rendered onto a half-width
+    // canvas — the same crop the still-photo gallery export (exportPNG
+    // singleStrip) already uses, so the video strip matches the uploaded
+    // photo/video crop exactly instead of the full multi-frame print
+    // template. film-duo/wide-mini and non-singleStrip 2x6 still render
+    // their full sheet.
+    const isLeftStripOnly = singleStrip && (
+      frameType === "2x6" || frameType === "long-duo" || frameType === "long-mini"
+    );
     const totalCopies = frameType === "2x6" ? 2 : 1;
     const copies = (frameType === "2x6" && singleStrip) ? 1 : totalCopies;
-    const slotsPerCopy = frameType === "2x6"
+    // Long Duo / Long Mini: Frame 1 (the left strip) is always the first 4 slots.
+    const leftSlotCount = frameType === "2x6"
       ? Math.round(config.photoSlots.length / totalCopies)
-      : config.photoSlots.length;
-    // Slots to draw: first copy only in singleStrip 2x6, all slots otherwise.
-    const slotsToRender = (frameType === "2x6" && singleStrip)
-      ? config.photoSlots.slice(0, slotsPerCopy)
+      : 4;
+    // Slots to draw: left strip only when isLeftStripOnly, all slots otherwise.
+    const slotsToRender = isLeftStripOnly
+      ? config.photoSlots.slice(0, leftSlotCount)
       : config.photoSlots;
-    // Canvas is half-width for singleStrip 2x6, full width otherwise.
-    const canvasW = Math.round((config.canvasWidth / totalCopies) * copies * scale);
+    // Canvas is half-width whenever we're rendering just the left strip.
+    const canvasW = isLeftStripOnly
+      ? Math.round((config.canvasWidth / 2) * scale)
+      : Math.round((config.canvasWidth / totalCopies) * copies * scale);
     const canvasH = Math.round(config.canvasHeight * scale);
 
     const canvas = document.createElement("canvas");
@@ -1472,9 +1693,10 @@ const stripModule = {
     canvas.height = canvasH;
     const ctx = canvas.getContext("2d");
 
-    // Preload hidden <video> elements for every slot that has a video,
-    // and <img> fallbacks for slots that don't.
-    // In singleStrip mode we only load the first copy's slots.
+    // Preload hidden <video> elements for every slot that has a video.
+    // Video-only strip: slots without a recorded clip resolve to null and
+    // are simply skipped when drawing (see the `else` branch below).
+    // In left-strip-only mode we only load Frame 1's slots.
     const mediaEls = await Promise.all(
       slotsToRender.map((slot, i) => {
         const photoIdx = (slot.photoIndex !== undefined) ? slot.photoIndex : config.slotToPhotoIndex[i];
@@ -1486,19 +1708,31 @@ const stripModule = {
             v.muted = true;
             v.loop = true;
             v.playsInline = true;
-            v.oncanplay = () => { v.play(); resolve(v); };
+            // Wait for play() to actually resolve, not just "canplay" — see
+            // the matching comment in the landscape film-duo branch above.
+            // Fixes the black screen at the start of the exported clip.
+            v.oncanplay = () => {
+              const p = v.play();
+              if (p && p.then) p.then(() => resolve(v)).catch(() => resolve(v));
+              else resolve(v);
+            };
             v.onerror = () => resolve(null);
-          } else if (shot && shot.imageUrl) {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = () => resolve(null);
-            img.src = shot.imageUrl;
           } else {
+            // Video-only strip: no still-photo fallback for slots
+            // without a recorded clip — leave the slot empty instead.
             resolve(null);
           }
         });
       })
     );
+
+    // Fix MediaRecorder blobs reporting duration:Infinity, then start a
+    // manually-synchronized, seamless loop across every clip instead of
+    // relying on native <video>.loop (see _createSyncedLoopTicker above).
+    await Promise.all(
+      mediaEls.filter((m) => m && m.tagName === "VIDEO").map((v) => this._fixVideoDuration(v))
+    );
+    const _loopTick = this._createSyncedLoopTicker(mediaEls);
 
     const design = this.getDesign(designId);
     const overlayPath = design && design.overlays && design.overlays[frameType];
@@ -1528,8 +1762,18 @@ const stripModule = {
           drawMediaCropFill(media, slot.x * scale, slot.y * scale, slot.w * scale, slot.h * scale);
         }
       });
+      // Bake in the active photobooth.cube LUT, matching the filtered
+      // clips already shown live on the Print & QR page (renderLive) —
+      // recorded video has no filter baked in at capture time (see the
+      // renderLive doc comment), so without this the uploaded/gallery
+      // video would be the one unfiltered copy of the session. Applied
+      // only to the photo/video content, before the (unfiltered) frame
+      // overlay is drawn on top, same as the live preview.
+      if (typeof cameraFilterManager !== "undefined") {
+        cameraFilterManager.applyLutToCanvasGL(canvas);
+      }
       if (overlayImg) {
-        if (singleStrip && frameType === "2x6") {
+        if (isLeftStripOnly) {
           // The overlay PNG spans the full two-strip sheet at its natural
           // resolution (e.g. 2400 × 3600px). We need to source only the
           // left half (copy 0) of that image.
@@ -1581,14 +1825,180 @@ const stripModule = {
       };
 
       let rafId;
-      const tick = () => { drawFrame(); rafId = requestAnimationFrame(tick); };
-      tick();
+      const tick = () => { _loopTick(); drawFrame(); rafId = requestAnimationFrame(tick); };
 
-      recorder.start();
-      setTimeout(() => {
-        cancelAnimationFrame(rafId);
-        recorder.stop();
-      }, durationMs);
+      // Same warmup as the landscape film-duo branch above: draw a real
+      // frame first, then give the browser two animation frames to paint it
+      // before starting the recorder, so the recording doesn't start against
+      // an unpainted canvas.
+      tick();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          recorder.start();
+          setTimeout(() => {
+            cancelAnimationFrame(rafId);
+            recorder.stop();
+          }, durationMs);
+        });
+      });
+    });
+  },
+
+  /*
+   * STITCHED VIDEO EXPORT — concatenates the 4 selected shots' clips into
+   * ONE continuous clip, played back-to-back in order (Video 1 → 2 → 3 →
+   * 4), instead of the four clips playing simultaneously side-by-side in
+   * the print-layout slots (see exportVideoStrip above). This is what
+   * both the Print & QR flow (sessionState.finalStripVideo /
+   * finalStripVideoPromise, see qr.js) and the digital gallery use as
+   * "the video" now.
+   *
+   * Each clip's trailing still-photo freeze-hold (baked on by
+   * cameraController.stopVideoRecording — see shooting.js) is trimmed so
+   * the cut into the next clip lands while motion is still happening: no
+   * frozen photo frame, no blank/black frame, no pause between clips. A
+   * slot with no recorded video is simply skipped — the result is
+   * video-only, same as exportVideoStrip.
+   *
+   * The camera's photobooth.cube LUT filter is baked in per frame,
+   * matching the filtered clips already shown live during shooting —
+   * recorded clips have no filter baked in at capture time (see
+   * renderLive's doc comment), so without this the stitched export would
+   * be the one unfiltered artifact from the whole session.
+   *
+   * The exported file is exactly one pass through the (trimmed) clips —
+   * a guest-facing <video loop> then repeats that pass natively for
+   * "continuous" playback, same as any other looping video file.
+   */
+  async exportStitchedVideo({ selectedShots }) {
+    const FREEZE_HOLD_SEC = 0.6; // matches stopVideoRecording's freeze-hold
+
+    const clipUrls = (selectedShots || [])
+      .filter((shot) => shot && shot.videoUrl)
+      .map((shot) => shot.videoUrl);
+
+    if (!clipUrls.length) return null;
+
+    // Preload every clip as a hidden <video>, fix Infinity-duration blobs
+    // (see _fixVideoDuration above), and trim each one's usable window to
+    // end just before its freeze-hold.
+    const videos = await Promise.all(
+      clipUrls.map(
+        (url) =>
+          new Promise((resolve) => {
+            const v = document.createElement("video");
+            v.src = url;
+            v.muted = true;
+            v.playsInline = true;
+            v.preload = "auto";
+            const onReady = () => {
+              v.removeEventListener("canplay", onReady);
+              v.removeEventListener("error", onReady);
+              resolve(v);
+            };
+            v.addEventListener("canplay", onReady, { once: true });
+            v.addEventListener("error", onReady, { once: true });
+          })
+      )
+    );
+    await Promise.all(videos.map((v) => this._fixVideoDuration(v)));
+    const trimmedDurations = videos.map((v) => {
+      const d = (isFinite(v.duration) && v.duration > 0) ? v.duration : (FREEZE_HOLD_SEC + 0.15);
+      return Math.max(0.15, d - FREEZE_HOLD_SEC);
+    });
+
+    // Canvas sized to the first clip's native video dimensions — the
+    // stitched export is raw clip content, not framed into the print
+    // layout's tiny photo slots, so there's no fixed layout size to match.
+    const firstVideo = videos.find((v) => v.videoWidth && v.videoHeight) || videos[0];
+    const canvasW = firstVideo.videoWidth  || 1080;
+    const canvasH = firstVideo.videoHeight || 1920;
+    const canvas = document.createElement("canvas");
+    canvas.width  = canvasW;
+    canvas.height = canvasH;
+    const ctx = canvas.getContext("2d");
+
+    const drawCropFill = (video) => {
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh) return;
+      const boxRatio = canvasW / canvasH;
+      const vidRatio = vw / vh;
+      let sx, sy, sw, sh;
+      if (vidRatio > boxRatio) {
+        sh = vh; sw = sh * boxRatio; sx = (vw - sw) / 2; sy = 0;
+      } else {
+        sw = vw; sh = sw / boxRatio; sx = 0; sy = (vh - sh) / 2;
+      }
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvasW, canvasH);
+    };
+
+    let activeIndex = 0;
+    videos.forEach((v) => { v.loop = false; v.pause(); v.currentTime = 0; });
+    videos[0].play().catch(() => {});
+
+    const drawFrame = () => {
+      const active = videos[activeIndex];
+      ctx.clearRect(0, 0, canvasW, canvasH);
+      if (active && active.readyState >= 2) {
+        drawCropFill(active);
+        if (typeof cameraFilterManager !== "undefined") {
+          cameraFilterManager.applyLutToCanvasGL(canvas);
+        }
+      }
+      // Advance to the next clip once the active one hits its trimmed
+      // duration. The next clip is already preloaded (preload="auto"), so
+      // starting it here is effectively instant for these local blob
+      // clips — a hard cut with no blank frame in between.
+      if (active && active.currentTime >= trimmedDurations[activeIndex] && activeIndex < videos.length - 1) {
+        active.pause();
+        activeIndex += 1;
+        videos[activeIndex].currentTime = 0;
+        videos[activeIndex].play().catch(() => {});
+      }
+    };
+
+    const totalDurationMs = Math.round(trimmedDurations.reduce((a, b) => a + b, 0) * 1000) + 200;
+
+    const stream = canvas.captureStream(30);
+    const videoMimeCandidates = [
+      "video/mp4;codecs=h264",
+      "video/mp4",
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm"
+    ];
+    const mimeType = videoMimeCandidates.find(
+      (type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)
+    ) || "";
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    return new Promise((resolve) => {
+      recorder.onstop = async () => {
+        videos.forEach((v) => v.pause());
+        const rawBlob = new Blob(chunks, { type: recorder.mimeType || "video/webm" });
+        // Re-mux into a properly finalized MP4, same as exportVideoStrip,
+        // so the downloaded/shared video works everywhere.
+        const finalBlob = await remuxToMp4(rawBlob);
+        resolve(finalBlob);
+      };
+
+      let rafId;
+      const tick = () => { drawFrame(); rafId = requestAnimationFrame(tick); };
+
+      // Warm up: draw real frames before starting the recorder so it
+      // doesn't start against an unpainted canvas (same as exportVideoStrip).
+      tick();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          recorder.start();
+          setTimeout(() => {
+            cancelAnimationFrame(rafId);
+            recorder.stop();
+          }, totalDurationMs);
+        });
+      });
     });
   },
 

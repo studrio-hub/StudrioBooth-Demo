@@ -23,6 +23,143 @@
   overflow: hidden;
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 1 REDESIGN — Welcome screen (minimal: logo, scan prompt, welcome text)
+ * ──────────────────────────────────────────────────────────────────────────
+ * The camera-scan panel + info panel below are kept in the DOM and fully
+ * functional (queue-ticket-kiosk.js still reads/writes them for validation)
+ * but are moved off-canvas rather than deleted, so:
+ *   • #ticketCamVideo keeps decoding frames for the jsQR fallback scanner
+ *     (removed from *view* only — `display:none` can throttle <video>
+ *     decoding in some Chromium builds, so it's positioned off-screen
+ *     instead, which does not).
+ *   • #ticketInfoPanel keeps receiving its idle/loading/validated/error
+ *     state classes and text content exactly as before; ticket-redesign.js
+ *     mirrors that into the new status label below instead of removing it.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: 'NeulisRegular';
+  src: url('../assets/fonts/Neulis-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+/* ── Camera panel + info panel: functional, moved off-canvas ────────────── */
+#page-ticket .ticket-body {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ── Centered "Welcome to studrio!" message ──────────────────────────────── */
+.ticket-welcome-msg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'NeulisRegular', var(--font-ui);
+  font-size: clamp(32px, 4.2vw, 80px);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: nowrap;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Each letter is wrapped in a span by ticket-redesign.js and animates on
+   its own staggered delay, producing a smooth traveling wave rather than
+   a uniform flash. Each leg (black→yellow, yellow→black) takes 1s. */
+.tw-letter {
+  display: inline-block;
+  animation: twLetterColor 2s ease-in-out infinite;
+  color: #1A1200;
+}
+.tw-letter.tw-space { width: 0.3em; }
+
+@keyframes twLetterColor {
+  0%   { color: #1A1200; }
+  50%  { color: #F0C231; }
+  100% { color: #1A1200; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-letter { animation: none; color: #1A1200; }
+}
+
+
+/* ── Bottom bar: Studrio logo (left) + scan-status prompt (right) ───────── *
+ * Overrides the shared .sb-next-corner (bottom-right box) so this page's
+ * version spans the full width of the kiosk, matching the reference design.
+ * Scoped to #page-ticket only — every other page's .sb-next-corner is
+ * untouched. */
+#page-ticket .sb-next-corner.ticket-scan-cta {
+  bottom: 2.8vh;
+  left: 3vw;
+  right: 3vw;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2vw;
+}
+
+.ticket-scan-cta-logo {
+  height: 3.2vh;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.ticket-scan-cta-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7vw;
+}
+
+.ticket-scan-cta-label {
+  font-size: 1.6vh;
+  font-weight: 600;
+  color: var(--text, #1A1200);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.ticket-scan-cta-arrow {
+  width: 1.8vh;
+  height: 1.8vh;
+  object-fit: contain;
+  flex-shrink: 0;
+  animation: ticketArrowHover 1.4s ease-in-out infinite;
+}
+
+@keyframes ticketArrowHover {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(0.5vh); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket-scan-cta-arrow { animation: none; }
+}
+
+/* btnNextFromTicket is kept in the DOM for queue-ticket-kiosk.js's click
+   handler + enable/disable logic, but is not part of this page's visual
+   design — ticket-redesign.js auto-clicks it once validated. */
+.ticket-scan-cta-hidden-next {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ── Header (top ~13% of canvas) ───────────────────────────────────────── */
 .ticket-header {
   position: absolute;

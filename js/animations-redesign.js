@@ -820,20 +820,19 @@
 
 
   /* ═══════════════════════════════════════════════════════════════════════
-   * TEMPLATE CAROUSEL: touch/pointer swipe + selection-animation suppression
+   * TEMPLATE CAROUSEL: touch/pointer swipe
    *
    * The template track-outer is made scrollable via CSS
    * (overflow-x: auto; scroll-snap-type: x mandatory in style-redesign.css).
    * This function adds pointer-drag support so click-and-drag also scrolls,
    * mirroring the design-carousel drag behaviour (_addDragScroll).
    *
-   * Selection-animation suppression:
-   *   app.js _selectTemplate() calls _renderCarousel() which adds .animating
-   *   to the track.  To suppress the slide-in animation on selection (but keep
-   *   it for category-change / arrow navigation), we intercept clicks on
-   *   .template-card elements and briefly set data-selecting on the track.
-   *   CSS rule  `.template-carousel-track[data-selecting] > .template-card`
-   *   sets animation:none, so the fade-slide does not play.
+   * (The selection-animation suppression hack that used to live here —
+   * setting data-selecting on the track around a card click — is gone.
+   * It existed to work around app.js's _selectTemplate() rebuilding the
+   * whole track on every tap; _selectTemplate() no longer does that, so
+   * the entrance animation was never being triggered by a selection to
+   * begin with and the suppression logic had nothing left to guard.)
    * ═══════════════════════════════════════════════════════════════════════ */
 
   function _initTemplateCarouselSwipe() {
@@ -1006,36 +1005,6 @@
     outer.addEventListener('pointercancel', _end);
   }
 
-  function _initTemplateSelectionAnimSuppression() {
-    const track = document.getElementById('templateCarouselTrack');
-    if (!track || track.dataset.selGuardReady) return;
-    track.dataset.selGuardReady = '1';
-
-    // Intercept clicks that land on a .template-card (selection action).
-    // Set data-selecting before app.js's click handler fires (which calls
-    // _renderCarousel → requestAnimationFrame → classList.add("animating")).
-    //
-    // Timing chain inside _renderCarousel after a selection click:
-    //   capture click → data-selecting = '1'
-    //   card click handler → _selectTemplate() → _renderCarousel()
-    //     → rAF(A): track.classList.remove("animating"); reflow; classList.add("animating")
-    //   rAF(B) [our guard]: delete data-selecting  ← MUST fire AFTER rAF(A)
-    //
-    // Two rAFs are not sufficient because rAF(A) is queued before our rAF
-    // and both run in the same frame batch, meaning rAF(B) can fire before
-    // the .animating class is added.  Using setTimeout(fn, 0) defers past
-    // the current animation frame batch entirely, guaranteeing data-selecting
-    // is still present when .animating is applied.
-    track.addEventListener('click', (e) => {
-      const card = e.target.closest('.template-card');
-      if (!card) return;
-      track.dataset.selecting = '1';
-      // Clear the flag after a full event-loop turn so it outlives the rAF
-      // that _renderCarousel uses to add .animating.
-      setTimeout(() => { delete track.dataset.selecting; }, 0);
-    }, true); // capture phase so we fire before the card's own click listener
-  }
-
   // Re-run swipe init whenever page-template becomes active (first render
   // of .template-carousel-track-outer may not have happened on DOMContentLoaded).
   function _watchTemplatePage() {
@@ -1046,7 +1015,6 @@
         // Small delay so app.js _renderCarousel() has run and inserted cards
         setTimeout(() => {
           _initTemplateCarouselSwipe();
-          _initTemplateSelectionAnimSuppression();
         }, 80);
       }
     }).observe(templatePage, { attributes: true, attributeFilter: ['class'] });
@@ -1152,11 +1120,10 @@
     _watchDesignPage();
     _ensurePoseOverlay();
 
-    // Template carousel: swipe support + selection-animation suppression
+    // Template carousel: swipe support
     _watchTemplatePage();
     // Also run immediately in case page-template is already active
     _initTemplateCarouselSwipe();
-    _initTemplateSelectionAnimSuppression();
 
     // Printing animation restore
     _restorePrinterFeedAnim();

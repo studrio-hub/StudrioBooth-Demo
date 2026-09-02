@@ -26,7 +26,7 @@
   --accent-dark: #D4880F;
 
   /* Font vars — mirrors style.css; defined here as fallback if loaded standalone */
-  --font-ui:     'Pretendard', 'PretendardVariable', system-ui, -apple-system, sans-serif;
+  --font-ui:     'Neulis', 'Pretendard', 'PretendardVariable', system-ui, -apple-system, sans-serif;
   --font-number: 'Hibana', 'Pretendard', system-ui, sans-serif;
 }
 
@@ -150,6 +150,19 @@ body {
   transform: scale(1);
 }
 /* Deselect: .visible removed → transition reverses automatically */
+
+/*
+ * Minor Fix: all text on Photo Selection forced to black. The title/
+ * subtitle and the "Print & QR" next-label were both using --text/
+ * --text-dim (dark/medium gray), and the counter tile's "/8" total was
+ * gray too — scoped to #page-selection only so no other page is affected.
+ */
+#page-selection .sb-page-title,
+#page-selection .sb-page-subtitle,
+#page-selection .sb-next-label,
+#page-selection .selection-counter-total {
+  color: #000000 !important;
+}
 
 
 /* ── 7. PAGE 6 — ALL DONE ────────────────────────────────────────────────── */
@@ -278,7 +291,9 @@ body {
 
 /* ── 14. SELECTION COUNTER ───────────────────────────────────────────────── */
 .selection-counter-card   { border-color: var(--anim-amber) !important; }
-.selection-counter-number { color: var(--anim-amber) !important; }
+/* Minor Fix: was var(--anim-amber) — this !important was clobbering
+   style.css's own #000000 rule for the same selector. Changed to black. */
+.selection-counter-number { color: #000000 !important; }
 .selection-counter-card.complete {
   background: linear-gradient(
     135deg,
@@ -334,6 +349,38 @@ body {
   background:   #f8f8f8       !important;
   border-color: var(--border) !important;
   box-shadow:   none          !important;
+}
+
+/*
+ * Minor Fix: printing.js's photo→stitched-video swap on Page 6. The stage
+ * is the ONE direct child of #printingVideoFrame (so the printer-feed
+ * slide-in MutationObserver — animations.js/_animatePrinterFeed and
+ * animations-redesign.js/_restorePrinterFeedAnim — only ever fires once,
+ * for the stage itself, not again for the video). The photo canvas stays
+ * in normal flow, sized exactly as it already is elsewhere; the video is
+ * layered on top of it via absolute positioning and cross-fades in with
+ * opacity once it's actually ready to play, instead of the frame briefly
+ * going blank while a freshly-appended element slides in from off-screen.
+ */
+.printing-media-stage {
+  position: relative;
+}
+.printing-media-stage .printing-media-video {
+  position:       absolute;
+  inset:          0;
+  width:          100%;
+  height:         100%;
+  object-fit:     contain;
+  opacity:        0;
+  pointer-events: none;
+  transition:     opacity 0.28s ease;
+}
+.printing-media-stage .printing-media-video.is-visible {
+  opacity: 1;
+}
+.printing-media-stage .layout-canvas.is-fading {
+  transition: opacity 0.28s ease;
+  opacity:    0;
 }
 
 

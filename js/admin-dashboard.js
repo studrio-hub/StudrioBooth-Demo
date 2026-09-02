@@ -14,7 +14,9 @@
     selectedIds: new Set(),
     idsToDelete: [],
     printers: [],
-    selectedPrinter: localStorage.getItem('studrio_selected_printer') || ''
+    // Two independent printer selections — see print-alignment.js PRINTER_KEYS.
+    selectedPrinter4x6: localStorage.getItem('studrio_selected_printer') || '',
+    selectedPrinterA4:  localStorage.getItem('studrio_selected_printer_a4') || ''
   };
 
   // ── Initialization ────────────────────────────────────────────────────────
@@ -123,20 +125,40 @@
   // ── Hardware (Camera + Printer) ──────────────────────────────────────────
 
   function wireHardware() {
-    // Printer Save
+    // Printer Save — 4×6
     document.getElementById('btnSavePrinter')?.addEventListener('click', () => {
       const printer = document.getElementById('printerSelect').value;
-      state.selectedPrinter = printer;
-      localStorage.setItem('studrio_selected_printer', printer);
-      showToast('Printer settings saved');
+      state.selectedPrinter4x6 = printer;
+      printAlignment.setConfiguredPrinter(printer, '4x6');
+      showToast('4×6 printer settings saved');
     });
 
-    // Printer Prefs
+    // Printer Prefs — 4×6
     document.getElementById('btnOpenPrinterPrefs')?.addEventListener('click', async () => {
       if (!window.electronAPI) return;
       const printer = document.getElementById('printerSelect').value;
       if (!printer) return showToast('Select a printer first', 'error');
       
+      showToast('Opening printer preferences...');
+      await window.electronAPI.openPrinterPreferences(printer);
+    });
+
+    // Printer Save — A4 (flipbook). Independent slot from the 4×6 printer
+    // above, so both physical printers can stay connected and configured
+    // at the same time (see print-alignment.js PRINTER_KEYS).
+    document.getElementById('btnSavePrinterA4')?.addEventListener('click', () => {
+      const printer = document.getElementById('printerSelectA4').value;
+      state.selectedPrinterA4 = printer;
+      printAlignment.setConfiguredPrinter(printer, 'a4');
+      showToast('A4 printer settings saved');
+    });
+
+    // Printer Prefs — A4
+    document.getElementById('btnOpenPrinterPrefsA4')?.addEventListener('click', async () => {
+      if (!window.electronAPI) return;
+      const printer = document.getElementById('printerSelectA4').value;
+      if (!printer) return showToast('Select a printer first', 'error');
+
       showToast('Opening printer preferences...');
       await window.electronAPI.openPrinterPreferences(printer);
     });
@@ -233,7 +255,8 @@
       }
     });
 
-    // Test Print
+    // Test Print — 4×6 (goes through compositeForPrint + the 4×6 printer,
+    // exactly like a real kiosk photo-strip job).
     document.getElementById('btnTestPrint')?.addEventListener('click', async () => {
       const btn = document.getElementById('btnTestPrint');
       try {
@@ -258,7 +281,7 @@
         ctx.textAlign = 'center';
         ctx.fillText('STUDRIO BOOTH', canvas.width / 2, 300);
         ctx.font = '60px sans-serif';
-        ctx.fillText('TEST PRINT', canvas.width / 2, 400);
+        ctx.fillText('TEST PRINT — 4×6', canvas.width / 2, 400);
         ctx.fillText(new Date().toLocaleString(), canvas.width / 2, 500);
         
         ctx.beginPath();
@@ -269,10 +292,60 @@
         const testImageUrl = canvas.toDataURL('image/png');
         const prefs = printAlignment.loadPrefs();
         
-        await printAlignment.sendPrintJob(testImageUrl, 1, prefs);
-        showToast('Test print sent to printer');
+        await printAlignment.sendPrintJob(testImageUrl, 1, prefs, '4x6');
+        showToast('Test print sent to 4×6 printer');
       } catch (e) {
         console.error('[Admin] Test print failed:', e);
+        showToast('Print failed: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Print (4×6)';
+      }
+    });
+
+    // Test Print — A4 (flipbook). Uses sendRawPrintJob() against the A4
+    // printer slot, same pipeline the kiosk uses for real flipbook sheets:
+    // no scale/offset compositing, printed at A4 as-is.
+    document.getElementById('btnTestPrintA4')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btnTestPrintA4');
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Printing...';
+
+        // A4 @ 150dpi test pattern (1240×1754) — plenty for a visual test print.
+        const canvas = document.createElement('canvas');
+        canvas.width = 1240;
+        canvas.height = 1754;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 12;
+        ctx.strokeRect(30, 30, canvas.width - 60, canvas.height - 60);
+
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 60px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('STUDRIO BOOTH', canvas.width / 2, 260);
+        ctx.font = '44px sans-serif';
+        ctx.fillText('TEST PRINT — A4 / FLIPBOOK', canvas.width / 2, 340);
+        ctx.fillText(new Date().toLocaleString(), canvas.width / 2, 420);
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(canvas.width, canvas.height);
+        ctx.moveTo(canvas.width, 0); ctx.lineTo(0, canvas.height);
+        ctx.stroke();
+
+        const blob = await new Promise((resolve, reject) =>
+          canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas export failed')), 'image/png')
+        );
+
+        await printAlignment.sendRawPrintJob(blob, 1, printAlignment.A4_PAGE_SIZE, 'a4');
+        showToast('Test print sent to A4 printer');
+      } catch (e) {
+        console.error('[Admin] A4 test print failed:', e);
         showToast('Print failed: ' + e.message, 'error');
       } finally {
         btn.disabled = false;
@@ -316,27 +389,46 @@
 
   async function checkHardware() {
     console.log("[Admin] Checking hardware status...");
-    
-    // 1. Check Printer Agent (Electron)
-    const dot = document.getElementById('printerAgentDot');
-    const label = document.getElementById('printerAgentLabel');
-    const selectorWrap = document.getElementById('printerSelectorWrap');
-    const offlineNotice = document.getElementById('printerOfflineNotice');
+
+    // 1. Check Printer Agent (Electron) — same Electron process serves both
+    // the 4×6 and A4 printer cards, so agent online/offline is one check,
+    // but each card gets its own dot/label/select populated independently.
     const alignmentSection = document.getElementById('alignmentSection');
+    const printerCards = [
+      {
+        dotId: 'printerAgentDot', labelId: 'printerAgentLabel',
+        selectorWrapId: 'printerSelectorWrap', offlineNoticeId: 'printerOfflineNotice',
+        selectId: 'printerSelect', storedValue: () => state.selectedPrinter4x6
+      },
+      {
+        dotId: 'printerAgentDotA4', labelId: 'printerAgentLabelA4',
+        selectorWrapId: 'printerSelectorWrapA4', offlineNoticeId: 'printerOfflineNoticeA4',
+        selectId: 'printerSelectA4', storedValue: () => state.selectedPrinterA4
+      }
+    ];
 
+    let printers = [];
     if (window.electronAPI) {
-      if (dot) dot.className = 'printer-agent-dot online';
-      if (label) label.textContent = 'Electron Agent Online';
-      if (selectorWrap) selectorWrap.hidden = false;
-      if (offlineNotice) offlineNotice.hidden = true;
-      if (alignmentSection) alignmentSection.hidden = false;
-
-      // Load Printers
       try {
-        const printers = await window.electronAPI.getPrinters();
-        const select = document.getElementById('printerSelect');
+        printers = await window.electronAPI.getPrinters();
+      } catch (e) { console.error("[Admin] Failed to get printers:", e); }
+    }
+
+    for (const card of printerCards) {
+      const dot = document.getElementById(card.dotId);
+      const label = document.getElementById(card.labelId);
+      const selectorWrap = document.getElementById(card.selectorWrapId);
+      const offlineNotice = document.getElementById(card.offlineNoticeId);
+      const select = document.getElementById(card.selectId);
+
+      if (window.electronAPI) {
+        if (dot) dot.className = 'printer-agent-dot online';
+        if (label) label.textContent = 'Electron Agent Online';
+        if (selectorWrap) selectorWrap.hidden = false;
+        if (offlineNotice) offlineNotice.hidden = true;
+
         if (select) {
-          const currentVal = select.value || state.selectedPrinter;
+          const currentVal = select.value || card.storedValue();
           select.innerHTML = '<option value="">— Select a printer —</option>';
           printers.forEach(p => {
             const opt = document.createElement('option');
@@ -346,14 +438,15 @@
           });
           select.value = currentVal;
         }
-      } catch (e) { console.error("[Admin] Failed to get printers:", e); }
-    } else {
-      if (dot) dot.className = 'printer-agent-dot offline';
-      if (label) label.textContent = 'Agent Offline';
-      if (selectorWrap) selectorWrap.hidden = true;
-      if (offlineNotice) offlineNotice.hidden = false;
-      if (alignmentSection) alignmentSection.hidden = true;
+      } else {
+        if (dot) dot.className = 'printer-agent-dot offline';
+        if (label) label.textContent = 'Agent Offline';
+        if (selectorWrap) selectorWrap.hidden = true;
+        if (offlineNotice) offlineNotice.hidden = false;
+      }
     }
+
+    if (alignmentSection) alignmentSection.hidden = !window.electronAPI;
 
     // 2. Check Camera
     const cameraDot = document.getElementById('cameraStatusDot');
@@ -458,8 +551,23 @@
       card.className = "session-card";
       if (state.selectedIds.has(session.id)) card.classList.add("session-card--selected");
 
-      const thumbSrc = session.print_ready_url || session.final_strip_url || "";
+      const isFlipbook = session.frame_type === "flipbook";
+
+      // Flipbook's print_ready_url is a full A4 sheet (a 10-page grid) once
+      // saveFlipbookPrintSheets() has run — a bad thumbnail. Its final_strip_url
+      // is the guest's own selected Cover Page photo (composited with the
+      // design's Cover Page overlay by flipbookGenerator.compositeCoverPhoto(),
+      // see flipbook-qr.js), so use that instead. Every other product's
+      // print_ready_url IS the right thumbnail (the actual printed sheet).
+      const thumbSrc = isFlipbook
+        ? (session.final_strip_url || "")
+        : (session.print_ready_url || session.final_strip_url || "");
       const hasVideo  = !!session.final_strip_video_url;
+      // A flipbook session only has something to (re)print once its sheets
+      // have actually been uploaded (saveFlipbookPrintSheets() ran during its
+      // live print) — sessions from before that existed, or where the
+      // best-effort upload failed, have no print_ready_url to reprint from.
+      const hasPrintable = !isFlipbook || !!session.print_ready_url;
       // copies_printed comes from the sessions table (joined or denormalized);
       // fall back to "—" if the column isn't present yet.
       const copies = session.copies_printed != null ? session.copies_printed : "—";
@@ -487,7 +595,7 @@
             <p class="session-card-id">#${session.id}</p>
           </div>
           <div class="session-card-actions">
-            <button class="btn-admin btn-admin-outline btn-sm" data-action="print">Print</button>
+            <button class="btn-admin btn-admin-outline btn-sm${hasPrintable ? '' : ' btn-admin-disabled'}" data-action="print" ${hasPrintable ? '' : 'disabled'}>${isFlipbook ? 'Reprint' : 'Print'}</button>
             <button class="btn-admin btn-admin-outline btn-sm" data-action="download-photo">Save Photo</button>
             <button class="btn-admin btn-admin-outline btn-sm${hasVideo ? '' : ' btn-admin-disabled'}" data-action="download-video" ${hasVideo ? '' : 'disabled'}>Save Video</button>
             <button class="btn-admin btn-admin-ghost btn-sm" data-action="delete">Delete</button>
@@ -618,10 +726,55 @@
   // ── Print Handlers ────────────────────────────────────────────────────────────
 
   async function handlePrint(session) {
-    if (!session.print_ready_url) { showToast("No print-ready file.", 'error'); return; }
+    const isFlipbook = session.frame_type === "flipbook";
+
+    if (!session.print_ready_url) {
+      showToast(isFlipbook ? "No saved flipbook sheets to reprint." : "No print-ready file.", 'error');
+      return;
+    }
+
+    // Route to the correct printer automatically based on the session's
+    // product type — staff never need to touch printer settings to print
+    // or reprint. Flipbook sessions use the separate A4 printer slot;
+    // every other product (2×6, 4×6, keychain) uses the 4×6 printer slot.
     try {
-      if (!state.selectedPrinter) {
-        showToast("Select a printer in the Hardware tab first.", 'error');
+      if (isFlipbook) {
+        const printerA4 = await printAlignment.getConfiguredPrinter('a4');
+        if (!printerA4) {
+          showToast("Select an A4 printer in the Hardware tab first.", 'error');
+          return;
+        }
+
+        // Flipbook's stored print-ready files are already pixel-exact A4
+        // sheets (same contract as the kiosk's flipbookGenerator output), so
+        // this goes through sendRawPrintJob() — no scale/offset compositing,
+        // same as the live kiosk flipbook print path (see print-alignment.js).
+        // A live session prints TWO A4 sheets (print_ready_url = sheet 1,
+        // print_ready_url_2 = sheet 2, see cloudStorage.saveFlipbookPrintSheets());
+        // sessions saved before that field existed, or where the best-effort
+        // upload only captured one sheet, reprint just the sheet available
+        // rather than fail outright.
+        showToast(session.print_ready_url_2 ? "Reprinting sheet 1 of 2…" : "Reprinting…");
+        const sheet1Blob = await (await fetch(session.print_ready_url)).blob();
+        await printAlignment.sendRawPrintJob(sheet1Blob, 1, printAlignment.A4_PAGE_SIZE, 'a4');
+
+        if (session.print_ready_url_2) {
+          showToast("Reprinting sheet 2 of 2…");
+          const sheet2Blob = await (await fetch(session.print_ready_url_2)).blob();
+          await printAlignment.sendRawPrintJob(sheet2Blob, 1, printAlignment.A4_PAGE_SIZE, 'a4');
+        }
+
+        showToast("Reprint successful!");
+        // The kiosk no longer auto-prints flipbook sheets (see printing.js) —
+        // this button is now the only place a flipbook session's copies
+        // actually reach the printer, so log it here for the "copies
+        // printed" dashboard stat instead of at kiosk print time.
+        cloudStorage.logPrintEvent(session.id, session.print_ready_url_2 ? 2 : 1);
+        return;
+      }
+
+      if (!state.selectedPrinter4x6) {
+        showToast("Select a 4×6 printer in the Hardware tab first.", 'error');
         return;
       }
 
@@ -632,9 +785,9 @@
       //   1. Scale + offset are composited onto a 2400×3600 canvas (alignment
       //      is baked into pixels, not left to the driver to interpret).
       //   2. Borderless 4×6 page-size settings are passed to Electron.
-      //   3. The saved printer name is read from the canonical localStorage key.
+      //   3. The saved 4×6 printer name is read from its own localStorage key.
       const prefs = printAlignment.loadPrefs();
-      await printAlignment.sendPrintJob(session.print_ready_url, 1, prefs);
+      await printAlignment.sendPrintJob(session.print_ready_url, 1, prefs, '4x6');
 
       showToast("Print successful!");
     } catch (e) {

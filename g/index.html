@@ -54,6 +54,12 @@
       </button>
     </div>
 
+    <!-- Individual photo grid — the 4 selected shots, each with its own
+         download button. Hidden until gallery.js has photo URLs to show. -->
+    <div class="gallery-photo-grid" id="galleryPhotoGrid" hidden>
+      <!-- photo cells injected by gallery.js -->
+    </div>
+
   </main>
 
   <!-- Loading / error states -->
@@ -134,7 +140,7 @@
     }
 
     function wireButtons() {
-      document.querySelectorAll('.gallery-download-toggle').forEach(btn => {
+      document.querySelectorAll('.gallery-download-toggle, .gallery-grid-download-btn').forEach(btn => {
         // Remove any previous listener to avoid duplicates
         btn.removeEventListener('pointerdown', btn._galleryFillHandler);
         btn._galleryFillHandler = () => animateFill(btn);
@@ -145,12 +151,14 @@
     // Wire immediately for any already-visible buttons
     wireButtons();
 
-    // Re-wire whenever gallery.js un-hides a button (MutationObserver on hidden attr)
-    const row = document.querySelector('.gallery-download-row');
-    if (row) {
-      new MutationObserver(wireButtons).observe(row, {
+    // Re-wire whenever gallery.js un-hides a button, or adds new photo-grid
+    // download buttons (MutationObserver on hidden attr + added nodes).
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      new MutationObserver(wireButtons).observe(mainEl, {
         attributes: true,
         attributeFilter: ['hidden'],
+        childList: true,
         subtree: true
       });
     }

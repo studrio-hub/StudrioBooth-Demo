@@ -50,6 +50,19 @@
  * PRINT & QR SFX (called from app.js on design NEXT press)
  * ──────────────
  *   playPrintSfx()  → printing.wav  fires immediately when NEXT is pressed on Frame Design
+ *                     uploading.wav then fires automatically once printing.wav's
+ *                     'ended' event fires (see the listener near the bottom of
+ *                     this file) — NOT on the Print & QR page simply opening.
+ *   qr_code.wav     → fired from app.js the moment the printing status subtitle
+ *                     is set to "Your photo is now printing at the counter."
+ *
+ * VOICEOVERS (assets/sfx/voiceovers/) — see the VOICEOVERS section below for
+ * the full engine. One clip plays at a time; re-triggering the same clip
+ * mid-playback is a no-op. Most are wired through onPageChange() (page-open
+ * announcements); playPhotoTakingGuide()/playFlipbookGuide() are awaited by
+ * shooting.js/flipbook-shooting.js to gate their countdowns; the ticket_*
+ * and qr_code clips are called directly from the ticket-scan and QR-render
+ * code paths.
  *
  * ELECTRON / WINDOWS
  * ──────────────────
@@ -205,6 +218,114 @@ const audioManager = (() => {
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
+   * VOICEOVERS — guest-facing narration clips, separate from BGM/SFX.
+   *
+   * RULES
+   * ─────
+   *   • Only one voiceover plays at a time. Starting a new clip stops
+   *     whatever voiceover was already playing so narration lines never
+   *     overlap/garble each other.
+   *   • Re-triggering the SAME clip while it is already mid-playback is a
+   *     no-op — this is what keeps a clip from "restarting unnecessarily"
+   *     when its trigger fires more than once (repeated page-change calls,
+   *     timer ticks, etc.).
+   *   • photo_taking_guide.wav and flipbook_guide.wav gate a countdown: the
+   *     caller awaits playPhotoTakingGuide()/playFlipbookGuide(), which
+   *     resolves when the clip's "ended" event fires — or immediately if
+   *     playback fails to start, so a blocked/missing audio file can never
+   *     hang the shoot flow.
+   * ───────────────────────────────────────────────────────────────────────── */
+
+  const VO_PATH = 'assets/sfx/voiceovers/';
+
+  function _makeVO(filename) {
+    const a  = new Audio(VO_PATH + filename);
+    a.loop    = false;
+    a.volume  = 1.0;
+    a.preload = 'auto';
+    return a;
+  }
+
+  const _vo = {
+    welcomeIntro:           _makeVO('welcome_intro.wav'),
+    ticketConfirmed:        _makeVO('ticket_confirmed.wav'),
+    ticketNotCalled:        _makeVO('ticket_not_called.wav'),
+    ticketNotRecognised:    _makeVO('ticket_not_recognised.wav'),
+    ticketUsed:             _makeVO('ticket_used.wav'),
+    templateSelection:      _makeVO('template_selection.wav'),
+    photoTakingGuide:       _makeVO('photo_taking_guide.wav'),
+    flipbookGuide:          _makeVO('flipbook_guide.wav'),
+    photoSelection:         _makeVO('photo_selection.wav'),
+    flipbookVideoSelection: _makeVO('flipbook_video_selection.wav'),
+    flipbookCoverPage:      _makeVO('flipbook_cover_page.wav'),
+    tenSecondsLeft:         _makeVO('10_seconds_left.wav'),
+    uploading:              _makeVO('uploading.wav'),
+    qrCode:                 _makeVO('qr_code.wav'),
+  };
+
+  // The single Audio element currently playing as a voiceover, if any —
+  // used to enforce "only one voiceover at a time" above.
+  let _activeVO = null;
+
+  /**
+   * Fire-and-forget voiceover playback for simple announcement clips.
+   */
+  function _playVO(audio) {
+    if (!audio) return;
+
+    // Already playing this exact clip — leave it alone.
+    if (_activeVO === audio && !audio.paused && !audio.ended) return;
+
+    // A different voiceover is mid-playback — cut it off for the new one.
+    if (_activeVO && _activeVO !== audio) {
+      _activeVO.pause();
+      _activeVO.currentTime = 0;
+    }
+
+    _activeVO = audio;
+    audio.currentTime = 0;
+    audio.play().catch(e =>
+      console.warn('[audioManager] voiceover play() failed:', e.message || e)
+    );
+    audio.addEventListener('ended', () => {
+      if (_activeVO === audio) _activeVO = null;
+    }, { once: true });
+  }
+
+  /**
+   * Await-able voiceover playback for clips that gate a countdown
+   * (photo_taking_guide, flipbook_guide). Resolves once the clip ends, or
+   * immediately if it can't start playing at all.
+   */
+  function _playVOAndWait(audio) {
+    return new Promise((resolve) => {
+      if (!audio) { resolve(); return; }
+
+      if (_activeVO && _activeVO !== audio) {
+        _activeVO.pause();
+        _activeVO.currentTime = 0;
+      }
+      _activeVO = audio;
+      audio.currentTime = 0;
+
+      let _done = false;
+      const finish = () => {
+        if (_done) return;
+        _done = true;
+        if (_activeVO === audio) _activeVO = null;
+        audio.removeEventListener('ended', finish);
+        resolve();
+      };
+
+      audio.addEventListener('ended', finish, { once: true });
+      audio.play().catch(e => {
+        console.warn('[audioManager] voiceover play() failed:', e.message || e);
+        finish();
+      });
+    });
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
    * PUBLIC BGM ZONE SWITCHER
    *
    * Rules:
@@ -292,6 +413,19 @@ const audioManager = (() => {
   });
 
   /* ─────────────────────────────────────────────────────────────────────────
+   * PRINTING SOUND → UPLOADING VOICEOVER HAND-OFF (Minor Fix)
+   *
+   * printing.wav (_print) plays once, immediately when NEXT is pressed on
+   * Frame Design (see playPrintSfx(), called from app.js). uploading.wav
+   * should only start once that clip has actually finished — not the
+   * instant the Print & QR page opens — so we gate it off _print's natural
+   * 'ended' event rather than off page navigation.
+   * ───────────────────────────────────────────────────────────────────────── */
+  _print.addEventListener('ended', () => {
+    _playVO(_vo.uploading);
+  });
+
+  /* ─────────────────────────────────────────────────────────────────────────
    * PUBLIC API
    * ───────────────────────────────────────────────────────────────────────── */
 
@@ -304,7 +438,7 @@ const audioManager = (() => {
      * Pre-loads all audio files so first playback is instant.
      */
     init() {
-      [_standby, _main, _beep, _shutter, _print].forEach(a => a.load());
+      [_standby, _main, _beep, _shutter, _print, ...Object.values(_vo)].forEach(a => a.load());
       console.log('[audioManager] init — audio assets queued for pre-load.');
     },
 
@@ -351,6 +485,7 @@ const audioManager = (() => {
           // "shooting:complete" listener above. Kept as a safety net in
           // case that event is ever missed.
           _setZone('main', { fadeIn: _zone === null });
+          _playVO(_vo.photoSelection);
           break;
 
         case 'design':
@@ -362,8 +497,28 @@ const audioManager = (() => {
           // duck it down after a short settle delay so it's already quiet
           // by the time the guest taps Done — the crossfade into standby
           // then has less distance to travel.
+          //
+          // uploading.wav is intentionally NOT triggered here — per Minor
+          // Fix, it should only play once printing.wav has finished, which
+          // is handled by the 'ended' listener on _print below (so it fires
+          // at the right moment regardless of how long the page-open vs.
+          // NEXT-press timing lines up).
           _setZone('main');
           _schedulePrintingDuck();
+          break;
+
+        case 'template':
+          // Template Selection page opening — voiceover only, BGM zone is
+          // unaffected (no case existed for 'template' before this).
+          _playVO(_vo.templateSelection);
+          break;
+
+        case 'flipbook-select':
+          _playVO(_vo.flipbookVideoSelection);
+          break;
+
+        case 'flipbook-cover-select':
+          _playVO(_vo.flipbookCoverPage);
           break;
 
         // lock, boot — leave audio unchanged
@@ -427,10 +582,63 @@ const audioManager = (() => {
      */
     playPrintSfx() { _sfx(_print); },
 
+    /* ── Voiceovers ──────────────────────────────────────────────────────── */
+
+    /** Queue System starts (guest arrives at the ticket/home page). */
+    playWelcomeIntro() { _playVO(_vo.welcomeIntro); },
+
+    /** QR ticket successfully scanned. */
+    playTicketConfirmed() { _playVO(_vo.ticketConfirmed); },
+
+    /** Ticket scanned but hasn't been called yet. */
+    playTicketNotCalled() { _playVO(_vo.ticketNotCalled); },
+
+    /** Scanned QR code isn't a recognized ticket. */
+    playTicketNotRecognised() { _playVO(_vo.ticketNotRecognised); },
+
+    /** Ticket has already been used. */
+    playTicketUsed() { _playVO(_vo.ticketUsed); },
+
+    /** Template Selection page opens. */
+    playTemplateSelection() { _playVO(_vo.templateSelection); },
+
+    /**
+     * Replaces the old "Get Ready in 10 seconds" numeric intro on the
+     * shooting page. Returns a Promise that resolves when the clip ends
+     * (or immediately on playback failure) so the caller can start the
+     * 8-second per-shot countdown right after.
+     */
+    playPhotoTakingGuide() { return _playVOAndWait(_vo.photoTakingGuide); },
+
+    /**
+     * Plays once when Flipbook Video Taking starts, before the first
+     * video's countdown. Returns a Promise the caller awaits before
+     * starting that countdown.
+     */
+    playFlipbookGuide() { return _playVOAndWait(_vo.flipbookGuide); },
+
+    /** Photo Selection page opens. */
+    playPhotoSelection() { _playVO(_vo.photoSelection); },
+
+    /** Flipbook Video Selection page opens. */
+    playFlipbookVideoSelection() { _playVO(_vo.flipbookVideoSelection); },
+
+    /** Flipbook Cover Page Photo Selection page opens. */
+    playFlipbookCoverPage() { _playVO(_vo.flipbookCoverPage); },
+
+    /** Fires once when 10 seconds remain on a selection page's timer. */
+    playTenSecondsLeft() { _playVO(_vo.tenSecondsLeft); },
+
+    /** Print & QR page opens. */
+    playUploading() { _playVO(_vo.uploading); },
+
+    /** QR code becomes visible on the Print & QR page. */
+    playQrCode() { _playVO(_vo.qrCode); },
+
     /* ── Utilities ───────────────────────────────────────────────────────── */
 
-    muteAll()   { [_standby, _main, _beep, _shutter, _print].forEach(a => { a.muted = true;  }); },
-    unmuteAll() { [_standby, _main, _beep, _shutter, _print].forEach(a => { a.muted = false; }); },
+    muteAll()   { [_standby, _main, _beep, _shutter, _print, ...Object.values(_vo)].forEach(a => { a.muted = true;  }); },
+    unmuteAll() { [_standby, _main, _beep, _shutter, _print, ...Object.values(_vo)].forEach(a => { a.muted = false; }); },
 
     /** DevTools helper */
     _debug: {

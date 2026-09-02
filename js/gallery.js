@@ -19,6 +19,7 @@
     downloadPhotoBtn: document.getElementById("btnDownloadPhoto"),
     downloadVideoBtn: document.getElementById("btnDownloadVideo"),
     // downloadQrBtn: document.getElementById("btnDownloadQR") // Removed per user request
+    photoGrid: document.getElementById("galleryPhotoGrid")
   };
 
   function extOf(url, fallback) {
@@ -64,43 +65,51 @@
     // const qrUrl    = data.printReadyUrl || null; // Removed from gallery per user request
 
     // ---- Main strip preview ----
-    // Prefer the animated video strip; fall back to the static photo if not available.
-    // Video plays silently (muted) — no mute toggle shown.
+    // Minor Fix: the photo strip is now the primary preview (previously the
+    // video strip was preferred). The video — now a single stitched clip
+    // (Video 1 → 2 → 3 → 4, see stripModule.exportStitchedVideo) rather
+    // than the old multi-slot composite — loads hidden and swaps in once
+    // it can actually play, same progressive photo-then-video behavior as
+    // the Print & QR page. If the video never loads, the photo just stays.
     els.stripContainer.innerHTML = "";
-    if (videoUrl) {
-      const videoEl = document.createElement("video");
-      videoEl.src = videoUrl;
-      videoEl.autoplay = true;
-      videoEl.loop = true;
-      videoEl.muted = true;        // must be muted for autoplay to work cross-browser
-      videoEl.playsInline = true;
-      videoEl.setAttribute("playsinline", "");
-      // Explicitly attempt play after the element is in the DOM
-      videoEl.addEventListener("canplay", () => {
-        videoEl.play().catch((e) => console.warn("[gallery] Video autoplay blocked:", e));
-      });
-      videoEl.onerror = () => {
-        // If the video fails to load, fall back to the photo strip
-        console.warn("[gallery] Video load failed, falling back to photo strip.");
-        els.stripContainer.innerHTML = photoUrl
-          ? `<img src="${photoUrl}" alt="Photo strip">`
-          : `<p class="gallery-status">Your strip is still processing — check back in a moment.</p>`;
-      };
-      els.stripContainer.appendChild(videoEl);
-    } else if (photoUrl) {
+    if (photoUrl) {
       const img = document.createElement("img");
       img.src = photoUrl;
       img.alt = "Photo strip";
       els.stripContainer.appendChild(img);
-    } else {
+    } else if (!videoUrl) {
       els.stripContainer.innerHTML = `<p class="gallery-status">Your strip is still processing — check back in a moment.</p>`;
+    }
+
+    if (videoUrl) {
+      const videoEl = document.createElement("video");
+      videoEl.src = videoUrl;
+      videoEl.loop = true;
+      videoEl.muted = true;        // must be muted for autoplay to work cross-browser
+      videoEl.playsInline = true;
+      videoEl.setAttribute("playsinline", "");
+      videoEl.style.display = "none"; // stays hidden until it can actually play
+      videoEl.addEventListener("canplay", () => {
+        // Swap the photo out only once the video is actually ready to
+        // replace it, so there's never a moment showing neither.
+        const img = els.stripContainer.querySelector("img");
+        if (img) img.remove();
+        videoEl.style.display = "";
+        videoEl.play().catch((e) => console.warn("[gallery] Video autoplay blocked:", e));
+      }, { once: true });
+      videoEl.onerror = () => {
+        // If the video fails to load, the photo strip (already showing) just stays.
+        console.warn("[gallery] Video load failed — keeping the photo strip.");
+        videoEl.remove();
+      };
+      els.stripContainer.appendChild(videoEl);
     }
 
     // ---- Download buttons ----
     if (photoUrl && els.downloadPhotoBtn) {
       els.downloadPhotoBtn.hidden = false;
       els.downloadPhotoBtn.addEventListener("click", () => {
-        downloadFile(photoUrl, `${data.id}-photo-strip.png`, els.downloadPhotoBtn);
+        downloadFile(photoUrl, `${data.id}-photo-strip.${extOf(photoUrl, "jpg")}`, els.downloadPhotoBtn);
       });
     }
     if (videoUrl && els.downloadVideoBtn) {
@@ -110,6 +119,52 @@
       });
     }
     // QR download logic removed from gallery per user request (admin panel only)
+
+    // ---- Individual photo grid ----
+    // NOTE: expects data.individualPhotoUrls — a new array of up to 4
+    // public URLs for the compressed individual photos qr.js now prepares
+    // (see qrModule._compressIndividualPhotos). cloud-storage.js needs to
+    // upload sessionState.individualPhotos and write the resulting URLs
+    // back under this field for a session record; until it does, the grid
+    // just stays hidden.
+    renderPhotoGrid(data.individualPhotoUrls, data.id);
+  }
+
+  /* Renders up to 4 individually-downloadable photos below the main strip.
+     Each photo gets a small square download button pinned to its
+     upper-right corner. Hides the whole section if there's nothing to show. */
+  function renderPhotoGrid(urls, sessionId) {
+    if (!els.photoGrid) return;
+    els.photoGrid.innerHTML = "";
+
+    const valid = (urls || []).filter(Boolean);
+    if (!valid.length) {
+      els.photoGrid.hidden = true;
+      return;
+    }
+    els.photoGrid.hidden = false;
+
+    valid.forEach((url, i) => {
+      const cell = document.createElement("div");
+      cell.className = "gallery-grid-photo";
+
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = `Photo ${i + 1}`;
+      cell.appendChild(img);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gallery-grid-download-btn";
+      btn.setAttribute("aria-label", `Download photo ${i + 1}`);
+      btn.textContent = "⬇";
+      btn.addEventListener("click", () => {
+        downloadFile(url, `${sessionId}-photo-${i + 1}.${extOf(url, "jpg")}`, btn);
+      });
+      cell.appendChild(btn);
+
+      els.photoGrid.appendChild(cell);
+    });
   }
 
   function getSessionIdFromHash() {

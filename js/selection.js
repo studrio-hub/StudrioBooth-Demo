@@ -1,5 +1,25 @@
 /*
- * SELECTION LOGIC — Page 4  (v3)
+ * SELECTION LOGIC — Page 4  (v4)
+ *
+ * Changes from v3 (up to 20 photos, counter moved to the page header):
+ *
+ *  Photo Taking can now produce up to 20 shots (guest-triggered shutter,
+ *  see shooting.js) instead of a fixed 8, so the grid no longer has a
+ *  fixed 3x3 shape. Two changes here:
+ *
+ *   1. The live selection counter is no longer a 9th tile injected into
+ *      the grid (#selectionCounterCard) — it's a static element in the
+ *      page header (#selectionCounterHeader / #selectionCounterHeaderNumber,
+ *      see index.html), on the opposite side of the "Select Photos" title.
+ *      _buildGrid() no longer creates or appends a counter tile; grid
+ *      cells are photo cards only. renderCounterCard()/flashLimit() now
+ *      target the header element instead.
+ *
+ *   2. The grid's row height no longer shrinks to fit more photos —
+ *      .selection-grid keeps the same per-row height regardless of shot
+ *      count (see its CSS) and scrolls vertically once rows overflow the
+ *      visible area, so photo aspect ratio/size stays consistent whether
+ *      there are 8 shots or 20.
  *
  * Changes from v2 (crash fix — "page lags/errors right after the 4th photo"):
  *
@@ -37,7 +57,9 @@ const selectionModule = {
     grid: document.getElementById("selectionGrid"),
     previewContainer: document.getElementById("stripPreviewContainer"),
     nextBtn: document.getElementById("btnNextFromSelection"),
-    counterCard: null // created in renderGrid() the first time it runs
+    // Live counter now lives in the page header, not the grid — see index.html.
+    counterCard: document.getElementById("selectionCounterHeader"),
+    counterNumber: document.getElementById("selectionCounterHeaderNumber")
   },
 
   selectionOrder: [], // shot ids in tap order; null means slot is empty (max 4 slots)
@@ -64,7 +86,9 @@ const selectionModule = {
     this._updateAllCardVisuals();
   },
 
-  /* Builds the 8 photo cards + counter tile exactly once per session. */
+  /* Builds the photo cards (up to 20) exactly once per session. The live
+     counter is a static header element (#selectionCounterHeader), not a
+     grid tile, so nothing counter-related is created here. */
   _buildGrid() {
     this.els.grid.innerHTML = "";
     this._cardEls = {};
@@ -100,13 +124,6 @@ const selectionModule = {
           badge: card.querySelector(".photo-card-order-badge")
         };
       });
-
-    // 9th tile — live selection counter
-    const counterCard = document.createElement("div");
-    counterCard.className = "selection-counter-card";
-    counterCard.id = "selectionCounterCard";
-    this.els.grid.appendChild(counterCard);
-    this.els.counterCard = counterCard;
 
     this._cardsBuilt = true;
   },
@@ -176,10 +193,7 @@ const selectionModule = {
     if (!this.els.counterCard) return;
     const selected = sessionState.shots.filter((s) => s.selected).length;
     this.els.counterCard.classList.toggle("complete", selected === 4);
-    this.els.counterCard.innerHTML = `
-      <span><span class="selection-counter-number">${selected}</span><span class="selection-counter-total">/4</span></span>
-      <span class="selection-counter-label">Selected</span>
-    `;
+    if (this.els.counterNumber) this.els.counterNumber.textContent = selected;
   },
 
   updateCountAndNav() {

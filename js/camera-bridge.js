@@ -303,8 +303,23 @@ const realCameraBridge = {
   async stopVideoRecording(freezeBlob) {
     if (!this._recorder) return null;
 
+    // Stop the live draw() rAF loop FIRST, before the freeze-hold below.
+    // This used to happen AFTER the freeze-hold, which meant that for the
+    // whole 600ms hold BOTH loops were painting the same canvas at once:
+    // this freeze-hold loop drawing the just-captured still, and the
+    // still-running draw() loop repainting whatever the live view had
+    // already moved on to (the camera resumes live view immediately after
+    // a capture). The two interleaved frame-by-frame, which is what showed
+    // up as a glitch/flash of live view at the tail end of every recorded
+    // clip.
+    this._recording = false;
+    if (this._recordRafId) { cancelAnimationFrame(this._recordRafId); this._recordRafId = null; }
+
     // Hold on the just-captured still for a beat before ending, same as
-    // the mock bridge, so the clip doesn't cut off mid-motion.
+    // the mock bridge, so the clip doesn't cut off mid-motion. Now that the
+    // live draw loop above is stopped, this is the only thing still
+    // painting the canvas, so the tail of the recording is purely the
+    // frozen photo — no more live-view frames can sneak in.
     if (freezeBlob && this._recordCtx && this._recordCanvas) {
       try {
         const freezeImg = await blobToImage(freezeBlob);
@@ -315,9 +330,6 @@ const realCameraBridge = {
         }
       } catch (_) {}
     }
-
-    this._recording = false;
-    if (this._recordRafId) { cancelAnimationFrame(this._recordRafId); this._recordRafId = null; }
 
     const rawBlob = await new Promise(resolve => {
       this._recorder.onstop = () => {

@@ -3,22 +3,66 @@
  * Updated to use Electron IPC for silent printing.
  *
  * localStorage keys:
- *   studrio_printer_prefs    — canonical alignment key written by savePrefs()
- *                              and read by loadPrefs() for every print job.
- *   studrio_selected_printer — selected printer name (shared with admin).
+ *   studrio_printer_prefs       — canonical alignment key written by savePrefs()
+ *                                 and read by loadPrefs() for every 4×6 print job.
+ *                                 Alignment (scale/offset) only ever applies to
+ *                                 the 4×6 pipeline — flipbook/A4 sheets never use it.
+ *   studrio_selected_printer    — 4×6 printer name (photo strips, keychain sheets).
+ *   studrio_selected_printer_a4 — A4 printer name (flipbook sheets).
+ *
+ * DUAL PRINTER SETUP (4×6 vs A4)
+ * ─────────────────────────────────────────────────────────────────────────
+ * The kiosk can have two physically separate, simultaneously-connected
+ * printers: one loaded with 4×6 photo paper, one loaded with A4 paper for
+ * flipbook sheets. Every function below that talks to a printer takes an
+ * optional `printerType` argument ('4x6' | 'a4') so callers pick the right
+ * one; it defaults to whichever type that function is normally used for
+ * (sendPrintJob → '4x6', sendRawPrintJob → 'a4'), so existing call sites
+ * that don't pass it keep working unchanged.
  *
  * The admin panel previously used "studrio_print_alignment" as a separate key.
  * loadPrefs() merges both sources so any previously-saved admin values are
  * honoured until overwritten. savePrefs() always writes to the canonical key.
+ *
+ * FLIPBOOK SHEETS (no separate print server)
+ * ─────────────────────────────────────────────────────────────────────────
+ * Flipbook's two A4 print sheets used to go out through a standalone
+ * flipbook-print.js module with its own printer selection
+ * (studrio_selected_printer_flipbook) and its own IPC call — effectively a
+ * second, parallel print path. That module has been removed: flipbook
+ * sheets now print through this same module, using this module's own
+ * A4 printer slot (studrio_selected_printer_a4 / getConfiguredPrinter('a4')).
+ *
+ * They do NOT go through sendPrintJob()/compositeForPrint(), though — those
+ * always re-apply the operator's scale/offset alignment prefs and hardcode
+ * a 4×6 page size, both of which flipbook sheets must never have (they're
+ * already composited pixel-exact onto a 2480×3508 A4 canvas by
+ * flipbookGenerator). Instead they use sendRawPrintJob() below, which reuses
+ * the same Electron IPC plumbing but skips the compositing step entirely
+ * and prints at the given page size (A4) as-is, to the A4 printer slot.
  */
 const printAlignment = (function () {
   const PREFS_KEY = "studrio_printer_prefs";
   const LEGACY_PREFS_KEY = "studrio_print_alignment"; // admin panel used this key previously
-  const SELECTED_PRINTER_KEY = "studrio_selected_printer";
+
+  // Two independent printer selections, one per physical printer/paper type.
+  // '4x6' keeps the original key name so existing saved selections keep working.
+  const PRINTER_KEYS = {
+    "4x6": "studrio_selected_printer",
+    "a4":  "studrio_selected_printer_a4"
+  };
+
+  function _printerKeyFor(type) {
+    return PRINTER_KEYS[type] || PRINTER_KEYS["4x6"];
+  }
 
   const PAGE_W_PX = 2400; // 4in @ 600dpi
   const PAGE_H_PX = 3600; // 6in @ 600dpi
   const PX_PER_MM = 600 / 25.4;
+
+  // Physical page size for flipbook's A4 sheets, used by sendRawPrintJob()
+  // (values match what flipbook-print.js used previously — 210mm × 297mm).
+  const A4_PAGE_SIZE = { name: "A4", width: 210000, height: 297000 }; // µm
 
   const defaultPrefs = {
     scale: 100,
@@ -131,18 +175,24 @@ const printAlignment = (function () {
     return [];
   }
 
-  async function getConfiguredPrinter() {
-    return localStorage.getItem(SELECTED_PRINTER_KEY);
+  /*
+   * getConfiguredPrinter/setConfiguredPrinter — `type` is '4x6' (default) or
+   * 'a4'. Each type has its own independent localStorage slot, so both a
+   * 4×6 printer and an A4 printer can be configured and connected at the
+   * same time without one overwriting the other.
+   */
+  async function getConfiguredPrinter(type = "4x6") {
+    return localStorage.getItem(_printerKeyFor(type));
   }
 
-  async function setConfiguredPrinter(printerName) {
-    localStorage.setItem(SELECTED_PRINTER_KEY, printerName);
+  async function setConfiguredPrinter(printerName, type = "4x6") {
+    localStorage.setItem(_printerKeyFor(type), printerName);
   }
 
-  async function sendPrintJob(imageUrl, copies, prefs) {
+  async function sendPrintJob(imageUrl, copies, prefs, printerType = "4x6") {
     if (!window.electronAPI) throw new Error("Electron API not available");
     
-    const printer = await getConfiguredPrinter();
+    const printer = await getConfiguredPrinter(printerType);
     if (!printer) throw new Error("No printer selected in Admin");
 
     // Apply scale + offset composite first — this is where alignment is baked in.
@@ -176,6 +226,57 @@ const printAlignment = (function () {
   }
 
   /*
+   * sendRawPrintJob — sends an already pixel-exact image (e.g. a flipbook
+   * A4 sheet from flipbookGenerator) straight to the configured printer
+   * with NO compositing step: no scale/offset prefs, no centering, no
+   * reapplied alignment.
+   *
+   * Takes the sheet as a Blob (not a blob: URL) and reads it directly via
+   * FileReader — it does NOT fetch() the blob. fetch() on a blob: URL falls
+   * under the app's CSP connect-src, which only allows 'self' and the
+   * Supabase origin, so fetching a blob: URL is blocked and throws
+   * "Failed to fetch". Loading blob: URLs into <img>/<video> elements (as
+   * compositeForPrint() does) is a separate img-src/media-src check that
+   * already permits blob:, which is why that path isn't affected — but
+   * fetch() here is not, so this must consume the Blob itself directly.
+   *
+   * printerType defaults to 'a4' (flipbook's own printer slot), independent
+   * of whatever the 4×6 printer is set to — see PRINTER_KEYS above.
+   *
+   * pageSize defaults to A4_PAGE_SIZE, but callers can pass any Electron
+   * pageSize object.
+   */
+  async function sendRawPrintJob(blob, copies, pageSize, printerType = "a4") {
+    if (!window.electronAPI) throw new Error("Electron API not available");
+
+    const printer = await getConfiguredPrinter(printerType);
+    if (!printer) throw new Error("No printer selected in Admin");
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const result = await window.electronAPI.printSilent({
+          filePath: reader.result, // data URL — untouched, no composite step
+          printerName: printer,
+          settings: {
+            copies: copies || 1,
+            pageSize: pageSize || A4_PAGE_SIZE,
+            scaleFactor: 100, // no additional scaling on top of the given pixels
+            printBackground: true,
+            margins: { marginType: "none" }
+          }
+        });
+        // Wait for print confirmation before resolving — same contract as
+        // sendPrintJob(), so callers can await it before marking a job done.
+        if (result.success) resolve({ success: true });
+        else reject(new Error(result.error));
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /*
    * resetPrefs — clears both the canonical and legacy alignment keys from
    * localStorage and returns the factory defaults. Call this from the admin
    * panel when previously-saved values from the old px-unit sliders are causing
@@ -191,6 +292,7 @@ const printAlignment = (function () {
   }
 
   return {
+    A4_PAGE_SIZE,
     loadPrefs,
     savePrefs,
     resetPrefs,
@@ -198,6 +300,7 @@ const printAlignment = (function () {
     listPrinters,
     getConfiguredPrinter,
     setConfiguredPrinter,
-    sendPrintJob
+    sendPrintJob,
+    sendRawPrintJob
   };
 })();

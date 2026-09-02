@@ -228,6 +228,72 @@ body {
   margin-top: 2px;
 }
 
+/* ── Individual photo grid ───────────────────────────────────────────────────
+ * The 4 selected shots, each individually downloadable — sits below the
+ * main strip + its download buttons. Hidden by gallery.js when there's
+ * nothing to show (e.g. the compressed individual photos haven't uploaded
+ * yet, or the session predates this feature).
+ */
+.gallery-photo-grid {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.gallery-grid-photo {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--strip-bg);
+}
+
+.gallery-grid-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Square pressable button pinned to the photo's upper-right corner */
+.gallery-grid-download-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(28, 30, 33, 0.55);
+  color: #ffffff;
+  font-size: 0.95rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.12s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.gallery-grid-download-btn:hover:not(:disabled) {
+  background: rgba(28, 30, 33, 0.75);
+}
+
+.gallery-grid-download-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.gallery-grid-download-btn:disabled,
+.gallery-grid-download-btn.is-downloading {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+@media (max-width: 360px) {
+  .gallery-photo-grid       { gap: 8px; }
+  .gallery-grid-download-btn { width: 28px; height: 28px; border-radius: 7px; font-size: 0.82rem; }
+}
+
 /* ── Status messages (loading / not-found) ──────────────────────────────────── */
 .gallery-status {
   text-align: center;

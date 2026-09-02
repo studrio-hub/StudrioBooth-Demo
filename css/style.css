@@ -1,17 +1,25 @@
 /* ── PRETENDARD FONT FAMILY ─────────────────────────────────────────────── */
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Thin.otf') format('opentype'); font-weight: 100; font-display: swap; }
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-ExtraLight.otf') format('opentype'); font-weight: 200; font-display: swap; }
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Light.otf') format('opentype'); font-weight: 300; font-display: swap; }
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Regular.otf') format('opentype'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Medium.otf') format('opentype'); font-weight: 500; font-display: swap; }
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-SemiBold.otf') format('opentype'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Bold.otf') format('opentype'); font-weight: 700; font-display: swap; }
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-ExtraBold.otf') format('opentype'); font-weight: 800; font-display: swap; }
-@font-face { font-family: 'Pretendard'; src: url('assets/fonts/Pretendard-Black.otf') format('opentype'); font-weight: 900; font-display: swap; }
-@font-face { font-family: 'PretendardVariable'; src: url('assets/fonts/PretendardVariable.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-Thin.woff2') format('woff2'); font-weight: 100; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-ExtraLight.woff2') format('woff2'); font-weight: 200; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-Light.woff2') format('woff2'); font-weight: 300; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-ExtraBold.woff2') format('woff2'); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Pretendard'; src: url('../assets/fonts/Pretendard-Black.woff2') format('woff2'); font-weight: 900; font-display: swap; }
+@font-face { font-family: 'PretendardVariable'; src: url('../assets/fonts/PretendardVariable.woff2') format('woff2-variations'); font-weight: 100 900; font-display: swap; }
 
 /* ── HIBANA — large numerals, counters, countdowns ──────────────────────── */
-@font-face { font-family: 'Hibana'; src: url('assets/fonts/Hibana-SubMedium.otf') format('opentype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Hibana'; src: url('../assets/fonts/Hibana-SubMedium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+
+/* ── NEULIS — converted + registered for availability; not currently applied
+   to any element (no existing font-family reference used it before this
+   change), so registering it here does not alter any existing UI. ────────── */
+@font-face { font-family: 'Neulis'; src: url('../assets/fonts/Neulis-Light.woff2') format('woff2'); font-weight: 300; font-display: swap; }
+@font-face { font-family: 'Neulis'; src: url('../assets/fonts/Neulis-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Neulis'; src: url('../assets/fonts/Neulis-Medium.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Neulis'; src: url('../assets/fonts/Neulis-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
 
 :root {
   --bg: #f4f5f7;
@@ -29,13 +37,13 @@
   /* ── Redesign tokens (Pages 2–6) ────────────────────── */
   --grid-color: rgba(0,0,0,0.055);
   --grid-size: 48px;
-  --sb-next-radius: 25px 0px 25px 0px;
+  --sb-next-radius: 0;
   --sb-next-grad-start: #fffbee;
   --sb-next-grad-end: #ffdd66;
   --sb-header-h: 10.35vh; /* +15% from 9.0vh per redesign spec */
 
   /* ── Font stack ─────────────────────────────────────── */
-  --font-ui:     'Pretendard', 'PretendardVariable', system-ui, -apple-system, sans-serif;
+  --font-ui:     'Neulis', 'Pretendard', 'PretendardVariable', system-ui, -apple-system, sans-serif;
   --font-number: 'Hibana', 'Pretendard', system-ui, sans-serif;
 }
 
@@ -156,31 +164,37 @@
 }
 
 /* ── NEXT / PRIMARY ACTION BUTTON (white bg + Studrio yellow border) ──────── */
+/* Inactive (disabled): 1px black border, white background.
+   Active (enabled): 1px black border, #ffe165 background. All-caps text. */
 .sb-btn-next {
   background: #ffffff !important;
-  border: 2px solid #F0C231 !important;
+  border: 1px solid #000000 !important;
   border-radius: var(--sb-next-radius) !important;
   color: var(--text) !important;
   font-size: 1.6vh !important;
   font-weight: 700 !important;
   letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
   padding: 1.2vh 2.4vw !important;
   min-width: 13vw !important;
   cursor: pointer;
-  box-shadow: 0 2px 12px rgba(240, 194, 49, 0.22) !important;
+  box-shadow: none !important;
   transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease !important;
   overflow: hidden;
   position: relative;
 }
+.sb-btn-next:not(:disabled) {
+  background: #ffe165 !important;
+  border: 1px solid #000000 !important;
+}
 .sb-btn-next:not(:disabled):hover {
-  background: #fffbee !important;
-  box-shadow: 0 4px 16px rgba(240, 194, 49, 0.38) !important;
+  filter: brightness(0.96);
   transform: translateY(-1px);
 }
 .sb-btn-next:not(:disabled):active { transform: scale(0.97); }
 .sb-btn-next:disabled {
-  background: #f5f5f5 !important;
-  border-color: #d9dce1 !important;
+  background: #ffffff !important;
+  border: 1px solid #000000 !important;
   color: var(--text-dim) !important;
   cursor: not-allowed;
   box-shadow: none !important;
@@ -851,7 +865,10 @@ button {
 .photos-taken-label {
   font-size: 1.4vh;
   font-weight: 600;
-  color: rgba(255,255,255,0.85);
+  /* Was rgba(255,255,255,0.85) — right panel background is now white
+     (see #page-shooting/#page-flipbook-shoot .shooting-side-right in
+     style-redesign.css), so this needs to be dark to stay legible. */
+  color: rgba(0,0,0,0.65);
   letter-spacing: 0.05em;
 }
 
@@ -859,7 +876,8 @@ button {
   font-size: 6vh;
   font-weight: 800;
   font-family: var(--font-number);
-  color: #ffffff;
+  /* Was #ffffff — same white-panel reasoning as .photos-taken-label above. */
+  color: #1a1a1a;
   line-height: 1.05;
   letter-spacing: -0.02em;
 }
@@ -1435,22 +1453,37 @@ button {
   justify-content: center;
 }
 
-/* Tight zero-gap grid for selection photos — equal square cells */
+/*
+ * Tight zero-gap grid for selection photos — equal cells, fixed row height.
+ *
+ * Photo Taking can now produce up to 20 shots (was a fixed 8), so this no
+ * longer uses grid-auto-rows: 1fr (which divides the container's height
+ * evenly across ALL rows, shrinking every cell as more rows are added).
+ * Instead each row is a fixed 33.3333% of the grid's own height — the same
+ * size 3 rows would be at 1fr — so cells never shrink; once there are more
+ * than 3 rows (10+ shots) the grid simply grows taller than its container
+ * and scrolls vertically instead.
+ */
 .selection-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: 1fr;
+  grid-auto-rows: 33.3333%;
   gap: 0;
   width: 100%;
   height: 100%;
   min-height: 0;
   border: 1px solid var(--border);
   border-radius: 10px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  touch-action: pan-y;
   background: var(--panel);
   /* Enforce consistent aspect on all cells */
   align-items: stretch;
 }
+.selection-grid::-webkit-scrollbar { display: none; }
 
 /* ── legacy ── */
 .selection-layout {
@@ -1461,11 +1494,50 @@ button {
   min-height: 0;
 }
 
-/* ---- 9th tile: live selection counter, updates as photos are picked ---- */
+/* ---- Live selection counter — page header, opposite the "Select Photos"
+   title (see index.html #selectionCounterHeader). Replaces the old 9th
+   grid tile below (.selection-counter-card / #selectionCounterCard),
+   which selection.js no longer creates. Those rules are left in place —
+   unused — rather than removed, in case anything else still expects them. */
+.selection-counter-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3vw;
+  padding: 0.9vh 1.4vw;
+  border: 2px solid #000000;
+  border-radius: 10px;
+  background: var(--panel);
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.selection-counter-header-number {
+  font-size: 2.6vh;
+  font-weight: 800;
+  font-family: var(--font-number);
+  color: #000000;
+  line-height: 1;
+}
+.selection-counter-header-total {
+  font-size: 1.3vh;
+  color: var(--text-dim);
+}
+.selection-counter-header-label {
+  font-size: 1.2vh;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #000000;
+  margin-left: 0.6vw;
+}
+.selection-counter-header.complete { background: #ffe165; }
+/* Reuses the counterFlash keyframes defined below with .selection-counter-card.flash */
+.selection-counter-header.flash { animation: counterFlash 0.3s ease; }
+
+/* ---- 9th tile (legacy, unused): live selection counter, updates as photos are picked ---- */
 .selection-counter-card {
   aspect-ratio: 4 / 3;
   background: var(--panel);
-  border: 2px solid var(--accent);
+  border: 2px solid #000000;
   border-radius: 0px 0px 10px 0px; /* top-left: 0, top-right: 0, bottom-right: 10px, bottom-left: 0 */
   display: flex;
   flex-direction: column;
@@ -1478,20 +1550,21 @@ button {
   font-size: 5.1vh; /* +50% from 3.4vh */
   font-weight: 800;
   font-family: var(--font-number);
-  color: var(--accent);
+  /* Minor Fix: was var(--accent) — changed to black for legibility. */
+  color: #000000;
   line-height: 1;
 }
 .selection-counter-total { font-size: 1.7vh; color: var(--text-dim); margin-left: 0.15vh; }
 .selection-counter-label {
-  font-size: 1.1vh;
+  font-size: 1.43vh; /* +30% from 1.1vh */
   letter-spacing: 0.1em;
-  color: var(--text-dim);
+  color: #000000;
   text-transform: uppercase;
 }
-.selection-counter-card.complete { background: var(--accent); border-color: var(--accent); }
+.selection-counter-card.complete { background: var(--accent); border-color: #000000; }
 .selection-counter-card.complete .selection-counter-number,
-.selection-counter-card.complete .selection-counter-total,
-.selection-counter-card.complete .selection-counter-label { color: #fff !important; }
+.selection-counter-card.complete .selection-counter-total { color: #fff !important; }
+.selection-counter-card.complete .selection-counter-label { color: #000000 !important; }
 .selection-counter-card.flash { animation: counterFlash 0.3s ease; }
 @keyframes counterFlash {
   0% { box-shadow: 0 0 0 4px rgba(224,64,63,0.45); }
@@ -1653,6 +1726,17 @@ button {
 }
 
 /*
+ * Selection page only: the 4×6 preview canvas can grow tall enough
+ * (vertically centered in .strip-preview-wrap, up to 72vh) to sit low
+ * enough that it collides with the floating Next button in the bottom-right
+ * corner. Nudge it up slightly for clearance — visual only, doesn't change
+ * the canvas or affect the Design/Print pages' preview.
+ */
+#page-selection .single-strip-clip[data-frame="4x6"] {
+  transform: translateY(-3vh);
+}
+
+/*
  * preview-single: strip.js now passes a TRUE single-strip canvas for 2×6 preview.
  * The canvas is already single-strip width — no clipping needed. Fill the column.
  */
@@ -1711,18 +1795,25 @@ button {
 
 /*
  * film-duo: preview canvas is 3600×1200 LANDSCAPE (aspect 3:1).
- * Width-constrained so the landscape strip fills the column without overflowing.
+ * The wrapper's own box is locked to that exact ratio via aspect-ratio
+ * (rather than being derived indirectly from the child canvas's rendered
+ * height), and both canvas layers fill it at 100%/100% — this guarantees
+ * the photo and overlay canvases stay pixel-aligned with each other and
+ * with the template artwork inside #stripPreviewContainer.
  */
 .single-strip-clip[data-frame="film-duo"] {
   width: 100%;
+  max-width: 100%;
+  aspect-ratio: 3600 / 1200;
   height: auto;
-  overflow: visible;
+  max-height: 40vh;
+  overflow: hidden;
 }
 .single-strip-clip[data-frame="film-duo"] .layout-canvas {
   width: 100% !important;
-  height: auto !important;
-  max-height: 40vh !important;
+  height: 100% !important;
   max-width: 100% !important;
+  max-height: 100% !important;
 }
 
 .single-strip-clip[data-frame="wide-mini"] {
@@ -2039,9 +2130,18 @@ button {
 .printing-video-frame[data-frame="long-mini"] {
   aspect-ratio: 1200 / 3600;
 }
-/* film-duo: preview 3600×1200 → 3:1 (landscape strip) */
+/* film-duo: preview 3600×1200 → 3:1 (landscape strip).
+   Width-constrained (unlike the other, portrait/near-square frame types
+   above, which are safely height-constrained) so this wide landscape strip
+   never grows past the column's width — aspect-ratio then jointly resolves
+   both dimensions if max-height also binds, so it stays fully contained
+   without stretching or overlapping .printing-qr-col. */
 .printing-video-frame[data-frame="film-duo"] {
   aspect-ratio: 3600 / 1200;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  max-height: 82%;
 }
 /* wide-mini: preview 2400×1800 → 4:3 */
 .printing-video-frame[data-frame="wide-mini"] {
@@ -2182,23 +2282,23 @@ button {
   transition: none;
 }
 
-/* Disabled state: gray */
+/* Inactive/disabled state: 1px black border, white background */
 .printing-done-btn:disabled,
 .printing-done-btn:not(.ready) {
-  background: #f5f5f5 !important;
-  border: 2px solid #d9dce1 !important;
+  background: #ffffff !important;
+  border: 1px solid #000000 !important;
   color: var(--text-dim) !important;
   cursor: not-allowed !important;
   box-shadow: none !important;
 }
 
-/* Ready state: white + yellow border */
+/* Active/ready state: 1px black border, #ffe165 background */
 .printing-done-btn.ready {
-  background: #ffffff !important;
-  border: 2px solid #F0C231 !important;
+  background: #ffe165 !important;
+  border: 1px solid #000000 !important;
   color: var(--text) !important;
   cursor: pointer !important;
-  box-shadow: 0 2px 12px rgba(240, 194, 49, 0.22) !important;
+  box-shadow: none !important;
 }
 
 .printing-done-btn:active.ready { transform: scale(0.97); }
@@ -2618,17 +2718,23 @@ button {
 
 /* ══════════════════════════════════════════════════════════════════════════
  * PAGE 3 — SHOOTING: taken-photo thumbnails inside the right side panel
- * These slot into the existing .shooting-side-right panel so no HTML
- * restructuring is needed — app.js already drives photosTakenCount.
+ * (LEGACY — no longer wired up. animations-redesign.js's
+ * _injectShootingTakenCol() only runs against a `.shooting-layout-solo`
+ * wrapper that no longer exists in the current markup, so it always bails
+ * out early and these thumbnails are never created. Left in place —
+ * harmless — rather than removed since it wasn't asked for.)
  * ══════════════════════════════════════════════════════════════════════════ */
 
-/* Thumbnail cards stacked inside the right dark panel */
+/* Thumbnail cards stacked inside the right panel. Border/background were
+   originally a faint white tint (meant to sit on the old dark panel);
+   right panel is now white (style-redesign.css), so these are given a
+   visible light-gray fill + dark border instead so they don't disappear. */
 .shooting-taken-thumb {
   width: calc(100% - 0.8vw);
   aspect-ratio: 3 / 2;
   border-radius: 8px;
-  background: rgba(255,255,255,0.08);
-  border: 1.5px solid rgba(255,255,255,0.18);
+  background: #f4f4f4;
+  border: 1.5px solid rgba(0,0,0,0.18);
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
@@ -2655,23 +2761,78 @@ button {
   pointer-events: none;
 }
 
-/* Wrap thumbnails above the existing counter inside the right side panel */
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 3 — SHOOTING: right side panel layout
+ * Photos Taken counter (top) → SHUTTER button (vertically centered in the
+ * remaining space) → DONE button (bottom). Guest-triggered shutter flow —
+ * see shooting.js.
+ * ══════════════════════════════════════════════════════════════════════════ */
 #page-shooting .shooting-side-right {
-  overflow-y: auto;
-  scrollbar-width: none;
-  gap: 0.7vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
+  gap: 1.4vh;
 }
-#page-shooting .shooting-side-right::-webkit-scrollbar { display: none; }
 
-/* Ensure the photos-taken block stays at the bottom of the right panel */
+/* Counter block sits at the top of the panel (was bottom-pinned when this
+   panel only ever held the counter; now it's the first of three sections). */
 #page-shooting .shooting-side-right .shooting-photos-taken {
-  margin-top: auto;
   flex-shrink: 0;
   width: 100%;
+  text-align: center;
+}
+
+/* Centers the SHUTTER button in the space between the counter and DONE. */
+.shooting-shutter-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shooting-shutter-btn {
+  width: 6.4vw;
+  height: 6.4vw;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+.shooting-shutter-btn-ring {
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  background: #ffe165;
+  border: 2px solid #000000;
+  pointer-events: none;
+}
+.shooting-shutter-btn:not(:disabled):active { transform: scale(0.92); }
+.shooting-shutter-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.shooting-shutter-btn:disabled .shooting-shutter-btn-ring {
+  background: #cfcfcf;
+}
+
+/* DONE button — reuses .sb-btn-next's disabled(gray)/active(yellow) states;
+   only overrides sizing so it fits the narrower 12vw side panel instead of
+   .sb-btn-next's min-width:13vw. */
+.shooting-done-btn {
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0 !important;
+  padding: 1.1vh 0.6vw !important;
+  font-size: 1.3vh !important;
 }
 
 

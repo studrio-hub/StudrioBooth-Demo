@@ -56,8 +56,8 @@ const templateManager = (() => {
   let _toast         = null; // shared with admin-dashboard.js
 
   // ── Category / format constants ─────────────────────────────────────────────
-  const CATEGORIES = ["Originals", "Designs", "Accessories"];
-  const FORMATS    = ["2x6", "4x6", "long-duo", "long-mini", "film-duo", "wide-mini"];
+  const CATEGORIES = ["Originals", "Designs", "Accessories", "Flipbook"];
+  const FORMATS    = ["2x6", "4x6", "long-duo", "long-mini", "film-duo", "wide-mini", "flipbook"];
 
   // Human-readable labels for the new frame formats
   const FORMAT_LABELS = {
@@ -66,8 +66,14 @@ const templateManager = (() => {
     "long-duo": "Long Duo",
     "long-mini":"Long Mini",
     "film-duo": "Film Duo",
-    "wide-mini":"Wide Mini"
+    "wide-mini":"Wide Mini",
+    "flipbook": "Flipbook (3 Slots)"
   };
+
+  // Flipbook templates use 3 independent overlay slots instead of one
+  // shared frame PNG — checked in a few places below wherever the code
+  // otherwise looks at a single overlay_path_* column.
+  const FLIPBOOK_OVERLAY_COLS = ["overlay_path_flipbook_cover", "overlay_path_flipbook_a4_1", "overlay_path_flipbook_a4_2", "overlay_path_flipbook_preview"];
 
   let _templates     = [];
   let _dragSrcIndex  = null; // for drag-and-drop reordering
@@ -102,6 +108,7 @@ const templateManager = (() => {
       if (t.overlay_path_long_mini)return "long-mini";
       if (t.overlay_path_film_duo) return "film-duo";
       if (t.overlay_path_wide_mini)return "wide-mini";
+      if (t.overlay_path_flipbook_cover || t.overlay_path_flipbook_a4_1 || t.overlay_path_flipbook_a4_2) return "flipbook";
       return null;
     }
 
@@ -405,6 +412,7 @@ const templateManager = (() => {
                          : template.overlay_path_long_mini ? "long-mini"
                          : template.overlay_path_film_duo  ? "film-duo"
                          : template.overlay_path_wide_mini ? "wide-mini"
+                         : (template.overlay_path_flipbook_cover || template.overlay_path_flipbook_a4_1 || template.overlay_path_flipbook_a4_2) ? "flipbook"
                          : "2x6";
 
     // Pre-fill name, category, format
@@ -419,9 +427,17 @@ const templateManager = (() => {
     const f2El = sel("editTemplateFile2x6");
     const f4El = sel("editTemplateFile4x6");
     const fPvEl = sel("editTemplateFilePreviewOverlay");
+    const fFbCoverEl = sel("editTemplateFileFlipbookCover");
+    const fFbA1El    = sel("editTemplateFileFlipbookA4Page1");
+    const fFbA2El    = sel("editTemplateFileFlipbookA4Page2");
+    const fFbPvEl    = sel("editTemplateFileFlipbookPreview");
     if (f2El)  f2El.value  = "";
     if (f4El)  f4El.value  = "";
     if (fPvEl) fPvEl.value = "";
+    if (fFbCoverEl) fFbCoverEl.value = "";
+    if (fFbA1El)    fFbA1El.value    = "";
+    if (fFbA2El)    fFbA2El.value    = "";
+    if (fFbPvEl)    fFbPvEl.value    = "";
 
     // Show the existing overlay file status (check all supported format columns)
     const curFileEl = sel("editCurrentFile");
@@ -434,6 +450,16 @@ const templateManager = (() => {
                       template.overlay_path_wide_mini;
       curFileEl.textContent = hasFile ? "✓ Existing file" : "None";
     }
+
+    // Show per-slot existing-file status for flipbook templates
+    const curFbCoverEl = sel("editCurrentFlipbookCover");
+    const curFbA1El    = sel("editCurrentFlipbookA4Page1");
+    const curFbA2El    = sel("editCurrentFlipbookA4Page2");
+    if (curFbCoverEl) curFbCoverEl.textContent = template.overlay_path_flipbook_cover ? "✓ Existing file" : "None";
+    if (curFbA1El)    curFbA1El.textContent    = template.overlay_path_flipbook_a4_1  ? "✓ Existing file" : "None";
+    if (curFbA2El)    curFbA2El.textContent    = template.overlay_path_flipbook_a4_2  ? "✓ Existing file" : "None";
+    const curFbPvEl = sel("editCurrentFlipbookPreview");
+    if (curFbPvEl)    curFbPvEl.textContent    = template.overlay_path_flipbook_preview ? "✓ Existing file" : "None (optional)";
 
     // Show the existing strip preview overlay status
     const curPreviewOverlayEl = sel("editCurrentPreviewOverlay");
@@ -476,12 +502,16 @@ const templateManager = (() => {
     const fieldPreview = sel("editFieldPreviewOverlay");
     const previewLabel = sel("editPreviewOverlayLabel");
     const previewHint  = sel("editPreviewOverlayHint");
+    const fieldFlipbook = sel("editFieldFlipbook");
+
+    const isFlipbook = format === "flipbook";
 
     // New frame types reuse the 2×6 file field with an updated label
     const isNew = ["long-duo", "long-mini", "film-duo", "wide-mini"].includes(format);
 
     if (field2x6) field2x6.style.display = (format === "2x6" || isNew) ? "" : "none";
     if (field4x6) field4x6.style.display = format === "4x6" ? "" : "none";
+    if (fieldFlipbook) fieldFlipbook.style.display = isFlipbook ? "" : "none";
 
     // Update the label inside the 2x6 field when a new format is selected
     if (field2x6) {
@@ -551,6 +581,10 @@ const templateManager = (() => {
       const f4El       = sel("editTemplateFile4x6");
       const fThEl      = sel("editTemplateFileThumb");
       const fPvEl      = sel("editTemplateFilePreviewOverlay");
+      const fFbCoverEl = sel("editTemplateFileFlipbookCover");
+      const fFbA1El    = sel("editTemplateFileFlipbookA4Page1");
+      const fFbA2El    = sel("editTemplateFileFlipbookA4Page2");
+      const fFbPvEl    = sel("editTemplateFileFlipbookPreview");
 
       const newName     = nameEl     ? nameEl.value.trim()     : "";
       const newCategory = categoryEl ? categoryEl.value.trim() : "Originals";
@@ -569,6 +603,15 @@ const templateManager = (() => {
       const isNewFormat = ["long-duo", "long-mini", "film-duo", "wide-mini"].includes(newFormat);
       const newPreviewOverlay = (isNewFormat && fPvEl) ? (fPvEl.files[0] || null) : null;
 
+      // Flipbook — 3 independent slots, each replaceable independently.
+      // Leaving any of the 3 blank keeps that slot's existing asset.
+      const isFlipbookFormat = newFormat === "flipbook";
+      const newFileFlipbookCover   = (isFlipbookFormat && fFbCoverEl) ? (fFbCoverEl.files[0] || null) : null;
+      const newFileFlipbookA4Page1 = (isFlipbookFormat && fFbA1El)    ? (fFbA1El.files[0]    || null) : null;
+      const newFileFlipbookA4Page2 = (isFlipbookFormat && fFbA2El)    ? (fFbA2El.files[0]    || null) : null;
+      // Preview Frame Overlay — optional, screen preview only (not printed).
+      const newFileFlipbookPreview = (isFlipbookFormat && fFbPvEl)    ? (fFbPvEl.files[0]    || null) : null;
+
       if (!newName) { showToast("Template name cannot be empty."); return; }
 
       submitBtn.disabled = true;
@@ -583,7 +626,9 @@ const templateManager = (() => {
         let storagePrefix = null;
         const firstPath = current.overlay_path_2x6 || current.overlay_path_4x6 ||
                           current.overlay_path_long_duo || current.overlay_path_long_mini ||
-                          current.overlay_path_film_duo || current.overlay_path_wide_mini;
+                          current.overlay_path_film_duo || current.overlay_path_wide_mini ||
+                          current.overlay_path_flipbook_cover || current.overlay_path_flipbook_a4_1 ||
+                          current.overlay_path_flipbook_a4_2  || current.overlay_path_flipbook_preview;
         if (firstPath) {
           storagePrefix = firstPath.replace(/\/overlay_[^/]+\.png$/, "");
         } else if (current.thumbnail_path) {
@@ -599,10 +644,13 @@ const templateManager = (() => {
 
         // All overlay path columns not matching the new format are cleared when a
         // new file is uploaded (format switch). This prevents stale paths persisting.
+        // Flipbook's 3 slots are NOT included here — they are cleared only when the
+        // format switches AWAY from flipbook (see below), never against each other.
         const ALL_OVERLAY_COLS = [
           "overlay_path_2x6", "overlay_path_4x6",
           "overlay_path_long_duo", "overlay_path_long_mini",
-          "overlay_path_film_duo", "overlay_path_wide_mini"
+          "overlay_path_film_duo", "overlay_path_wide_mini",
+          ...FLIPBOOK_OVERLAY_COLS
         ];
 
         if (newFile2x6) {
@@ -658,6 +706,41 @@ const templateManager = (() => {
           );
           ALL_OVERLAY_COLS.filter(c => c !== "overlay_path_wide_mini").forEach(c => {
             if (current[c] && newFormat === "wide-mini") updates[c] = null;
+          });
+        }
+
+        // Flipbook — each of the 3 print slots + optional Preview Frame
+        // Overlay is replaced independently; leaving a slot's file input
+        // blank keeps that slot's existing asset.
+        if (newFileFlipbookCover || newFileFlipbookA4Page1 || newFileFlipbookA4Page2 || newFileFlipbookPreview) {
+          if (newFileFlipbookCover) {
+            if (progressEl) progressEl.textContent = "Uploading Flipbook — Cover Page…";
+            updates.overlay_path_flipbook_cover = await adminTemplates._uploadFile(
+              newFileFlipbookCover, `${storagePrefix}/overlay_flipbook_cover.png`, "image/png"
+            );
+          }
+          if (newFileFlipbookA4Page1) {
+            if (progressEl) progressEl.textContent = "Uploading Flipbook — A4 Page 1…";
+            updates.overlay_path_flipbook_a4_1 = await adminTemplates._uploadFile(
+              newFileFlipbookA4Page1, `${storagePrefix}/overlay_flipbook_a4_1.png`, "image/png"
+            );
+          }
+          if (newFileFlipbookA4Page2) {
+            if (progressEl) progressEl.textContent = "Uploading Flipbook — A4 Page 2…";
+            updates.overlay_path_flipbook_a4_2 = await adminTemplates._uploadFile(
+              newFileFlipbookA4Page2, `${storagePrefix}/overlay_flipbook_a4_2.png`, "image/png"
+            );
+          }
+          if (newFileFlipbookPreview) {
+            if (progressEl) progressEl.textContent = "Uploading Flipbook — Preview Frame Overlay…";
+            updates.overlay_path_flipbook_preview = await adminTemplates._uploadFile(
+              newFileFlipbookPreview, `${storagePrefix}/overlay_flipbook_preview.png`, "image/png"
+            );
+          }
+          // Clear non-flipbook overlay columns when switching a template TO
+          // flipbook format — never clears sibling flipbook slots.
+          ALL_OVERLAY_COLS.filter(c => !FLIPBOOK_OVERLAY_COLS.includes(c)).forEach(c => {
+            if (current[c] && newFormat === "flipbook") updates[c] = null;
           });
         }
 
@@ -770,6 +853,7 @@ const templateManager = (() => {
       if (t.overlay_path_long_mini) return "long-mini";
       if (t.overlay_path_film_duo)  return "film-duo";
       if (t.overlay_path_wide_mini) return "wide-mini";
+      if (t.overlay_path_flipbook_cover || t.overlay_path_flipbook_a4_1 || t.overlay_path_flipbook_a4_2) return "flipbook";
       return null;
     }
 
@@ -813,6 +897,10 @@ const templateManager = (() => {
       const f4El       = sel("templateFile4x6");
       const fThEl      = sel("templateFileThumb");
       const fPvEl      = sel("templateFilePreviewOverlay");
+      const fFbCoverEl = sel("templateFileFlipbookCover");
+      const fFbA1El    = sel("templateFileFlipbookA4Page1");
+      const fFbA2El    = sel("templateFileFlipbookA4Page2");
+      const fFbPvEl    = sel("templateFileFlipbookPreview");
 
       if (nameEl)     nameEl.value = "";
       if (categoryEl) categoryEl.value = _activeCategory !== "all" ? _activeCategory : "Originals";
@@ -820,6 +908,10 @@ const templateManager = (() => {
       if (f4El)       f4El.value = "";
       if (fThEl)      fThEl.value = "";
       if (fPvEl)      fPvEl.value = "";
+      if (fFbCoverEl) fFbCoverEl.value = "";
+      if (fFbA1El)    fFbA1El.value = "";
+      if (fFbA2El)    fFbA2El.value = "";
+      if (fFbPvEl)    fFbPvEl.value = "";
       if (progressEl) { progressEl.textContent = ""; progressEl.hidden = true; }
 
       // Default format to the active filter, or 2x6 if "all"
@@ -844,6 +936,7 @@ const templateManager = (() => {
       console.log("[templateManager] Upload submit clicked.");
 
       let name, category, format, file2x6, file4x6, thumbFile;
+      let fileFlipbookCover, fileFlipbookA4Page1, fileFlipbookA4Page2, fileFlipbookPreview;
       try {
         const nameEl     = sel("templateName");
         const categoryEl = sel("templateCategory");
@@ -851,22 +944,33 @@ const templateManager = (() => {
         const f2El       = sel("templateFile2x6");
         const f4El       = sel("templateFile4x6");
         const fThEl      = sel("templateFileThumb");
+        const fFbCoverEl = sel("templateFileFlipbookCover");
+        const fFbA1El    = sel("templateFileFlipbookA4Page1");
+        const fFbA2El    = sel("templateFileFlipbookA4Page2");
+        const fFbPvEl    = sel("templateFileFlipbookPreview");
 
         if (!nameEl || !categoryEl || !formatEl) {
           throw new Error("Upload form fields not found in the page — try a hard refresh (Ctrl+Shift+R).");
         }
 
         name      = nameEl.value.trim();
-        category  = categoryEl.value;   // "Originals" | "Designs" | "Accessories"
-        format    = formatEl.value;     // "2x6" | "4x6" | "long-duo" | "long-mini" | "film-duo" | "wide-mini"
+        category  = categoryEl.value;   // "Originals" | "Designs" | "Accessories" | "Flipbook"
+        format    = formatEl.value;     // "2x6" | "4x6" | "long-duo" | "long-mini" | "film-duo" | "wide-mini" | "flipbook"
 
-        // All formats share a single file field (#templateFile2x6) in the upload modal.
-        // f2El is repurposed to accept the overlay for any format.
+        // All single-file formats share one file field (#templateFile2x6) in the
+        // upload modal. f2El is repurposed to accept the overlay for any of them.
         const uploadFileEl = f2El || f4El;
         const uploadFile = uploadFileEl ? (uploadFileEl.files[0] || null) : null;
         file2x6   = (format === "2x6" ) ? uploadFile : null;
         file4x6   = (format === "4x6" ) ? uploadFile : null;
         thumbFile = fThEl ? (fThEl.files[0] || null) : null;
+
+        // Flipbook has its own dedicated slot fields, not the shared field above.
+        // Preview Frame Overlay is optional (screen preview only, never printed).
+        fileFlipbookCover   = fFbCoverEl ? (fFbCoverEl.files[0] || null) : null;
+        fileFlipbookA4Page1 = fFbA1El    ? (fFbA1El.files[0]    || null) : null;
+        fileFlipbookA4Page2 = fFbA2El    ? (fFbA2El.files[0]    || null) : null;
+        fileFlipbookPreview = fFbPvEl    ? (fFbPvEl.files[0]    || null) : null;
       } catch (e) {
         console.error("[templateManager] Could not read upload form:", e);
         showToast(`Could not read upload form: ${e.message}`);
@@ -875,12 +979,20 @@ const templateManager = (() => {
 
       if (!name) { showToast("Please enter a template name."); return; }
 
-      // For new formats, the file is still required — check that any file was selected
-      const uploadFileEl2 = sel("templateFile2x6") || sel("templateFile4x6");
-      const uploadedFile  = uploadFileEl2 ? (uploadFileEl2.files[0] || null) : null;
-      if (!file2x6 && !file4x6 && !uploadedFile) {
-        showToast(`Please select a frame PNG file for the ${FORMAT_LABELS[format] || format} format.`);
-        return;
+      if (format === "flipbook") {
+        // All 3 slots are required on first upload — a partial flipbook can't print.
+        if (!fileFlipbookCover || !fileFlipbookA4Page1 || !fileFlipbookA4Page2) {
+          showToast("Please select all 3 files: Cover Page, A4 Page 1, and A4 Page 2.");
+          return;
+        }
+      } else {
+        // For single-file formats, the file is still required — check that one was selected
+        const uploadFileEl2 = sel("templateFile2x6") || sel("templateFile4x6");
+        const uploadedFile  = uploadFileEl2 ? (uploadFileEl2.files[0] || null) : null;
+        if (!file2x6 && !file4x6 && !uploadedFile) {
+          showToast(`Please select a frame PNG file for the ${FORMAT_LABELS[format] || format} format.`);
+          return;
+        }
       }
 
       submitBtn.disabled = true;
@@ -906,7 +1018,8 @@ const templateManager = (() => {
           "wide-mini":"previewFileWideMini"
         }[format] || null;
 
-        // The upload form uses #templateFile2x6 as the shared file field for all formats.
+        // The upload form uses #templateFile2x6 as the shared file field for
+        // single-file formats only (not flipbook, which has its own 3 fields).
         const sharedFileEl = sel("templateFile2x6") || sel("templateFile4x6");
         const sharedFile   = sharedFileEl ? (sharedFileEl.files[0] || null) : null;
 
@@ -917,6 +1030,12 @@ const templateManager = (() => {
         const uploadPayload = { name, assetType: category, thumbFile };
         if (format === "2x6")       uploadPayload.file2x6      = file2x6      || sharedFile;
         else if (format === "4x6")  uploadPayload.file4x6      = file4x6      || sharedFile;
+        else if (format === "flipbook") {
+          uploadPayload.fileFlipbookCover   = fileFlipbookCover;
+          uploadPayload.fileFlipbookA4Page1 = fileFlipbookA4Page1;
+          uploadPayload.fileFlipbookA4Page2 = fileFlipbookA4Page2;
+          uploadPayload.fileFlipbookPreview = fileFlipbookPreview;
+        }
         else if (formatFileKey)     uploadPayload[formatFileKey] = sharedFile;
 
         // Attach preview overlay if provided for a new frame type
@@ -959,6 +1078,10 @@ const templateManager = (() => {
     const fieldPreview      = sel("uploadFieldPreviewOverlay");
     const previewLabel      = sel("uploadPreviewOverlayLabel");
     const previewHint       = sel("uploadPreviewOverlayHint");
+    const fieldFlipbook     = sel("uploadFieldFlipbook");
+    const fieldThumb        = sel("uploadFieldThumb");
+
+    const isFlipbook = format === "flipbook";
 
     // Standard formats use their own dedicated field; new formats reuse #uploadField2x6
     // with an updated label/hint via the shared #uploadFieldNew wrapper.
@@ -966,6 +1089,9 @@ const templateManager = (() => {
 
     if (field2x6) field2x6.style.display = (format === "2x6" || isNew) ? "" : "none";
     if (field4x6) field4x6.style.display = format === "4x6" ? "" : "none";
+    if (fieldFlipbook) fieldFlipbook.style.display = isFlipbook ? "" : "none";
+    // Thumbnail stays optional/available for every format, including flipbook.
+    if (fieldThumb) fieldThumb.style.display = "";
 
     // Update label and hint for new frame types (reuse the 2x6 field)
     if (isNew && fieldNewLabel) {
@@ -1565,6 +1691,7 @@ const templateManager = (() => {
         <button class="template-category-tab"        data-category="Originals"   type="button">Originals</button>
         <button class="template-category-tab"        data-category="Designs"     type="button">Designs</button>
         <button class="template-category-tab"        data-category="Accessories" type="button">Accessories</button>
+        <button class="template-category-tab"        data-category="Flipbook"    type="button">Flipbook</button>
       </div>
 
       <!-- ── Format pills ──────────────────────────────────────────────── -->
@@ -1578,6 +1705,7 @@ const templateManager = (() => {
           <button class="template-format-pill"        data-format="long-mini" type="button">Long Mini</button>
           <button class="template-format-pill"        data-format="film-duo"  type="button">Film Duo</button>
           <button class="template-format-pill"        data-format="wide-mini" type="button">Wide Mini</button>
+          <button class="template-format-pill"        data-format="flipbook"  type="button">Flipbook</button>
         </div>
       </div>
 
@@ -1615,6 +1743,7 @@ const templateManager = (() => {
                 <option value="Originals">Originals</option>
                 <option value="Designs">Designs</option>
                 <option value="Accessories">Accessories</option>
+                <option value="Flipbook">Flipbook</option>
               </select>
             </div>
 
@@ -1627,6 +1756,7 @@ const templateManager = (() => {
                 <option value="long-mini">Long Mini</option>
                 <option value="film-duo">Film Duo</option>
                 <option value="wide-mini">Wide Mini</option>
+                <option value="flipbook">Flipbook (3 Slots)</option>
               </select>
               <p class="form-hint">Changing the format and uploading a new file will switch this template to the new format. The old overlay file will be cleared.</p>
             </div>
@@ -1666,6 +1796,41 @@ const templateManager = (() => {
                 Leave blank to keep the existing preview overlay. This PNG is shown on the
                 Photo Selection and Print &amp; QR preview screens only — not used for print.
               </p>
+            </div>
+
+            <!-- Flipbook — 3 independent slots, shown when format = flipbook -->
+            <div class="form-field" id="editFieldFlipbook" style="display:none">
+              <p class="form-hint" style="margin-top:0;">
+                Each slot below is replaced independently — leaving a slot blank keeps its existing file.
+              </p>
+
+              <label for="editTemplateFileFlipbookCover">
+                Replace Cover Page
+                <span class="edit-current-label" id="editCurrentFlipbookCover"></span>
+              </label>
+              <input type="file" id="editTemplateFileFlipbookCover" accept=".png,image/png">
+              <p class="form-hint">1200 × 666 px, 300 DPI.</p>
+
+              <label for="editTemplateFileFlipbookA4Page1" style="margin-top:0.75rem;display:block;">
+                Replace A4 Page 1
+                <span class="edit-current-label" id="editCurrentFlipbookA4Page1"></span>
+              </label>
+              <input type="file" id="editTemplateFileFlipbookA4Page1" accept=".png,image/png">
+              <p class="form-hint">2480 × 3508 px, 300 DPI — sheet 1: cover + flipbook pages 1–9.</p>
+
+              <label for="editTemplateFileFlipbookA4Page2" style="margin-top:0.75rem;display:block;">
+                Replace A4 Page 2
+                <span class="edit-current-label" id="editCurrentFlipbookA4Page2"></span>
+              </label>
+              <input type="file" id="editTemplateFileFlipbookA4Page2" accept=".png,image/png">
+              <p class="form-hint">2480 × 3508 px, 300 DPI — sheet 2: flipbook pages 10–19.</p>
+
+              <label for="editTemplateFileFlipbookPreview" style="margin-top:0.75rem;display:block;">
+                Replace Preview Frame Overlay (optional)
+                <span class="edit-current-label" id="editCurrentFlipbookPreview"></span>
+              </label>
+              <input type="file" id="editTemplateFileFlipbookPreview" accept=".png,image/png">
+              <p class="form-hint">1060 × 666 px — decorative frame shown around the video on the Video Selection and Print &amp; QR screens only; never printed. Leave blank for no frame graphic.</p>
             </div>
 
             <!-- Thumbnail field — always visible -->
@@ -1710,6 +1875,7 @@ const templateManager = (() => {
                 <option value="Originals">Originals</option>
                 <option value="Designs">Designs</option>
                 <option value="Accessories">Accessories</option>
+                <option value="Flipbook">Flipbook</option>
               </select>
             </div>
 
@@ -1722,6 +1888,7 @@ const templateManager = (() => {
                 <option value="long-mini">Long Mini</option>
                 <option value="film-duo">Film Duo</option>
                 <option value="wide-mini">Wide Mini</option>
+                <option value="flipbook">Flipbook (3 Slots)</option>
               </select>
             </div>
 
@@ -1756,6 +1923,25 @@ const templateManager = (() => {
                 and Print &amp; QR preview screens. Leave blank to use the full-frame overlay
                 cropped to the preview region instead.
               </p>
+            </div>
+
+            <!-- Flipbook — 3 independent slots, shown when format = flipbook -->
+            <div class="form-field" id="uploadFieldFlipbook" style="display:none">
+              <label for="templateFileFlipbookCover">Cover Page</label>
+              <input type="file" id="templateFileFlipbookCover" accept=".png,image/png">
+              <p class="form-hint">1200 × 666 px, 300 DPI.</p>
+
+              <label for="templateFileFlipbookA4Page1" style="margin-top:0.75rem;display:block;">A4 Page 1</label>
+              <input type="file" id="templateFileFlipbookA4Page1" accept=".png,image/png">
+              <p class="form-hint">2480 × 3508 px, 300 DPI — sheet 1: cover + flipbook pages 1–9.</p>
+
+              <label for="templateFileFlipbookA4Page2" style="margin-top:0.75rem;display:block;">A4 Page 2</label>
+              <input type="file" id="templateFileFlipbookA4Page2" accept=".png,image/png">
+              <p class="form-hint">2480 × 3508 px, 300 DPI — sheet 2: flipbook pages 10–19. These 3 files are required.</p>
+
+              <label for="templateFileFlipbookPreview" style="margin-top:0.75rem;display:block;">Preview Frame Overlay (optional)</label>
+              <input type="file" id="templateFileFlipbookPreview" accept=".png,image/png">
+              <p class="form-hint">1060 × 666 px — decorative frame shown around the video on the Video Selection and Print &amp; QR screens only; never printed. Leave blank for no frame graphic.</p>
             </div>
 
             <!-- Thumbnail upload field — always visible -->

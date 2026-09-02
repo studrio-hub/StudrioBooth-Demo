@@ -852,6 +852,75 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
 
+    /* ── D2. FLIPBOOK SHOOTING: RESTORE "NEXT ... IN" LABEL ────────────────
+     * page-flipbook-shoot has two .interval-preview overlays that only show
+     * the video/photo itself:
+     *   #flipbookPlaybackOverlay   — clip playback between the 3 video takes
+     *                                 (shown for PLAYBACK_SECONDS = 4s)
+     *   #flipbookCoverPhotoPreview — each of the 3 cover-page photos, held
+     *                                 briefly right after capture
+     *                                 (shown for COVER_PHOTO_SHOW_SECONDS = 3s)
+     * Page 3's equivalent (#intervalPreview) additionally has a bottom pill
+     * (".interval-countdown-bottom": a "NEXT PHOTO IN" label + ticking
+     * number) that these two are missing. This restores that pill for both
+     * ("NEXT VIDEO IN" / "NEXT PHOTO IN"), timed to match
+     * flipbook-shooting.js's actual PLAYBACK_SECONDS / COVER_PHOTO_SHOW_SECONDS
+     * so the countdown reaches 1 right as the overlay hides.
+     *
+     * NOTE: no flash hook here — flipbookShootingModule.flashEffect() already
+     * fires #flipbookCapturedFlash itself (on both the video-recording start
+     * and each cover-photo capture), so nothing else needs to touch it here;
+     * doing so again on the overlay's ".show" toggle would double-flash.
+     *
+     * Purely additive and self-driven off each overlay's own ".show" class
+     * toggle (the same contract flipbook-shooting.js already uses to reveal
+     * these overlays) — no dependency on flipbook-shooting.js's internals
+     * beyond that, and injection is a no-op once the markup exists. */
+
+    function _ensureIntervalCountdownPill(overlay, labelText, numberId, startAt) {
+      if (!overlay || overlay.querySelector(".interval-countdown-bottom")) return;
+      const pill = document.createElement("div");
+      pill.className = "interval-countdown-bottom";
+      pill.innerHTML =
+        `<span class="interval-label">${labelText}</span>` +
+        `<span class="interval-number" id="${numberId}">${startAt}</span>`;
+      overlay.appendChild(pill);
+    }
+
+    function _runOverlayCountdown(numberId, seconds) {
+      const numEl = document.getElementById(numberId);
+      if (!numEl) return;
+      let s = seconds;
+      numEl.textContent = s;
+      const timerId = setInterval(() => {
+        s -= 1;
+        if (s < 1) { clearInterval(timerId); return; }
+        numEl.textContent = s;
+      }, 1000);
+    }
+
+    function _hookFlipbookOverlay(overlayId, labelText, numberId, seconds) {
+      const overlay = document.getElementById(overlayId);
+      if (!overlay) return;
+
+      _ensureIntervalCountdownPill(overlay, labelText, numberId, seconds);
+
+      new MutationObserver(() => {
+        if (!overlay.classList.contains("show")) return;
+        _runOverlayCountdown(numberId, seconds);
+      }).observe(overlay, { attributes: true, attributeFilter: ["class"] });
+    }
+
+    function _initFlipbookShootingEnhancements() {
+      // Between the 3 video takes: playback overlay → "NEXT VIDEO IN"
+      // (matches flipbookShootingModule.PLAYBACK_SECONDS)
+      _hookFlipbookOverlay("flipbookPlaybackOverlay", "NEXT VIDEO IN", "flipbookVideoIntervalNumber", 4);
+      // The 3 cover-page photos: preview overlay → "NEXT PHOTO IN"
+      // (matches flipbookShootingModule.COVER_PHOTO_SHOW_SECONDS)
+      _hookFlipbookOverlay("flipbookCoverPhotoPreview", "NEXT PHOTO IN", "flipbookCoverIntervalNumber", 3);
+    }
+
+
     /* ── E. PAGE 4 ALL-SELECTED GLOW ─────────────────────────────────────
      * Watches the selection grid for the moment all 4 photos are chosen
      * and temporarily adds .all-selected for the CSS glow animation. */
@@ -928,11 +997,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", () => {
         _initShootingEnhancements();
+        _initFlipbookShootingEnhancements();
         _watchSelectionCompletion();
         _installNavInterceptor();
       });
     } else {
       _initShootingEnhancements();
+      _initFlipbookShootingEnhancements();
       _watchSelectionCompletion();
       _installNavInterceptor();
     }

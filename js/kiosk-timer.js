@@ -16,6 +16,12 @@ const kioskTimer = {
   remaining: 60,
   onExpire: null,
 
+  // Pages where the "10 seconds left" voiceover should fire. Gated on the
+  // #kioskTimer element's data-active-page attribute, which app.js's
+  // goToPage() keeps in sync with the currently active page.
+  _TEN_SEC_VO_PAGES: new Set(["selection", "flipbook-select", "flipbook-cover-select"]),
+  _tenSecWarned: false,
+
   _init() {
     this.circumference = 2 * Math.PI * this.radius;
     this.progressEl.style.strokeDasharray = `${this.circumference}`;
@@ -27,6 +33,7 @@ const kioskTimer = {
     this.duration = seconds;
     this.remaining = seconds;
     this.onExpire = onExpire;
+    this._tenSecWarned = false;
     this.el.hidden = false;
     this._render();
     this.intervalId = setInterval(() => {
@@ -60,6 +67,16 @@ const kioskTimer = {
     this.numberEl.textContent = clamped;
     const fraction = this.duration > 0 ? clamped / this.duration : 0;
     this.progressEl.style.strokeDashoffset = `${this.circumference * (1 - fraction)}`;
+
+    // "10 seconds left" voiceover — only on the selection pages, and only
+    // once per countdown run (guarded by _tenSecWarned, reset in start()).
+    if (clamped === 10 && !this._tenSecWarned && typeof audioManager !== "undefined") {
+      const activePage = this.el.dataset.activePage;
+      if (this._TEN_SEC_VO_PAGES.has(activePage)) {
+        audioManager.playTenSecondsLeft();
+        this._tenSecWarned = true;
+      }
+    }
   }
 };
 

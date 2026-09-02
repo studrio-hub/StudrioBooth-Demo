@@ -22,7 +22,13 @@ const sessionState = {
   ticketLine:     null,   // queue line name
   ticketCopies:   null,   // number of copies from ticket (overrides qty selector)
   ticketFrame:    null,   // frame_addon quantity
-  ticketKeychain: null    // keychain_addon quantity
+  ticketKeychain: null,   // keychain_addon quantity
+
+  // ── Flipbook product fields ──
+  _isFlipbook:            false,
+  flipbookVideos:         [],   // { id, video, videoUrl, selected } × 3
+  selectedFlipbookVideo:  null, // the one chosen clip
+  flipbookFrames:         []    // 19 extracted frame Blobs, generated after selection
 };
 
 /* ---------------- Navigation ---------------- */
@@ -45,6 +51,22 @@ function goToPage(pageName) {
       pageName = "camera-check";
     }
   }
+
+  // Voiceover: Queue System starts. Fires each time the kiosk genuinely
+  // reaches the ticket/home page for a new guest (not on the one-shot
+  // camera-check diversion above). Placed before the QUEUE BYPASS below so
+  // it still fires even while that bypass is active.
+  if (pageName === "ticket" && typeof audioManager !== "undefined") {
+    audioManager.playWelcomeIntro();
+  }
+
+  // ── QUEUE BYPASS (temporary — re-enable by removing this block) ─────────
+  // The QR ticket / queue system is disabled for testing: any remaining
+  // navigation to "ticket" skips straight to Template Selection instead.
+  // (The one-shot camera-check above still runs first on initial boot.)
+  // To re-enable the queue, delete the line below.
+  if (pageName === "ticket") pageName = "template";
+  // ── END QUEUE BYPASS ──────────────────────────────────────────────────────
 
   // Old page-frame and page-setup are replaced by page-template.
   if (pageName === "frame" || pageName === "setup") pageName = "template";
@@ -127,10 +149,14 @@ function renderCameraStatus(status) {
 
 async function setFixedZoom(level) {
   await updateZoom(level);
-  const btnWide   = document.getElementById("btnZoomWide");
-  const btnNormal = document.getElementById("btnZoomNormal");
-  if (btnWide)   btnWide.classList.toggle("active",   level === 1.0);
-  if (btnNormal) btnNormal.classList.toggle("active", level === 1.5);
+  ["btnZoomWide", "btnFlipbookZoomWide"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("active", level === 1.0);
+  });
+  ["btnZoomNormal", "btnFlipbookZoomNormal"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("active", level === 1.5);
+  });
 }
 
 async function updateZoom(level) {
@@ -159,6 +185,21 @@ document.addEventListener("DOMContentLoaded", () => {
     btnMirrorToggle.addEventListener("click", () => {
       mirrorEnabled = !mirrorEnabled;
       btnMirrorToggle.classList.toggle("active", mirrorEnabled);
+      cameraController.setMirror(mirrorEnabled);
+    });
+  }
+
+  // Same zoom/mirror controls, mirrored onto the flipbook video-taking page
+  const btnFlipbookZoomWide     = document.getElementById("btnFlipbookZoomWide");
+  const btnFlipbookZoomNormal   = document.getElementById("btnFlipbookZoomNormal");
+  const btnFlipbookMirrorToggle = document.getElementById("btnFlipbookMirrorToggle");
+
+  if (btnFlipbookZoomWide)   btnFlipbookZoomWide.addEventListener("click",   () => setFixedZoom(1.0));
+  if (btnFlipbookZoomNormal) btnFlipbookZoomNormal.addEventListener("click", () => setFixedZoom(1.5));
+  if (btnFlipbookMirrorToggle) {
+    btnFlipbookMirrorToggle.addEventListener("click", () => {
+      mirrorEnabled = !mirrorEnabled;
+      btnFlipbookMirrorToggle.classList.toggle("active", mirrorEnabled);
       cameraController.setMirror(mirrorEnabled);
     });
   }
@@ -1185,9 +1226,11 @@ const templateModule = (() => {
     if (cat === "originals")   return "originals";
     if (cat === "accessories") return "accessories";
     if (cat === "designs")     return "designs";
+    if (cat === "flipbook")    return "flipbook";
     // Legacy fallback: try to infer from the label as a last resort
     const label = (template.label || template.name || "").toLowerCase();
     if (label.includes("accessor")) return "accessories";
+    if (label.includes("flipbook")) return "flipbook";
     if (label.includes("design"))   return "designs";
     return "originals";
   }
@@ -1209,6 +1252,10 @@ const templateModule = (() => {
     const hasLongMini = !!(template.overlayUrlLongMini || template.overlays?.["long-mini"]);
     const hasFilmDuo  = !!(template.overlayUrlFilmDuo  || template.overlays?.["film-duo"]);
     const hasWideMini = !!(template.overlayUrlWideMini || template.overlays?.["wide-mini"]);
+    const hasFlipbook = !!(template.flipbookCoverUrl || template.flipbookA4Page1Url || template.flipbookA4Page2Url);
+
+    // A flipbook template has its own 3-asset set and never a standard strip.
+    if (hasFlipbook) return "flipbook";
 
     // A keychain template: has a keychain overlay but no standard strip overlays.
     if (hasKeychain && !has2x6 && !has4x6 && !hasLongDuo && !hasLongMini && !hasFilmDuo && !hasWideMini) return "keychain";
@@ -1258,7 +1305,10 @@ const templateModule = (() => {
 
       // Size badge
       const sizeBadge = document.createElement("span");
-      if (frameType === "keychain") {
+      if (frameType === "flipbook") {
+        sizeBadge.className = "template-size-badge template-size-badge--flipbook";
+        sizeBadge.textContent = "Flipbook";
+      } else if (frameType === "keychain") {
         sizeBadge.className = "template-size-badge template-size-badge--keychain";
         sizeBadge.textContent = "Keychain";
       } else if (frameType === "2x6") {
@@ -1322,8 +1372,21 @@ const templateModule = (() => {
       designModule._activeFilter = "none";
     }
 
-    // Re-render so the active card highlight is correct
-    _renderCarousel();
+    // Toggle the "active" class on the existing card elements instead of
+    // calling _renderCarousel(). _renderCarousel() wipes and rebuilds the
+    // entire track's innerHTML, which (a) retriggered the .animating
+    // fade/slide-in entrance animation — meant only for genuinely new card
+    // sets (category switch, arrow paging, initial load) — on every single
+    // tap, and (b) replaced each card with a brand-new DOM node, so the
+    // enlarge/glow CSS transition on .template-card-thumb had no previous
+    // state to animate from/to. Updating the class in place on the same
+    // nodes lets that existing transition run naturally in both directions.
+    const track = document.getElementById("templateCarouselTrack");
+    if (track) {
+      track.querySelectorAll(".template-card").forEach(card => {
+        card.classList.toggle("active", String(card.dataset.templateId) === String(id));
+      });
+    }
 
     // Enable NEXT
     const nextBtn = document.getElementById("btnNextFromTemplate");
@@ -1338,7 +1401,7 @@ const templateModule = (() => {
     if (!nameEl || !sizeEl) return;
 
     if (!sessionState.design) {
-      nameEl.textContent = "No template selected";
+      _setSelectedName(nameEl, "No template selected");
       sizeEl.textContent = "";
       return;
     }
@@ -1347,9 +1410,10 @@ const templateModule = (() => {
       || (typeof STRIP_DESIGNS !== "undefined" ? STRIP_DESIGNS.find(t => String(t.id) === String(sessionState.design)) : null);
     if (!tmpl) return;
 
-    nameEl.textContent = tmpl.label || tmpl.name || "Template";
+    _setSelectedName(nameEl, tmpl.label || tmpl.name || "Template");
     const ft = sessionState.frameType || "2x6";
     const frameSizeLabels = {
+      "flipbook":  "Flipbook (20 pages)",
       "keychain":  "Mini-Strip Keychain",
       "2x6":       "Long Strip (2×6)",
       "4x6":       "Wide Frame (4×6)",
@@ -1359,6 +1423,21 @@ const templateModule = (() => {
       "wide-mini": "Wide Mini"
     };
     sizeEl.textContent = frameSizeLabels[ft] || ft;
+  }
+
+  /*
+   * Plays a short fade/slide swap animation on the selected-template name
+   * (see .template-selected-name.name-swap in style-redesign.css) whenever
+   * the displayed text actually changes. No-ops on repeat calls with the
+   * same text (e.g. _updateSelectedBar() re-running for other reasons)
+   * so it only plays when switching between templates.
+   */
+  function _setSelectedName(nameEl, text) {
+    if (nameEl.textContent === text) return;
+    nameEl.textContent = text;
+    nameEl.classList.remove("name-swap");
+    void nameEl.offsetWidth; // force reflow to restart the animation
+    nameEl.classList.add("name-swap");
   }
 
   function _updateArrows() {
@@ -1468,6 +1547,18 @@ function _startShooting() {
     console.warn("[_startShooting] No design selected — auto-selected first available:", first.id);
   }
 
+  // Flipbook templates route to their own video-taking flow entirely —
+  // never the 8-shot photo session below.
+  if (sessionState.frameType === "flipbook") {
+    sessionState._isFlipbook = true;
+    sessionState._isKeychain = false;
+    if (typeof audioManager !== "undefined") audioManager.onShootingStart();
+    goToPage("flipbook-shoot");
+    flipbookShootingModule.startSession();
+    return;
+  }
+  sessionState._isFlipbook = false;
+
   // Ensure frameType is always set (2x6 is safe default).
   // "keychain" uses the 2x6 photo-taking layout (8 shots, same slots).
   // The keychain-specific print layout is applied at printing time.
@@ -1485,8 +1576,14 @@ function _startShooting() {
   }
 
   _updatePoseOverlay();
+  // shootingModule.startSession() re-derives and writes both of these from
+  // sessionState.shots right away (see _updatePhotosTakenUI()) — set here
+  // too just so the page never flashes a stale "8" total from a previous
+  // build before that runs.
   const ptEl = document.getElementById("photosTakenCount");
-  if (ptEl) ptEl.innerHTML = '0<span class="photos-taken-slash">/</span><span class="photos-taken-total">8</span>';
+  if (ptEl) ptEl.innerHTML = '0<span class="photos-taken-slash">/</span><span class="photos-taken-total">20</span>';
+  const ptLabelEl = document.getElementById("photosTakenLabel");
+  if (ptLabelEl) ptLabelEl.textContent = "Photos Taken";
 
   goToPage("shooting");
   shootingModule.startSession();
@@ -1495,25 +1592,23 @@ function _startShooting() {
 /* Also keep _proceedFromSetup as an alias (boot.js / kiosk-timer callbacks) */
 function _proceedFromSetup() { _startShooting(); }
 
-/* ---------------- PAGE 6: ALL DONE + DONE-BUTTON TIMER ---------------- */
+/* ---------------- PAGE 6: PRINTING → AUTO-RETURN QR COUNTDOWN ---------------- */
 
 /*
  * uploadProgress — public API for qr.js / printing.js.
  *
  * The visible upload progress bar has been removed from the UI.
  * These methods still update the hidden #uploadProgressWrap elements so
- * qr.js can call them without errors, and they drive the Done button state:
+ * qr.js can call them without errors, and they drive the post-print flow:
  *
  *   uploadProgress.start()      — called when printing begins (no-op for UI)
  *   uploadProgress.set(0–1)     — tracks upload fraction (no-op for UI)
- *   uploadProgress.complete()   — printing started → enable Done + start timer
- *   uploadProgress.error(msg)   — upload failed → still enable Done
+ *   uploadProgress.complete()   — printing started → show QR + start 30s countdown
+ *   uploadProgress.error(msg)   — upload failed → still start the 30s countdown
  *
- * The Done button has three CSS states:
- *   default           — disabled, dim, cursor:not-allowed
- *   .ready            — amber border, clickable
- *   .ready.timer-running — amber fill sweeps left→right over 60s (CSS ::before)
- *   .timer-done       — fill complete, session auto-resets
+ * There is no Done button — printing is never interruptible. Once the
+ * countdown in #qrCountdown reaches zero, the kiosk fades to white and
+ * automatically returns to the home/ticket screen (see _fadeToWhiteThenReset).
  */
 const uploadProgress = (() => {
   // Hidden elements — kept for qr.js compatibility
@@ -1523,43 +1618,44 @@ const uploadProgress = (() => {
   const label = document.getElementById("uploadProgressLabel");
   const hint  = document.getElementById("uploadProgressHint");
 
-  const doneBtn = document.getElementById("btnPrintingDone");
+  const countdownEl = document.getElementById("qrCountdown");
+  const countdownNumberEl = document.getElementById("qrCountdownNumber");
 
-  // 60-second auto-advance timer handle
-  let _doneTimer = null;
+  const QR_COUNTDOWN_SECONDS = 30;
+
+  // Visible 30s post-print countdown, ticking down next to the QR code.
+  let _qrCountdownTimer = null;
   // Safety-net timer: if complete() / error() never fires (e.g. upload hangs
-  // with no network and no error callback), enable Done after 25s anyway so
-  // the guest is never permanently stranded on the printing page offline.
+  // with no network and no error callback), start the countdown after 25s
+  // anyway so the guest is never permanently stranded on the printing page.
   let _safetyTimer = null;
 
-  function _enableDone() {
-    if (!doneBtn) return;
+  function _hideCountdown() {
+    if (_qrCountdownTimer) { clearInterval(_qrCountdownTimer); _qrCountdownTimer = null; }
+    if (countdownEl) countdownEl.hidden = true;
+  }
+
+  function _startQrCountdown() {
     if (_safetyTimer) { clearTimeout(_safetyTimer); _safetyTimer = null; }
-    if (doneBtn.classList.contains("ready")) return; // already enabled
+    if (_qrCountdownTimer) return; // already counting down
 
-    // 1. Unlock the button
-    doneBtn.disabled = false;
-    doneBtn.classList.add("ready");
+    let secondsLeft = QR_COUNTDOWN_SECONDS;
+    if (countdownNumberEl) countdownNumberEl.textContent = secondsLeft;
+    if (countdownEl) countdownEl.hidden = false;
 
-    // 2. Start the CSS fill animation
-    // Force a reflow so the animation restarts cleanly if re-used
-    doneBtn.classList.remove("timer-running", "timer-done");
-    void doneBtn.offsetWidth; // reflow
-    doneBtn.classList.add("timer-running");
-
-    // 3. Auto-advance after 60 s
-    if (_doneTimer) clearTimeout(_doneTimer);
-    _doneTimer = setTimeout(() => {
-      if (doneBtn.classList.contains("timer-running")) {
-        doneBtn.classList.remove("timer-running");
-        doneBtn.classList.add("timer-done");
-        // ── Audio: begin main → standby crossfade on auto-advance ────────
+    _qrCountdownTimer = setInterval(() => {
+      secondsLeft -= 1;
+      if (countdownNumberEl) countdownNumberEl.textContent = Math.max(secondsLeft, 0);
+      if (secondsLeft <= 0) {
+        clearInterval(_qrCountdownTimer);
+        _qrCountdownTimer = null;
+        // ── Audio: begin main → standby crossfade as the kiosk returns home ──
         if (typeof audioManager !== "undefined") {
           audioManager.onPrintingDone();
         }
-        resetSessionAndRestart();
+        _fadeToWhiteThenReset();
       }
-    }, 60000);
+    }, 1000);
   }
 
   return {
@@ -1572,12 +1668,12 @@ const uploadProgress = (() => {
       if (hint)  { hint.textContent = "Your digital copy will be ready soon"; }
 
       // Safety net: if complete() or error() never fires (no network + no error
-      // callback), enable Done after 25s so the kiosk never gets stuck offline.
+      // callback), start the countdown after 25s so the kiosk never gets stuck.
       if (_safetyTimer) clearTimeout(_safetyTimer);
       _safetyTimer = setTimeout(() => {
         _safetyTimer = null;
-        console.warn("[uploadProgress] Safety timer fired — enabling Done (upload may be stalled or offline).");
-        _enableDone();
+        console.warn("[uploadProgress] Safety timer fired — starting QR countdown (upload may be stalled or offline).");
+        _startQrCountdown();
       }, 25000);
     },
 
@@ -1594,7 +1690,7 @@ const uploadProgress = (() => {
       if (pct)   { pct.textContent = "100%"; }
       if (label) { label.textContent = "Upload complete!"; }
       if (hint)  { hint.textContent = "Scan the QR code to access your digital copy"; }
-      _enableDone();
+      _startQrCountdown();
     },
 
     error(msg) {
@@ -1602,21 +1698,50 @@ const uploadProgress = (() => {
       if (pct)   { pct.textContent = "—"; }
       if (label) { label.textContent = msg || "Upload failed"; }
       if (hint)  { hint.textContent = "Your photos were printed. Contact staff for the digital copy."; }
-      // Still enable Done so the session isn't stuck
-      _enableDone();
+      // Still start the countdown so the session isn't stuck
+      _startQrCountdown();
     },
 
     // Called by resetSessionAndRestart() to cancel the auto-timer
     cancelTimer() {
-      if (_doneTimer)   { clearTimeout(_doneTimer);   _doneTimer   = null; }
       if (_safetyTimer) { clearTimeout(_safetyTimer); _safetyTimer = null; }
-      if (doneBtn) {
-        doneBtn.classList.remove("timer-running", "timer-done", "ready");
-        doneBtn.disabled = true;
-      }
+      _hideCountdown();
     }
   };
 })();
+
+/*
+ * _fadeToWhiteThenReset — the screen fades completely to white, the session
+ * is reset and the home/ticket page is swapped in underneath the fade, then
+ * the fade clears to reveal it. Used when the Print & QR page's 30s
+ * countdown reaches zero (see uploadProgress._startQrCountdown above).
+ */
+function _fadeToWhiteThenReset() {
+  const overlay = document.getElementById("whiteFadeOverlay");
+  if (!overlay) { resetSessionAndRestart(); return; }
+
+  overlay.classList.add("active");
+  // Wait for the fade-to-white CSS transition (0.6s) to finish before
+  // switching pages, so the page change is never visible mid-transition.
+  setTimeout(() => {
+    // The Print & QR page normally fades out over its own 0.35s .page
+    // transition when goToPage() runs — that fade races the white overlay's
+    // own (slower) fade-out below and can let the page briefly peek through
+    // as the overlay clears. Force it instantly invisible first (no
+    // transition) so the swap below happens fully hidden.
+    const printingPage = document.getElementById("page-printing");
+    if (printingPage) printingPage.classList.add("page-force-hidden");
+
+    resetSessionAndRestart();
+
+    // Reveal the home/ticket page by fading the white overlay back out.
+    requestAnimationFrame(() => {
+      overlay.classList.remove("active");
+      if (printingPage) printingPage.classList.remove("page-force-hidden");
+    });
+  }, 650);
+}
+
 
 /* Hook into the design page's "NEXT" button — defined in strip.js. */
 const _origDesignNext = document.getElementById("btnNextFromDesign");
@@ -1660,37 +1785,12 @@ function _setPrintingFrameAspectRatio() {
 /* _startPhotoToVideoTransition removed — photo overlay on Print & QR page
    has been removed per spec. Video strip shows directly without overlay. */
 
-/* Done button — opens confirm modal. Timer keeps running behind the modal.
-   If guest picks "Back", the timer simply continues from where it is.
-   Only "Proceed" (end session) cancels the timer. */
-document.getElementById("btnPrintingDone").addEventListener("click", () => {
-  const btn = document.getElementById("btnPrintingDone");
-  if (btn.disabled || !btn.classList.contains("ready")) return;
-  // Do NOT cancel the timer — let it keep running behind the modal
-  document.getElementById("confirmModal").hidden = false;
-  document.getElementById("confirmModal").classList.add("show");
-});
-
-document.getElementById("btnConfirmBack").addEventListener("click", () => {
-  const m = document.getElementById("confirmModal");
-  m.classList.remove("show");
-  m.hidden = true;
-  // Timer is already running — nothing to restart
-});
-
-document.getElementById("btnConfirmProceed").addEventListener("click", () => {
-  const m = document.getElementById("confirmModal");
-  m.classList.remove("show");
-  m.hidden = true;
-  uploadProgress.cancelTimer();
-  // ── Audio: begin main → standby crossfade immediately on confirm ──────
-  // onPageChange('ticket') will also call _setZone('standby') but by then
-  // main is already fading, so the transition feels seamless.
-  if (typeof audioManager !== "undefined") {
-    audioManager.onPrintingDone();
-  }
-  resetSessionAndRestart();
-});
+/* Done button removed — printing can no longer be interrupted or cancelled
+   from this page (see #page-printing .sb-next-corner in style-redesign.css).
+   The kiosk now returns home automatically via the 30s QR countdown in the
+   uploadProgress module above; the confirm-before-ending-session modal is
+   no longer reachable from this page since there is nothing left that can
+   trigger it here. */
 
 /*
  * resetSessionAndRestart — tears down the current session and returns to
@@ -1703,7 +1803,7 @@ document.getElementById("btnConfirmProceed").addEventListener("click", () => {
  *      stuck waiting on a network call while the guest is standing here.
  *   c) failed → offlineQueue already enqueued it for retry.
  *
- * In all three cases the guest can tap Done and the kiosk resets immediately.
+ * In all three cases the 30s QR countdown still resets the kiosk on schedule.
  * The pending upload continues / retries in the background via offlineQueue.
  */
 async function resetSessionAndRestart() {
@@ -1720,6 +1820,22 @@ async function resetSessionAndRestart() {
       URL.revokeObjectURL(s.videoUrl);
     }
   });
+
+  // Flipbook cleanup — revoke the 3 recorded-clip URLs; flipbookFrames are
+  // plain Blobs (no object URL made for them until preview/print time, and
+  // flipbookPreviewModule/_teardownUrls handles those separately).
+  (sessionState.flipbookVideos || []).forEach((clip) => {
+    if (clip.videoUrl) URL.revokeObjectURL(clip.videoUrl);
+  });
+  if (typeof flipbookPreviewModule !== "undefined") flipbookPreviewModule.teardown();
+  if (typeof printingModule !== "undefined" && printingModule._flipAnimator) {
+    printingModule._flipAnimator.teardown();
+    printingModule._flipAnimator = null;
+  }
+  sessionState._isFlipbook           = false;
+  sessionState.flipbookVideos        = [];
+  sessionState.selectedFlipbookVideo = null;
+  sessionState.flipbookFrames        = [];
 
   // Mark ticket as COMPLETED before resetting (fire-and-forget)
   if (sessionState.ticketId) {
@@ -1754,7 +1870,8 @@ async function resetSessionAndRestart() {
   sessionState.keychainAddonSelected = false;
   sessionState._isKeychain           = false;
 
-  // Reset Page 6 Done button (cancels timer + removes .ready / .timer-running / .timer-done)
+  // Cancel the 30s QR countdown and hide it, in case reset was triggered
+  // some other way while it was still running.
   uploadProgress.cancelTimer();
   const wrap = document.getElementById("uploadProgressWrap");
   if (wrap) {
@@ -1816,17 +1933,21 @@ async function resetSessionAndRestart() {
 
 /* ── Page 3: Photos Taken counter ──────────────────────────────────────── */
 /*
- * shooting.js updates .shot-counter (now hidden). We hook into the same
- * session state to keep the right-panel counter in sync.
- * shooting.js exposes window.kioskShooting.getShotCount() — if that isn't
- * available yet, we watch for the global shotsTaken variable instead.
+ * Dormant since the guest-triggered shutter rewrite (shooting.js v4):
+ * shooting.js now writes #photosTakenCount / #photosTakenLabel directly
+ * itself (see _updatePhotosTakenUI()) and no longer sets #shotCounter's
+ * textContent at all, so this patched setter is never triggered. Left in
+ * place (harmless) rather than removed, in case something upstream still
+ * writes to #shotCounter in the future.
  *
- * The simplest approach: patch the shot-counter's textContent setter so
- * any write to the hidden element also updates the visible counter.
+ * Original note: shooting.js used to update .shot-counter (hidden); this
+ * patched the hidden element's textContent setter so any write to it also
+ * updated the visible right-panel counter.
  */
 (function patchShotCounter() {
   const shotCounterEl = document.getElementById("shotCounter");
   const photosTakenEl = document.getElementById("photosTakenCount");
+  const photosTakenLabelEl = document.getElementById("photosTakenLabel");
   if (!shotCounterEl || !photosTakenEl) return;
 
   const _origSet = Object.getOwnPropertyDescriptor(Node.prototype, "textContent").set;
@@ -1836,10 +1957,15 @@ async function resetSessionAndRestart() {
       // Parse "PHOTO X OF Y" — update the side counter
       const m = String(val).match(/(\d+)\s*OF\s*(\d+)/i);
       if (m) {
-        const taken = parseInt(m[1], 10) - 1; // current shot hasn't been taken yet
+        // Minor Fix: counter now shows the CURRENT photo number (1..8),
+        // matching the flipbook video counter's "current take" behavior —
+        // no longer offset by 1 to show a completed-count instead.
+        const taken = parseInt(m[1], 10);
         const total = parseInt(m[2], 10);
         photosTakenEl.innerHTML =
           `${taken}<span class="photos-taken-slash">/</span><span class="photos-taken-total">${total}</span>`;
+        // Label text is now static ("Photo") per Minor Fix — no longer
+        // overwritten with "Photos X/Y" here.
       }
     },
     get() { return shotCounterEl.innerText; }
@@ -1849,8 +1975,12 @@ async function resetSessionAndRestart() {
 /* ── Page 3: Show pose overlay for 4×6 only ────────────────────────────── */
 function _updatePoseOverlay() {
   const overlay = document.getElementById("poseOverlay4x6");
-  if (!overlay) return;
-  overlay.style.display = sessionState.frameType === "4x6" ? "block" : "none";
+  if (overlay) overlay.style.display = sessionState.frameType === "4x6" ? "block" : "none";
+
+  // Stamp the live-preview frame with the active frame type so CSS can size
+  // it correctly for 4×6 templates (see #shootingPreviewFrame[data-frame="4x6"]).
+  const previewFrame = document.getElementById("shootingPreviewFrame");
+  if (previewFrame) previewFrame.dataset.frame = sessionState.frameType || "2x6";
 }
 
 /* ── Page 6: Printing status subtitle update ────────────────────────────── */
@@ -1872,4 +2002,10 @@ uploadProgress.complete = function(...args) {
   const sub = document.getElementById("printingStatusSubtitle");
   if (sub) sub.textContent = "Your photo is now printing at the counter.";
   // No yellow wave — white grid-bg is maintained throughout
+
+  // Minor Fix: qr_code.wav plays the moment the printer tells the guest
+  // their photo is now printing at the counter.
+  if (typeof audioManager !== "undefined") {
+    audioManager.playQrCode();
+  }
 };

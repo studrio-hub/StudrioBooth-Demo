@@ -67,6 +67,7 @@ const kioskQrScanner = (() => {
     _setState("error");
     const el = $("ticketErrorMsg");
     if (el) el.textContent = msg || "Something went wrong. Please try again.";
+    _playScanVoiceover(msg);
     setTimeout(() => {
       if (!_validated) {
         _setState("idle");
@@ -76,6 +77,21 @@ const kioskQrScanner = (() => {
         focus();
       }
     }, ERROR_DISPLAY_MS);
+  }
+
+  // ── Voiceover: mirror the specific validateTicketForKiosk() failure
+  // reason (queue-ticket.js) to the matching narration clip. Reasons with
+  // no requested voiceover (cancelled, already in session, on hold,
+  // network/unexpected errors) simply match nothing here and stay silent.
+  function _playScanVoiceover(reason) {
+    if (typeof audioManager === "undefined") return;
+    if (reason === "This ticket has already been used.") {
+      audioManager.playTicketUsed();
+    } else if (reason === "Your ticket has not been called yet. Please wait.") {
+      audioManager.playTicketNotCalled();
+    } else if (reason === "Ticket not found. Please check with staff.") {
+      audioManager.playTicketNotRecognised();
+    }
   }
 
   // ── Activate / deactivate NEXT ───────────────────────────────────────────
@@ -151,6 +167,10 @@ const kioskQrScanner = (() => {
       _validating = false;
       _applyToSession(result.ticket);
       _renderTicket(result.ticket);
+
+      if (typeof audioManager !== "undefined") {
+        audioManager.playTicketConfirmed();
+      }
 
       // Hide the camera feed on success
       const camWrap = $("ticketCamWrap");

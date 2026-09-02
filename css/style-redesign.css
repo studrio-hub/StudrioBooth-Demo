@@ -32,7 +32,7 @@
   /* NEXT button gradient */
   --next-grad-start:  #fffbee;
   --next-grad-end:    #ffdd66;
-  --next-radius:      25px 0px 25px 0px;
+  --next-radius:      0;
 
   /* Kiosk timer: light track + Studrio yellow stroke */
   --timer-track-color:    #e0e0e0;
@@ -205,23 +205,29 @@
 
 .btn-next-studrio {
   background: #ffffff !important;
-  border: 2px solid #F0C231 !important;
+  border: 1px solid #000000 !important;
   border-radius: var(--next-radius) !important;
   color: var(--studrio-black) !important;
   font-weight: 800 !important;
   letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
   overflow: hidden;
   position: relative;
 }
 
+.btn-next-studrio:not(:disabled) {
+  background: #ffe165 !important;
+  border: 1px solid #000000 !important;
+}
+
 .btn-next-studrio:hover:not(:disabled) {
-  background: #fffbee !important;
+  filter: brightness(0.96);
 }
 
 .btn-next-studrio:disabled {
-  background: #f5f5f5 !important;
-  border-color: #d9dce1 !important;
-  opacity: 0.6 !important;
+  background: #ffffff !important;
+  border: 1px solid #000000 !important;
+  opacity: 1 !important;
   cursor: not-allowed !important;
 }
 
@@ -459,10 +465,16 @@
  *   .shooting-look-text
  * ══════════════════════════════════════════════════════════════════════════ */
 
-#page-shooting {
+#page-shooting,
+#page-flipbook-shoot {
   display: flex !important;
   flex-direction: column !important;
-  padding: 0 !important;
+  /* Minor Fix: top margin-gap above the live view, matching the existing
+     bottom margin-gap — both restored to the .page base's vertical
+     padding value (2.2vh) so the live view no longer sits fully flush at
+     the top only. Horizontal padding stays 0 so the side panels still
+     reach the left/right edges. */
+  padding: 2.2vh 0 !important;
 }
 
 /* Topbar: keep centered look */
@@ -470,9 +482,16 @@
   flex-shrink: 0;
 }
 
-/* Full-screen layout fills remaining height */
-#page-shooting .shooting-fullscreen-layout {
+/* Full-screen layout: now the only child of #page-shooting (the top bar and
+   "Look at the camera" text have been removed), so it must fill the entire
+   page with no leftover gaps where those elements used to sit. Flipbook
+   Video Taking (#page-flipbook-shoot) uses the exact same shell, so it
+   gets the same fullscreen treatment for parity. */
+#page-shooting .shooting-fullscreen-layout,
+#page-flipbook-shoot .shooting-fullscreen-layout {
   flex: 1;
+  width: 100%;
+  height: 100%;
   min-height: 0;
 }
 
@@ -544,6 +563,11 @@
   padding: 2.8vh 2.2vw 2.2vh 2.2vw !important;
 }
 
+/* Title on the left, live selection counter on the right (opposite side). */
+#page-selection .sb-page-header {
+  justify-content: space-between !important;
+}
+
 /* Override the selection-layout to match reference coordinates:
    selection grid ≈ 59.5% of 1920, strip ≈ rest */
 #page-selection .selection-layout {
@@ -553,17 +577,24 @@
   min-height: 0 !important;
 }
 
-/* Selection grid: tight grid, zero gaps, equal square cells */
+/* Selection grid: tight grid, zero gaps, equal cells.
+   grid-auto-rows is a fixed 33.3333% (not 1fr) and overflow scrolls
+   vertically instead of shrinking cells as more than 9 shots are taken —
+   see the longer explanation on the base .selection-grid rule in style.css. */
 #page-selection .selection-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
-  grid-auto-rows: 1fr !important;
+  grid-auto-rows: 33.3333% !important;
   gap: 0 !important;
   min-height: 0 !important;
   border-radius: 12px !important;
-  overflow: hidden !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: none !important;
+  touch-action: pan-y !important;
   align-items: stretch !important;
 }
+#page-selection .selection-grid::-webkit-scrollbar { display: none !important; }
 
 /* Photo cards: no gap, no border-radius at seam */
 #page-selection .selection-grid .photo-card {
@@ -580,9 +611,17 @@
 }
 
 /* Selection number badge style (from animations.css .photo-card-order-badge) */
-/* Already defined — just ensure it uses studrio yellow */
+/* Square, flush to the top-right corner, Studrio selection yellow.
+   Minor Fix: moved from top-left to top-right, and text color changed
+   to black (was inheriting animations.css's white) for legibility
+   against the light yellow background. */
 .photo-card-order-badge {
-  background: var(--studrio-yellow) !important;
+  top:           0        !important;
+  left:          auto     !important;
+  right:         0        !important;
+  border-radius: 0        !important;
+  background:    #ffe165  !important;
+  color:         #1a1a1a  !important;
 }
 
 /* Photo darkening on selection */
@@ -620,11 +659,16 @@
 #btnNextFromSelection {
   border-radius: var(--next-radius) !important;
   background: #ffffff !important;
-  border: 2px solid #F0C231 !important;
+  border: 1px solid #000000 !important;
   color: var(--studrio-black) !important;
   font-weight: 800 !important;
+  text-transform: uppercase !important;
   overflow: hidden !important;
   position: relative !important;
+}
+#btnNextFromSelection:not(:disabled) {
+  background: #ffe165 !important;
+  border: 1px solid #000000 !important;
 }
 
 /* Hide BACK button on Page 4 — none existed but guard it */
@@ -641,11 +685,16 @@
 #btnNextFromDesign {
   border-radius: var(--next-radius) !important;
   background: #ffffff !important;
-  border: 2px solid #F0C231 !important;
+  border: 1px solid #000000 !important;
   color: var(--studrio-black) !important;
   font-weight: 800 !important;
+  text-transform: uppercase !important;
   overflow: hidden !important;
   position: relative !important;
+}
+#btnNextFromDesign:not(:disabled) {
+  background: #ffe165 !important;
+  border: 1px solid #000000 !important;
 }
 
 /* Keep filter column hidden (admin-only feature) */
@@ -774,14 +823,14 @@
   border-radius: var(--next-radius) !important;
 }
 
-/* DONE button: gray until printing starts (handled by existing .ready class logic) */
-/* When .ready: apply white + yellow border styling */
+/* DONE button: white/black until printing starts (handled by existing .ready class logic) */
+/* When .ready: 1px black border, #ffe165 background */
 .printing-done-btn.ready {
-  background: #ffffff !important;
-  border: 2px solid #F0C231 !important;
+  background: #ffe165 !important;
+  border: 1px solid #000000 !important;
   color: var(--studrio-black) !important;
   cursor: pointer !important;
-  box-shadow: 0 2px 12px rgba(240, 194, 49, 0.22) !important;
+  box-shadow: none !important;
 }
 
 /* QR column: ensure proper layout */
@@ -801,6 +850,55 @@
  * ══════════════════════════════════════════════════════════════════════════ */
 #btnBackFromFrame {
   display: none !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * PAGE 6: PRINT & QR — REMOVE DONE BUTTON
+ * The Done button previously let a guest advance/cancel while printing was
+ * still in progress. Printing now runs to completion automatically and the
+ * kiosk returns home on its own via the 30s QR countdown (see app.js), so
+ * the corner action row (icon + label + button) built around that button
+ * is removed for this page only — other pages' identical corner UI is
+ * untouched.
+ * ══════════════════════════════════════════════════════════════════════════ */
+#page-printing .sb-next-corner {
+  display: none !important;
+}
+
+/* Post-print countdown shown next to the QR code, counting down the 30s
+   before the kiosk automatically returns to the home screen. */
+.qr-countdown {
+  font-size: 1.3vh;
+  font-weight: 600;
+  color: var(--studrio-black, #1a1a1a);
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+/* Full-screen white fade used when the 30s countdown ends and the kiosk
+   returns to the home screen. */
+.white-fade-overlay {
+  position: fixed;
+  inset: 0;
+  background: #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 0.6s ease;
+}
+/* Applied briefly to #page-printing during _fadeToWhiteThenReset() so it
+   snaps to invisible instantly (no fade) instead of racing the white
+   overlay's own fade-out — see app.js. */
+.page-force-hidden {
+  transition: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.white-fade-overlay.active {
+  opacity: 1;
+  pointer-events: all;
 }
 
 
@@ -845,9 +943,15 @@
 #page-design .nav-row .btn-primary {
   border-radius: var(--next-radius) !important;
   background: #ffffff !important;
-  border: 2px solid #F0C231 !important;
+  border: 1px solid #000000 !important;
   color: var(--studrio-black) !important;
   font-weight: 800 !important;
+  text-transform: uppercase !important;
+}
+#page-selection .nav-row .btn-primary:not(:disabled),
+#page-design .nav-row .btn-primary:not(:disabled) {
+  background: #ffe165 !important;
+  border: 1px solid #000000 !important;
 }
 
 /* Restore pointer events during transitions */
@@ -905,11 +1009,15 @@
   display: none !important;
 }
 
-/* Left panel: fixed width, column-flex, content centered vertically */
-#page-shooting .shooting-side-left {
+/* Left panel: fixed width, column-flex, content centered vertically.
+   Flipbook Video Taking (#page-flipbook-shoot) reuses the identical
+   .shooting-side-left markup as Page 3, so it gets the exact same
+   layout/placement here too. */
+#page-shooting .shooting-side-left,
+#page-flipbook-shoot .shooting-side-left {
   width: 14vw !important;
   flex-shrink: 0 !important;
-  background: rgba(80, 80, 80, 0.82) !important;
+  background: #ffffff !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -920,13 +1028,28 @@
   overflow-x: hidden !important;
   scrollbar-width: none !important;
 }
-#page-shooting .shooting-side-left::-webkit-scrollbar { display: none; }
+#page-shooting .shooting-side-left::-webkit-scrollbar,
+#page-flipbook-shoot .shooting-side-left::-webkit-scrollbar { display: none; }
+
+/* Minor Fix: Photos Taken counter moved from the right panel into this
+   (left) panel — sits above the "Camera Mode" label, centered like
+   everything else in this panel. Base text styling (.photos-taken-label/
+   .photos-taken-count) is unscoped in style.css so it's unaffected by the
+   move; this just adds the spacing this panel needs. */
+#page-shooting .shooting-side-left .shooting-photos-taken {
+  width: 100% !important;
+  text-align: center !important;
+  flex-shrink: 0 !important;
+  margin-bottom: 1.8vh !important;
+}
 
 /* "Camera Mode" label — sits above the buttons, dim uppercase like "Photos Taken" */
 .shooting-cam-mode-label {
   font-size: 1.05vh;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.50);
+  /* Was rgba(255,255,255,0.50) — panel background is now white, see
+     .shooting-side-left above. */
+  color: rgba(0, 0, 0, 0.55);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   text-align: center;
@@ -936,7 +1059,8 @@
 }
 
 /* Control groups: stacked, full width */
-#page-shooting .shooting-side-left .shooting-ctrl-group {
+#page-shooting .shooting-side-left .shooting-ctrl-group,
+#page-flipbook-shoot .shooting-side-left .shooting-ctrl-group {
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -944,67 +1068,82 @@
   flex-shrink: 0;
 }
 
-#page-shooting .shooting-side-left .filter-group {
+#page-shooting .shooting-side-left .filter-group,
+#page-flipbook-shoot .shooting-side-left .filter-group {
   margin-top: 1vh;
 }
 
-/* Camera control buttons — restore original sb-control-btn look inside dark panel */
-#page-shooting .shooting-side-left .sb-control-btn {
+/* Camera control buttons.
+ * Square corners, black text/border throughout:
+ *   inactive: white background, black border
+ *   active:   #ffe165 background, black border
+ * Icon invert filter (previously needed to show icons on the old dark
+ * panel) is removed below — icons render in their native color, which
+ * reads correctly against both the white (inactive) and yellow (active)
+ * button backgrounds. */
+#page-shooting .shooting-side-left .sb-control-btn,
+#page-flipbook-shoot .shooting-side-left .sb-control-btn {
   width: 100% !important;
   padding: 1.1vh 1vw !important;
-  border-radius: 10px !important;
+  border-radius: 0 !important;
   font-size: 1.35vh !important;
   font-weight: 600 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: flex-start !important;
   gap: 0.7vw !important;
-  background: rgba(255, 255, 255, 0.10) !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
-  color: rgba(255, 255, 255, 0.90) !important;
+  background: #ffffff !important;
+  border: 1.5px solid #000000 !important;
+  color: #000000 !important;
   transition: background 0.14s ease, border-color 0.14s ease !important;
   letter-spacing: 0.02em !important;
   white-space: nowrap !important;
   overflow: hidden !important;
 }
 
-#page-shooting .shooting-side-left .sb-control-btn img {
+#page-shooting .shooting-side-left .sb-control-btn img,
+#page-flipbook-shoot .shooting-side-left .sb-control-btn img {
   width: 2vh !important;
   height: 2vh !important;
   object-fit: contain !important;
   flex-shrink: 0 !important;
-  filter: invert(1) brightness(2) !important;
-  opacity: 0.80 !important;
+  opacity: 1 !important;
 }
 
-#page-shooting .shooting-side-left .sb-control-btn:hover {
-  background: rgba(240, 194, 49, 0.22) !important;
-  border-color: rgba(240, 194, 49, 0.55) !important;
+#page-shooting .shooting-side-left .sb-control-btn:hover,
+#page-flipbook-shoot .shooting-side-left .sb-control-btn:hover {
+  background: #fff8dc !important;
+  border-color: #000000 !important;
 }
 
-/* Active / selected state: Studrio yellow */
-#page-shooting .shooting-side-left .sb-control-btn.active {
-  background: #F0C231 !important;
-  border-color: #F0C231 !important;
-  color: #1a1200 !important;
+/* Active / selected state: black border, Studrio-yellow #ffe165 fill */
+#page-shooting .shooting-side-left .sb-control-btn.active,
+#page-flipbook-shoot .shooting-side-left .sb-control-btn.active {
+  background: #ffe165 !important;
+  border-color: #000000 !important;
+  color: #000000 !important;
 }
-#page-shooting .shooting-side-left .sb-control-btn.active img {
+#page-shooting .shooting-side-left .sb-control-btn.active img,
+#page-flipbook-shoot .shooting-side-left .sb-control-btn.active img {
   filter: none !important;
   opacity: 1 !important;
 }
 
-/* Filter chip + toggle button */
+/* Filter chip + toggle button — currently hidden from the guest UI
+   (.filter-group has display:none in index.html) but kept in sync with
+   the same square-corner/black-on-white(active: #ffe165) scheme above,
+   since it's a button living in the same panel. */
 .filter-status-chip {
   display: flex;
   align-items: center;
   gap: 0.4vw;
   padding: 0.55vh 0.7vw;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0;
+  background: #ffffff;
+  border: 1.5px solid #000000;
   font-size: 1.1vh;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.80);
+  color: #000000;
   width: 100%;
   margin-bottom: 0.4vh;
 }
@@ -1012,7 +1151,7 @@
   width: 0.7vh;
   height: 0.7vh;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(0, 0, 0, 0.35);
   flex-shrink: 0;
 }
 .filter-status-chip:not(.no-filter) .filter-dot { background: #F0C231; }
@@ -1021,20 +1160,20 @@
 .filter-toggle-btn {
   width: 100% !important;
   padding: 0.9vh 0.8vw !important;
-  border-radius: 10px !important;
+  border-radius: 0 !important;
   font-size: 1.2vh !important;
   font-weight: 600 !important;
-  background: rgba(255, 255, 255, 0.10) !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
-  color: rgba(255, 255, 255, 0.75) !important;
+  background: #ffffff !important;
+  border: 1.5px solid #000000 !important;
+  color: #000000 !important;
   cursor: pointer !important;
   text-align: center !important;
   transition: background 0.14s ease !important;
 }
 .filter-toggle-btn:not(:disabled):hover {
-  background: rgba(240, 194, 49, 0.22) !important;
-  border-color: rgba(240, 194, 49, 0.55) !important;
-  color: #fff !important;
+  background: #ffe165 !important;
+  border-color: #000000 !important;
+  color: #000000 !important;
 }
 .filter-toggle-btn:disabled { opacity: 0.38 !important; cursor: not-allowed !important; }
 
@@ -1042,7 +1181,7 @@
 #page-shooting .shooting-side-right {
   width: 13vw !important;
   flex-shrink: 0 !important;
-  background: rgba(80, 80, 80, 0.82) !important;
+  background: #ffffff !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -1053,6 +1192,14 @@
   scrollbar-width: none !important;
 }
 #page-shooting .shooting-side-right::-webkit-scrollbar { display: none; }
+
+/* Flipbook Video Taking's right panel ("Video 1/3") previously had no
+   page-specific override at all here and just inherited the old dark
+   .shooting-side-panel background from style.css — give it the same
+   white background as Photo Taking's right panel above. */
+#page-flipbook-shoot .shooting-side-right {
+  background: #ffffff !important;
+}
 
 /* Counter block: don't push to bottom — let justify-content:center handle it */
 #page-shooting .shooting-side-right .shooting-photos-taken {
@@ -1155,8 +1302,60 @@
  * ══════════════════════════════════════════════════════════════════════════ */
 
 /* Ensure the preview frame is a positioning context for all overlays */
-#shootingPreviewFrame {
+#shootingPreviewFrame,
+#flipbookPreviewFrame {
   position: relative !important;
+}
+
+/*
+ * 4×6 templates: fixed-width portrait preview box, centered in the
+ * available space between the two side panels. Overrides the default
+ * flex:1 fill (used for other frame types) so the frame's WIDTH never
+ * stretches — height is left at 100% of its normal Photo Taking row.
+ *
+ * Minor Fix: this used to hardcode height:1080px (the full kiosk-canvas
+ * height), which is taller than .shooting-fullscreen-layout's actual
+ * available height (the row sits below the page's own top padding/timer
+ * header, so it never actually gets the full 1080px). That mismatch —
+ * combined with object-fit:cover on the fixed 812×1080 box below — is
+ * what zoomed/cropped the live view for 4×6. Height now just follows the
+ * row's real height (height:100%, same as the regular/2×6 preview frame
+ * gets via flex:1 stretch), so 4×6 keeps its own narrower width but the
+ * same, correct, non-cropped height as ordinary Photo Taking.
+ */
+#shootingPreviewFrame[data-frame="4x6"] {
+  flex: none;
+  width: 812px;
+  height: 100%;
+  margin: 0 auto;
+  align-self: center;
+}
+
+/* Video/live-image element sized to match the 4×6 frame exactly (rather
+   than inheriting the generic 100%/100% from the base #shootingVideo,
+   #shootingImg rule) — same box, stated explicitly per spec. Minor Fix:
+   height is now 100% (of the corrected box above) instead of a hardcoded
+   1080px, so it no longer forces object-fit:cover to crop/zoom into an
+   overly tall box. */
+#shootingPreviewFrame[data-frame="4x6"] #shootingVideo,
+#shootingPreviewFrame[data-frame="4x6"] #shootingImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/*
+ * With the 4×6 preview frame now a narrow fixed-size box instead of
+ * flex:1, the two side panels' old fixed 12vw width would leave a big
+ * empty gap (grid-bg showing through) between them and the frame. Give
+ * them the leftover horizontal space instead so the row tiles edge to
+ * edge with no gaps — panel content stays centered as before, only the
+ * panel width changes. Scoped to the 4×6 session only via :has(); other
+ * frame types keep the existing fixed-width side panels untouched.
+ */
+#page-shooting .shooting-fullscreen-layout:has(#shootingPreviewFrame[data-frame="4x6"]) .shooting-side-panel {
+  flex: 1 1 auto;
+  width: auto;
 }
 
 .prep-countdown-overlay {
@@ -1188,8 +1387,12 @@
 }
 
 /* When the overlay is visible (shooting.js sets display:flex or display:block),
-   the number must be large and high-contrast. */
-#countdownNumber {
+   the number must be large and high-contrast. #flipbookCountdownNumber is
+   the flipbook video-taking page's equivalent of #countdownNumber — it
+   had no matching CSS at all before, so it fell back to the tiny, dim
+   default from style.css (font-size:14vh, opacity:0.6). */
+#countdownNumber,
+#flipbookCountdownNumber {
   font-size: 22vh !important;
   font-weight: 900 !important;
   color: #ffffff !important;
@@ -1289,26 +1492,27 @@
   align-items: center;
   justify-content: center;
   padding: 0.8vh 2.0vw;
-  border-radius: 999px;
-  border: 1.5px solid var(--border, #e4e5e8);
+  border-radius: 0;
+  border: 1px solid #000000;
   background: #ffffff;
-  color: var(--text, #1c1e21);
+  color: #000000;
   font-size: 1.45vh;
   font-weight: 600;
   font-family: var(--font-ui, sans-serif);
   letter-spacing: 0.02em;
+  text-transform: uppercase;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
   white-space: nowrap;
 }
 .template-cat-tab:hover {
   background: #fffbee;
-  border-color: #F0C231;
+  border-color: #000000;
 }
 .template-cat-tab.active {
-  background: #F0C231;
-  border-color: #F0C231;
-  color: #1a1200;
+  background: #ffe165;
+  border-color: #000000;
+  color: #000000;
 }
 
 /* ── Carousel: arrow | track-outer | arrow ─────────────────────────────── */
@@ -1387,37 +1591,68 @@
   gap: 0.6vh;
   padding: 1.0vh 0.5vw 0.8vh 0.5vw;
 
-  background: rgba(255, 255, 255, 0.80);
-  border: 1.5px solid var(--border, #e4e5e8);
-  border-radius: 12px;
+  /* Card is a layout-only wrapper now — no box/background/border of its own.
+     The visual boundary lives directly on .template-card-thumb below. */
+  background: transparent;
+  border: none;
+  border-radius: 0;
   cursor: pointer;
   position: relative;
-  overflow: hidden;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  overflow: visible;
+  transition: none;
   box-sizing: border-box;
 }
 .template-card:hover {
-  border-color: #F0C231;
-  background: #fffbee;
-  box-shadow: 0 2px 12px rgba(240, 194, 49, 0.20);
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
-/* Selected / active: yellow border + faint tint + glow pulse */
+/* Selected / active: no styling on the card itself — the glow + enlarge
+   are applied directly to .template-card-thumb (see below) so the effect
+   hugs the uploaded template image rather than an outer container. */
 .template-card.active,
 .template-card.selected {
-  border: 2px solid #F0C231 !important;
-  background: rgba(255, 251, 238, 0.60) !important;
-  animation: template-card-glow 1.8s ease-in-out infinite !important;
+  border: none !important;
+  background: transparent !important;
+  z-index: 5;
 }
 
-/* Thumbnail: object-fit:contain so 2×6 tall strips show their full height */
+/* Thumbnail: object-fit:contain so 2×6 tall strips show their full height.
+   1px black stroke sits directly on the image — this is the only visible
+   boundary around each uploaded template now that the card box is gone. */
 .template-card-thumb {
   width: 100%;
   flex: 1;
   min-height: 0;
   object-fit: contain;
   display: block;
-  border-radius: 4px;
+  border: 1px solid #000000;
+  border-radius: 0;
   background: transparent;
+  transform-origin: center center;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  position: relative;
+}
+
+/* Selected: #ffe165 glow behind the template + 20% enlarge */
+.template-card.active .template-card-thumb,
+.template-card.selected .template-card-thumb {
+  transform: scale(1.2);
+  animation: template-card-glow 1.8s ease-in-out infinite !important;
+}
+
+/* UI FIX: the 20% scale-up above doesn't take up layout space (transforms
+   never do), so the enlarged thumb's ~10% overflow at its bottom edge sits
+   visually on top of .template-card-label directly below it, covering the
+   title. Push the label down and above the thumb (z-index) only while its
+   card is active/selected, so it clears the overlap and stays fully
+   visible. */
+.template-card.active .template-card-label,
+.template-card.selected .template-card-label {
+  margin-top: 4vh;
+  position: relative;
+  z-index: 6;
+  transition: margin-top 0.25s ease;
 }
 
 /* Label below thumbnail */
@@ -1469,19 +1704,40 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1vw;
+  gap: 1.2vw;
   flex-shrink: 0;
-  padding: 0.6vh 2vw;
+  /* +20% from 0.6vh 2vw */
+  padding: 0.72vh 2.4vw;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid var(--border, #e4e5e8);
   border-radius: 999px;
-  min-height: 3.6vh;
+  /* +20% from 3.6vh */
+  min-height: 4.32vh;
 }
 .template-selected-name {
-  font-size: 1.35vh;
+  /* +20% from 1.35vh */
+  font-size: 1.62vh;
   font-weight: 700;
   color: var(--text, #1c1e21);
   letter-spacing: 0.01em;
+  display: inline-block; /* required for the transform in the swap animation below */
+}
+
+/* Fade/slide swap animation, played by app.js's _setSelectedName() every
+   time the selected-template name text actually changes (i.e. switching
+   between templates), so the title doesn't just hard-cut to new text. */
+@keyframes templateSelectedNameSwap {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.template-selected-name.name-swap {
+  animation: templateSelectedNameSwap 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .template-selected-size {
   font-size: 1.2vh;
@@ -1586,6 +1842,13 @@
 .template-carousel-track-outer {
   overflow-x: auto      !important;
   overflow-y: hidden    !important;
+  /* Vertical padding so a selected card's 20% enlarge + glow (both applied
+     to .template-card-thumb) has room to render without being clipped by
+     overflow-y: hidden above. Cards/thumbs stretch to 100% of this box's
+     *content* height (box-sizing: border-box), so the padding shrinks the
+     unscaled thumb just enough that scale(1.2) still fits inside the
+     unchanged outer box. */
+  padding: 7vh 0 !important;
   /* No scroll-snap — snapping fights momentum and makes drags feel stiff.
      Arrow buttons scroll by one card width via smooth scrollBy() in JS. */
   -webkit-overflow-scrolling: touch !important;
@@ -1604,44 +1867,67 @@
   min-width:  100%      !important;   /* fill outer at minimum */
 }
 
-/* Cards: no scroll-snap (removed — snap fought momentum, felt stiff) */
+/*
+ * Cards: no scroll-snap (removed — snap fought momentum, felt stiff)
+ *
+ * Extra horizontal margin is added on .active/.selected below so the
+ * enlarged card (scale(1.2) on .template-card-thumb) gets breathing room
+ * on both sides instead of visually overlapping its neighbors — the
+ * outer .template-card box isn't affected by that transform (transforms
+ * don't take up layout space), so without this margin the neighboring
+ * cards stayed put right up against the now-larger thumbnail.
+ */
 .template-card {
   /* Slightly smaller: reduce vertical padding so cards feel less cramped */
   padding: 0.6vh 0.5vw 0.5vh 0.5vw !important;
   transition:
     border-color 0.18s ease,
     background   0.18s ease,
-    box-shadow   0.18s ease !important;
+    box-shadow   0.18s ease,
+    margin       0.25s ease !important;
+}
+.template-card.active,
+.template-card.selected {
+  /* ~half of the thumb's 20% scale overflow on each side, plus a little
+     extra for the glow halo. Uses vh (not vw) because these cards are
+     sized by height (height:100%, width:auto), so their rendered width —
+     and therefore how far the scaled-up thumb overflows — scales with
+     viewport height, not width. */
+  margin-left:  3vh !important;
+  margin-right: 3vh !important;
 }
 
 /*
  * Glow pulse keyframe — box-shadow breathes between a tight inner ring
- * and a wider soft halo, both in Studrio yellow.  No scale, no layout shift.
+ * and a wider soft halo, both in the #ffe165 selection yellow. Applied to
+ * .template-card-thumb (see above), so the glow sits directly behind the
+ * enlarged template image rather than an outer card box. The static
+ * transform: scale(1.2) set alongside this animation is untouched by it,
+ * since transform isn't one of the animated properties.
  */
 @keyframes template-card-glow {
   0%, 100% {
     box-shadow:
-      0 0 0 2px rgba(240, 194, 49, 0.55),
-      0 0 10px 2px rgba(240, 194, 49, 0.18);
+      0 0 0 3px rgba(255, 225, 101, 0.75),
+      0 0 18px 6px rgba(255, 225, 101, 0.35);
   }
   50% {
     box-shadow:
-      0 0 0 3px rgba(240, 194, 49, 0.80),
-      0 0 22px 6px rgba(240, 194, 49, 0.28);
+      0 0 0 4px rgba(255, 225, 101, 1),
+      0 0 32px 12px rgba(255, 225, 101, 0.55);
   }
 }
 
 /*
- * Suppress the slide-in entrance animation (.animating) when the carousel
- * re-renders because of a template selection.  app.js sets
- * data-selecting="1" on the track just before calling _renderCarousel()
- * during _selectTemplate(); animations-redesign.js removes it after.
- * (Technique: target-class guard via attribute selector — no app.js edit
- * required; the attribute is set entirely in animations-redesign.js.)
+ * NOTE: an older fix attempt here suppressed the .animating entrance
+ * animation from replaying on selection via a `data-selecting` attribute
+ * set by animations-redesign.js. That was working around app.js's
+ * _selectTemplate() rebuilding the whole track on every tap. app.js no
+ * longer does that — selecting a template only toggles the .active class
+ * on the existing card elements (see _selectTemplate() in app.js), so
+ * .animating is never (re)triggered by a selection in the first place and
+ * that suppression rule/hook is no longer needed. Removed.
  */
-.template-carousel-track[data-selecting] > .template-card {
-  animation: none !important;
-}
 
 
 /* ── Pose overlay (1/2/3/4 grid) — hide entirely ──────────────────────── */
@@ -1663,7 +1949,12 @@
  * state. Override with the flat Studrio yellow to match the brand.
  */
 .selection-counter-card.complete {
-  background: #F0C231 !important;
+  background: #ffe165 !important;
+}
+/* animations.css sets border-color to amber with !important — force black,
+   in both the default and complete states, per spec. */
+.selection-counter-card {
+  border-color: #000000 !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

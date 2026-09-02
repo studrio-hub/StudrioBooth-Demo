@@ -190,6 +190,11 @@ const assetSync = (() => {
       if (t.overlay_path_long_mini === storagePath) return t._overlay_version_2x6 || -1;
       if (t.overlay_path_film_duo  === storagePath) return t._overlay_version_2x6 || -1;
       if (t.overlay_path_wide_mini === storagePath) return t._overlay_version_2x6 || -1;
+      // Flipbook — all 3 slots share the same template version number
+      if (t.overlay_path_flipbook_cover === storagePath) return t._overlay_version_2x6 || -1;
+      if (t.overlay_path_flipbook_a4_1  === storagePath) return t._overlay_version_2x6 || -1;
+      if (t.overlay_path_flipbook_a4_2  === storagePath) return t._overlay_version_2x6 || -1;
+      if (t.overlay_path_flipbook_preview === storagePath) return t._overlay_version_2x6 || -1;
     }
     return -1;
   }
@@ -253,6 +258,11 @@ const assetSync = (() => {
       const previewOverlayBlobLongMini    = t.preview_overlay_path_long_mini   ? await idbGet(t.preview_overlay_path_long_mini)   : null;
       const previewOverlayBlobFilmDuo     = t.preview_overlay_path_film_duo    ? await idbGet(t.preview_overlay_path_film_duo)    : null;
       const previewOverlayBlobWideMini    = t.preview_overlay_path_wide_mini   ? await idbGet(t.preview_overlay_path_wide_mini)   : null;
+      // Flipbook — 3 independent template slots
+      const flipbookCoverBlob             = t.overlay_path_flipbook_cover     ? await idbGet(t.overlay_path_flipbook_cover)      : null;
+      const flipbookA4Page1Blob           = t.overlay_path_flipbook_a4_1      ? await idbGet(t.overlay_path_flipbook_a4_1)       : null;
+      const flipbookA4Page2Blob           = t.overlay_path_flipbook_a4_2      ? await idbGet(t.overlay_path_flipbook_a4_2)       : null;
+      const flipbookPreviewBlob           = t.overlay_path_flipbook_preview   ? await idbGet(t.overlay_path_flipbook_preview)    : null;
 
       resolved.push({
         ...t,
@@ -268,7 +278,12 @@ const assetSync = (() => {
         previewOverlayUrlLongDuo:   previewOverlayBlobLongDuo  ? makeObjectUrl(previewOverlayBlobLongDuo,  t.preview_overlay_path_long_duo)  : null,
         previewOverlayUrlLongMini:  previewOverlayBlobLongMini ? makeObjectUrl(previewOverlayBlobLongMini, t.preview_overlay_path_long_mini) : null,
         previewOverlayUrlFilmDuo:   previewOverlayBlobFilmDuo  ? makeObjectUrl(previewOverlayBlobFilmDuo,  t.preview_overlay_path_film_duo)  : null,
-        previewOverlayUrlWideMini:  previewOverlayBlobWideMini ? makeObjectUrl(previewOverlayBlobWideMini, t.preview_overlay_path_wide_mini) : null
+        previewOverlayUrlWideMini:  previewOverlayBlobWideMini ? makeObjectUrl(previewOverlayBlobWideMini, t.preview_overlay_path_wide_mini) : null,
+        // Flipbook blob: URLs (null if not uploaded)
+        flipbookCoverUrl:           flipbookCoverBlob          ? makeObjectUrl(flipbookCoverBlob,          t.overlay_path_flipbook_cover)    : null,
+        flipbookA4Page1Url:         flipbookA4Page1Blob        ? makeObjectUrl(flipbookA4Page1Blob,        t.overlay_path_flipbook_a4_1)     : null,
+        flipbookA4Page2Url:         flipbookA4Page2Blob        ? makeObjectUrl(flipbookA4Page2Blob,        t.overlay_path_flipbook_a4_2)     : null,
+        flipbookPreviewUrl:         flipbookPreviewBlob        ? makeObjectUrl(flipbookPreviewBlob,        t.overlay_path_flipbook_preview)  : null
       });
     }
     return resolved.filter((t) => t.enabled !== false);
@@ -291,6 +306,10 @@ const assetSync = (() => {
       if (t.preview_overlay_path_long_mini)  activePaths.add(t.preview_overlay_path_long_mini);
       if (t.preview_overlay_path_film_duo)   activePaths.add(t.preview_overlay_path_film_duo);
       if (t.preview_overlay_path_wide_mini)  activePaths.add(t.preview_overlay_path_wide_mini);
+      if (t.overlay_path_flipbook_cover)     activePaths.add(t.overlay_path_flipbook_cover);
+      if (t.overlay_path_flipbook_a4_1)      activePaths.add(t.overlay_path_flipbook_a4_1);
+      if (t.overlay_path_flipbook_a4_2)      activePaths.add(t.overlay_path_flipbook_a4_2);
+      if (t.overlay_path_flipbook_preview)   activePaths.add(t.overlay_path_flipbook_preview);
     }
     const allKeys = await idbGetAllKeys();
     for (const key of allKeys) {
@@ -352,7 +371,13 @@ const assetSync = (() => {
           previewOverlayUrlLongDuo,
           previewOverlayUrlLongMini,
           previewOverlayUrlFilmDuo,
-          previewOverlayUrlWideMini
+          previewOverlayUrlWideMini,
+          // Flipbook — 3 independent template slots
+          flipbookCoverUrl,
+          flipbookA4Page1Url,
+          flipbookA4Page2Url,
+          // Flipbook Overlay — screen-preview-only decorative frame graphic
+          flipbookPreviewUrl
         ] = await Promise.all([
           syncAsset(template.overlay_path_2x6,       template.version || 1, cachedMeta),
           syncAsset(template.overlay_path_4x6,       template.version || 1, cachedMeta),
@@ -386,6 +411,19 @@ const assetSync = (() => {
             : Promise.resolve(null),
           template.preview_overlay_path_wide_mini
             ? syncAsset(template.preview_overlay_path_wide_mini, template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          // Flipbook slots (optional — null when not uploaded)
+          template.overlay_path_flipbook_cover
+            ? syncAsset(template.overlay_path_flipbook_cover, template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.overlay_path_flipbook_a4_1
+            ? syncAsset(template.overlay_path_flipbook_a4_1,  template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.overlay_path_flipbook_a4_2
+            ? syncAsset(template.overlay_path_flipbook_a4_2,  template.version || 1, cachedMeta)
+            : Promise.resolve(null),
+          template.overlay_path_flipbook_preview
+            ? syncAsset(template.overlay_path_flipbook_preview, template.version || 1, cachedMeta)
             : Promise.resolve(null)
         ]);
 
@@ -406,6 +444,12 @@ const assetSync = (() => {
           previewOverlayUrlLongMini,
           previewOverlayUrlFilmDuo,
           previewOverlayUrlWideMini,
+          // Resolved blob: URLs for the 3 flipbook slots (or null)
+          flipbookCoverUrl,
+          flipbookA4Page1Url,
+          flipbookA4Page2Url,
+          // Resolved blob: URL for the Flipbook Overlay (screen preview only, or null)
+          flipbookPreviewUrl,
           _overlay_version_2x6: template.version || 1,
           _overlay_version_4x6: template.version || 1,
           _thumbnail_version:   template.version || 1
