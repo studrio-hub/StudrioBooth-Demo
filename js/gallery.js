@@ -88,6 +88,26 @@
     if (iconEl) iconEl.style.display = "none";
     if (spinEl) spinEl.style.display = "";
 
+    /*
+     * Minor Fix — Download button showed a heads-up but never actually
+     * completed the save:
+     *
+     * window.open() only counts as "triggered by a user gesture" while it's
+     * called synchronously inside the click handler. The old code called it
+     * AFTER `await fetch()` / `await res.blob()` — by then the gesture had
+     * expired, so iOS Safari (and several in-app browsers) silently blocked
+     * the popup. Nothing visibly happened beyond whatever the browser shows
+     * for a blocked popup, and the file never saved.
+     *
+     * Fix: open the tab HERE, synchronously, before any await, so it stays
+     * tied to the gesture — we just point it at the real file once it's
+     * ready below, instead of opening a fresh (by-then-unprivileged) tab.
+     */
+    let preopenedTab = null;
+    if (IS_IOS) {
+      preopenedTab = window.open("", "_blank");
+    }
+
     try {
       const res = await fetch(item.url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -95,21 +115,18 @@
       const objUrl = URL.createObjectURL(blob);
       const filename = `studrio-${item.label.replace(/\s+/g, "-").toLowerCase()}.${item.mimeExt}`;
 
-      // Always attempt the direct file download first — this is what
-      // actually saves to Files/Downloads when the platform supports it.
-      const a = document.createElement("a");
-      a.href = objUrl;
-      a.download = filename;
-      a.rel = "noopener";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
       if (IS_IOS) {
-        // Keep the long-press fallback tab open alongside the download
-        // attempt above, in case this iOS version ignores the download
-        // attribute for blob URLs triggered after an async fetch.
-        window.open(objUrl, "_blank");
+        // iOS Safari doesn't reliably honor the <a download> attribute at
+        // all (blob or otherwise), so the anchor-click approach below is
+        // skipped here — the pre-opened tab (still holding the gesture) is
+        // where the guest actually saves, via long-press on the now-loaded
+        // media → "Save Video" / "Add to Photos" / "Save to Files".
+        if (preopenedTab && !preopenedTab.closed) {
+          preopenedTab.location = objUrl;
+        } else {
+          // Popup was blocked despite the pre-open (rare) — last resort.
+          window.open(objUrl, "_blank");
+        }
         if (!_iosHintShown) {
           _iosHintShown = true;
           _showIosHint(item.type === "video");
@@ -118,11 +135,25 @@
         }
         setTimeout(() => URL.revokeObjectURL(objUrl), 90000);
       } else {
-        setTimeout(() => URL.revokeObjectURL(objUrl), 15000);
+        // Android / desktop: standard <a download> blob trigger — saves
+        // directly to the device's Downloads folder.
+        const a = document.createElement("a");
+        a.href = objUrl;
+        a.download = filename;
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // Minor Fix: revoking the blob too soon can truncate the save on
+        // slower devices or large video files, before the browser's own
+        // download manager has finished reading it — give it more
+        // headroom (30s) instead of the previous 15s.
+        setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
         showToast(item.type === "video" ? "Video saved" : "Photo saved");
       }
     } catch (e) {
       console.error("[gallery] Download failed:", e);
+      if (preopenedTab && !preopenedTab.closed) preopenedTab.close();
       showToast("Download failed — tap to retry");
     } finally {
       // Restore icon
@@ -190,12 +221,34 @@
       mediaEl.playsInline = true;
       mediaEl.setAttribute("playsinline", "");
       mediaEl.setAttribute("controls", ""); // native controls so user can scrub
+
+      /*
+       * Minor Fix — video long-press only showed a preview, no save option:
+       * long-pressing a bare <video> gives a much more limited context menu
+       * on mobile than long-pressing a real link to the same file does.
+       * Wrap it in an <a> pointing at the actual remote URL (not a blob) so
+       * long-press recognizes it as a downloadable file and offers "Save
+       * Video" / "Download Linked File" — the same way photos already
+       * work via their plain <img>. The click handler below prevents the
+       * link from actually navigating on a normal tap (so tapping play/
+       * scrub on the native controls doesn't accidentally open a new tab);
+       * it has no effect on the OS's own long-press context menu, which is
+       * driven by the href, not by this click handler.
+       */
+      const videoLink = document.createElement("a");
+      videoLink.href = item.url;
+      videoLink.target = "_blank";
+      videoLink.rel = "noopener";
+      videoLink.className = "gallery-slide-media-link";
+      videoLink.addEventListener("click", (e) => e.preventDefault());
+      videoLink.appendChild(mediaEl);
+      slide.appendChild(videoLink);
     } else {
       mediaEl = document.createElement("img");
       mediaEl.src = item.url;
       mediaEl.alt = item.label;
+      slide.appendChild(mediaEl);
     }
-    slide.appendChild(mediaEl);
 
     // Counter badge
     const counter = document.createElement("div");
