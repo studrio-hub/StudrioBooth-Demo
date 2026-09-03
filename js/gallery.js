@@ -65,15 +65,17 @@
 
   // ── Download logic ────────────────────────────────────────────────────────
   /*
-   * On iOS, the browser blocks <a download> for cross-origin blob URLs and
-   * doesn't save anything to the Photos app. Instead we open the blob URL in
-   * a new tab, where the user can long-press the image/video and choose
-   * "Add to Photos" or "Save to Files".
+   * Every platform gets a standard <a download> blob trigger — this is what
+   * actually saves the file to the device (Downloads on Android/desktop,
+   * Files app on iOS 13+ that supports it).
    *
-   * On Android / desktop, a standard anchor click with the download attribute
-   * triggers the OS save-to-gallery / Downloads flow.
-   *
-   * We fetch first so both paths work for cross-origin Supabase URLs.
+   * On iOS specifically we ALSO open the blob in a new tab so the guest has
+   * a fallback: some iOS Safari versions silently ignore the download
+   * attribute when the click happens after an async fetch (breaks the
+   * "user gesture" chain Apple requires), so the anchor-download can
+   * silently no-op there. Keeping the long-press-to-save tab open means the
+   * guest can always save manually even when the automatic download doesn't
+   * fire.
    */
   async function downloadItem(item, btn) {
     if (btn.disabled) return;
@@ -93,28 +95,29 @@
       const objUrl = URL.createObjectURL(blob);
       const filename = `studrio-${item.label.replace(/\s+/g, "-").toLowerCase()}.${item.mimeExt}`;
 
+      // Always attempt the direct file download first — this is what
+      // actually saves to Files/Downloads when the platform supports it.
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = filename;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
       if (IS_IOS) {
-        // Open in new tab — user long-presses to save
+        // Keep the long-press fallback tab open alongside the download
+        // attempt above, in case this iOS version ignores the download
+        // attribute for blob URLs triggered after an async fetch.
         window.open(objUrl, "_blank");
-        // Show one-time hint
         if (!_iosHintShown) {
           _iosHintShown = true;
           _showIosHint(item.type === "video");
         } else {
-          const action = item.type === "video" ? "hold the video → Save to Files" : "hold the photo → Add to Photos";
-          showToast(`Long-${action}`);
+          showToast("Saving to Files — if nothing happens, long-press the media above");
         }
-        // Revoke after a generous delay so the new tab has time to use it
         setTimeout(() => URL.revokeObjectURL(objUrl), 90000);
       } else {
-        // Android / desktop: standard anchor download
-        const a = document.createElement("a");
-        a.href = objUrl;
-        a.download = filename;
-        a.rel = "noopener";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
         setTimeout(() => URL.revokeObjectURL(objUrl), 15000);
         showToast(item.type === "video" ? "Video saved" : "Photo saved");
       }
@@ -141,9 +144,10 @@
       <div class="gallery-ios-hint-sheet">
         <h2>${isVideo ? "Save Video" : "Save Photo"}</h2>
         <p>
+          We've started saving this to your <strong>Files</strong> app.
           ${isVideo
-            ? "The video opened in a new tab. Tap and hold it, then choose <strong>Save to Files</strong> or <strong>Download</strong>."
-            : "The photo opened in a new tab. Tap and hold it, then choose <strong>Add to Photos</strong>."}
+            ? "If nothing happens, the video also opened in a new tab — tap and hold it, then choose <strong>Save to Files</strong>."
+            : "If nothing happens, the photo also opened in a new tab — tap and hold it, then choose <strong>Add to Photos</strong> or <strong>Save to Files</strong>."}
         </p>
         <button class="gallery-ios-hint-ok">Got it</button>
       </div>`;

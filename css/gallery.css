@@ -159,35 +159,40 @@ body {
   right: 16px;
   width: 44px;
   height: 44px;
-  border-radius: 50%;
-  border: none;
-  background: linear-gradient(135deg, var(--accent-start) 0%, var(--accent-end) 100%);
-  color: #1c1e21;
+  /* Square corners, black border — matches the kiosk's sb-btn-next /
+     sb-control-btn / printing-done-btn pattern exactly. */
+  border-radius: 0;
+  border: 1.5px solid #000000;
+  /* Ready/default state: Studrio yellow fill, matches .ready / .active
+     states across the kiosk (sb-btn-next, printing-done-btn.ready,
+     sb-control-btn.active all use this same #ffe165). */
+  background: #ffe165;
+  color: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   z-index: 15;
-  box-shadow: 0 4px 16px rgba(249,115,22,0.35);
-  transition: transform 0.12s ease, opacity 0.15s ease, box-shadow 0.15s ease;
-  /* icon SVG */
+  box-shadow: none;
+  transition: background 0.14s ease, transform 0.1s ease, opacity 0.15s ease;
   flex-shrink: 0;
 }
 
-.gallery-slide-download:active {
-  transform: scale(0.88);
-  opacity: 0.85;
+.gallery-slide-download:hover:not(:disabled) {
+  background: #c9a028; /* kiosk's --accent-dark hover shade */
 }
 
-.gallery-slide-download:disabled {
-  opacity: 0.45;
+.gallery-slide-download:active {
+  transform: scale(0.92);
+}
+
+.gallery-slide-download:disabled,
+.gallery-slide-download.is-downloading {
+  /* Busy state mirrors the kiosk's disabled look: white bg, same black
+     border — not just a dimmed yellow. */
+  background: #ffffff;
   cursor: wait;
   transform: none;
-}
-
-.gallery-slide-download.is-downloading {
-  opacity: 0.55;
-  cursor: wait;
 }
 
 /* Download icon SVG inside button */
@@ -197,12 +202,13 @@ body {
   flex-shrink: 0;
 }
 
-/* Spinner shown while downloading */
+/* Spinner shown while downloading — black to match the button's black
+   border/icon color (button turns white while downloading, see JS) */
 .gallery-dl-spinner {
   width: 20px;
   height: 20px;
-  border: 2.5px solid rgba(28,30,33,0.3);
-  border-top-color: #1c1e21;
+  border: 2.5px solid rgba(0,0,0,0.2);
+  border-top-color: #000000;
   border-radius: 50%;
   animation: gallery-spin 0.7s linear infinite;
   flex-shrink: 0;
