@@ -300,6 +300,9 @@
 
   // ── Render from session data ──────────────────────────────────────────────
   function render(data) {
+    // Hide loading immediately — we have data, whatever happens next
+    if (els.loading) els.loading.hidden = true;
+
     // Build items list: strip → individual photos → video
     _items = [];
 
@@ -332,11 +335,11 @@
     }
 
     if (!_items.length) {
-      // Nothing to show yet
+      // Session exists but no media URLs yet — show processing state, not "not found"
       if (els.loading) {
         els.loading.innerHTML = `
           <div class="gallery-loading-spinner"></div>
-          <span>Your gallery is still processing — check back in a moment.</span>`;
+          <span>Your gallery is still processing —<br>check back in a moment.</span>`;
         els.loading.hidden = false;
       }
       return;
@@ -356,24 +359,24 @@
       els.filmstrip.appendChild(thumb);
     });
 
-    // Arrow buttons
-    if (els.navPrev) {
+    // Arrow buttons — wire once, guard against double-wiring
+    if (els.navPrev && !els.navPrev._wired) {
+      els.navPrev._wired = true;
       els.navPrev.addEventListener("click", () => goTo(_current - 1));
     }
-    if (els.navNext) {
+    if (els.navNext && !els.navNext._wired) {
+      els.navNext._wired = true;
       els.navNext.addEventListener("click", () => goTo(_current + 1));
     }
 
     // Native scroll → sync UI
-    if (els.carousel) {
+    if (els.carousel && !els.carousel._wired) {
+      els.carousel._wired = true;
       els.carousel.addEventListener("scroll", _onCarouselScroll, { passive: true });
     }
 
     // Initial state
     _syncUI();
-
-    // Show carousel area, hide loading
-    if (els.loading) els.loading.hidden = true;
   }
 
   // ── Session ID from URL hash ──────────────────────────────────────────────
@@ -381,28 +384,50 @@
     return window.location.hash.replace(/^#/, "").trim() || null;
   }
 
+  // ── Show not-found state ──────────────────────────────────────────────────
+  function showNotFound() {
+    if (els.loading) els.loading.hidden = true;
+    if (els.notFound) els.notFound.hidden = false;
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
   async function init() {
     const galleryId = getSessionIdFromHash();
+    console.log("[gallery] Session ID from hash:", galleryId);
 
     if (!galleryId) {
-      if (els.loading) els.loading.hidden = true;
-      if (els.notFound) els.notFound.hidden = false;
+      showNotFound();
+      return;
+    }
+
+    // Check cloudStorage availability with diagnostics
+    if (typeof cloudStorage === "undefined") {
+      console.error("[gallery] cloudStorage is not defined — cloud-storage.js may not have loaded.");
+      showNotFound();
+      return;
+    }
+
+    const available = cloudStorage.isAvailable();
+    console.log("[gallery] cloudStorage.isAvailable():", available);
+
+    if (!available) {
+      console.error("[gallery] cloudStorage reports unavailable — Supabase client may not have initialized. Check CLOUD_CONFIG / supabase credentials in cloud-storage.js.");
+      showNotFound();
       return;
     }
 
     let data = null;
-    if (typeof cloudStorage !== "undefined" && cloudStorage.isAvailable()) {
-      try {
-        data = await cloudStorage.getSession(galleryId);
-      } catch (e) {
-        console.error("[gallery] Cloud fetch failed:", e);
-      }
+    try {
+      data = await cloudStorage.getSession(galleryId);
+      console.log("[gallery] getSession() returned:", data
+        ? `id=${data.id}, stripUrl=${!!data.finalStripUrl}, videoUrl=${!!data.finalStripVideoUrl}, photos=${(data.individualPhotoUrls||[]).length}`
+        : "null");
+    } catch (e) {
+      console.error("[gallery] getSession() threw:", e);
     }
 
     if (!data) {
-      if (els.loading) els.loading.hidden = true;
-      if (els.notFound) els.notFound.hidden = false;
+      showNotFound();
       return;
     }
 
