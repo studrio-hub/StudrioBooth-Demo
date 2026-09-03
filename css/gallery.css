@@ -468,54 +468,6 @@ body {
   display: none; /* hidden in carousel layout — branding via logo in topbar */
 }
 
-/* ── iOS save-to-photos hint modal ───────────────────────────────────────── */
-.gallery-ios-hint {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: rgba(0,0,0,0.6);
-  padding: 0 0 env(safe-area-inset-bottom, 0);
-}
-
-.gallery-ios-hint-sheet {
-  background: #1c1e21;
-  border-radius: 20px 20px 0 0;
-  width: 100%;
-  max-width: 480px;
-  padding: 20px 24px 36px;
-  text-align: center;
-}
-
-.gallery-ios-hint-sheet h2 {
-  font-size: 1rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: var(--text);
-}
-
-.gallery-ios-hint-sheet p {
-  font-size: 0.85rem;
-  color: var(--text-dim);
-  line-height: 1.6;
-  margin-bottom: 20px;
-}
-
-.gallery-ios-hint-sheet .gallery-ios-hint-ok {
-  width: 100%;
-  padding: 14px;
-  border: none;
-  border-radius: 12px;
-  background: linear-gradient(90deg, var(--accent-start), var(--accent-end));
-  color: #1c1e21;
-  font-family: inherit;
-  font-size: 0.95rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 /* ── Responsive tweaks ────────────────────────────────────────────────────── */
 @media (min-width: 480px) {
   .gallery-thumb { width: 80px; height: 80px; }

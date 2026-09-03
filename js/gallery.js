@@ -7,12 +7,14 @@
  *   3. Stitched video (finalStripVideoUrl)  → label "Video"
  *
  * Each item has a prominent download button (top-right corner).
- * Download behavior:
- *   - iOS Safari: opens the blob URL in a new tab so the user can long-press
- *     → "Add to Photos" / "Save to Files". A one-time hint sheet explains
- *     this on the first download so guests know what to do.
- *   - Android / desktop: standard <a download> blob trigger — saves directly
- *     to the device gallery / Downloads.
+ *
+ * Download behavior — identical on every platform, no UA branching:
+ *   fetch the file → get a blob → hand it to saveBlob(), which prefers the
+ *   Web Share API (navigator.share with a File) when the browser supports
+ *   sharing files, and falls back to a plain <a download> blob trigger
+ *   everywhere else (mainly desktop browsers, which don't support sharing
+ *   files). Web Share is what gives iOS a genuine native "Save Image" /
+ *   "Save Video" action — no new tab, no long-press, no custom hint sheet.
  *
  * Carousel: horizontal scroll-snap + arrow buttons + filmstrip thumbnails.
  * Swipe works natively via CSS scroll-snap; arrows call scrollTo().
@@ -22,14 +24,6 @@
 
 (function () {
   "use strict";
-
-  // ── Platform detection ────────────────────────────────────────────────────
-  const IS_IOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
-                 (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const IS_ANDROID = /android/i.test(navigator.userAgent);
-
-  // Whether the iOS save-hint has been shown this session
-  let _iosHintShown = false;
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
@@ -65,17 +59,9 @@
 
   // ── Download logic ────────────────────────────────────────────────────────
   /*
-   * Every platform gets a standard <a download> blob trigger — this is what
-   * actually saves the file to the device (Downloads on Android/desktop,
-   * Files app on iOS 13+ that supports it).
-   *
-   * On iOS specifically we ALSO open the blob in a new tab so the guest has
-   * a fallback: some iOS Safari versions silently ignore the download
-   * attribute when the click happens after an async fetch (breaks the
-   * "user gesture" chain Apple requires), so the anchor-download can
-   * silently no-op there. Keeping the long-press-to-save tab open means the
-   * guest can always save manually even when the automatic download doesn't
-   * fire.
+   * Same fetch → blob → save call on every platform; no UA branching, no
+   * popup, no instructions. saveBlob() below is what actually adapts to
+   * what the platform supports.
    */
   async function downloadItem(item, btn) {
     if (btn.disabled) return;
@@ -88,72 +74,14 @@
     if (iconEl) iconEl.style.display = "none";
     if (spinEl) spinEl.style.display = "";
 
-    /*
-     * Minor Fix — Download button showed a heads-up but never actually
-     * completed the save:
-     *
-     * window.open() only counts as "triggered by a user gesture" while it's
-     * called synchronously inside the click handler. The old code called it
-     * AFTER `await fetch()` / `await res.blob()` — by then the gesture had
-     * expired, so iOS Safari (and several in-app browsers) silently blocked
-     * the popup. Nothing visibly happened beyond whatever the browser shows
-     * for a blocked popup, and the file never saved.
-     *
-     * Fix: open the tab HERE, synchronously, before any await, so it stays
-     * tied to the gesture — we just point it at the real file once it's
-     * ready below, instead of opening a fresh (by-then-unprivileged) tab.
-     */
-    let preopenedTab = null;
-    if (IS_IOS) {
-      preopenedTab = window.open("", "_blank");
-    }
-
     try {
       const res = await fetch(item.url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-      const objUrl = URL.createObjectURL(blob);
       const filename = `studrio-${item.label.replace(/\s+/g, "-").toLowerCase()}.${item.mimeExt}`;
-
-      if (IS_IOS) {
-        // iOS Safari doesn't reliably honor the <a download> attribute at
-        // all (blob or otherwise), so the anchor-click approach below is
-        // skipped here — the pre-opened tab (still holding the gesture) is
-        // where the guest actually saves, via long-press on the now-loaded
-        // media → "Save Video" / "Add to Photos" / "Save to Files".
-        if (preopenedTab && !preopenedTab.closed) {
-          preopenedTab.location = objUrl;
-        } else {
-          // Popup was blocked despite the pre-open (rare) — last resort.
-          window.open(objUrl, "_blank");
-        }
-        if (!_iosHintShown) {
-          _iosHintShown = true;
-          _showIosHint(item.type === "video");
-        } else {
-          showToast("Saving to Files — if nothing happens, long-press the media above");
-        }
-        setTimeout(() => URL.revokeObjectURL(objUrl), 90000);
-      } else {
-        // Android / desktop: standard <a download> blob trigger — saves
-        // directly to the device's Downloads folder.
-        const a = document.createElement("a");
-        a.href = objUrl;
-        a.download = filename;
-        a.rel = "noopener";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        // Minor Fix: revoking the blob too soon can truncate the save on
-        // slower devices or large video files, before the browser's own
-        // download manager has finished reading it — give it more
-        // headroom (30s) instead of the previous 15s.
-        setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
-        showToast(item.type === "video" ? "Video saved" : "Photo saved");
-      }
+      await saveBlob(blob, filename, item.type);
     } catch (e) {
       console.error("[gallery] Download failed:", e);
-      if (preopenedTab && !preopenedTab.closed) preopenedTab.close();
       showToast("Download failed — tap to retry");
     } finally {
       // Restore icon
@@ -164,27 +92,56 @@
     }
   }
 
-  // ── iOS hint sheet ────────────────────────────────────────────────────────
-  function _showIosHint(isVideo) {
-    const existing = document.querySelector(".gallery-ios-hint");
-    if (existing) existing.remove();
+  /*
+   * Saves an already-fetched blob to the device.
+   *
+   * Minor Fix — iOS: the previous version opened the blob in a new tab and
+   * showed a "long-press → Add to Photos / Save to Files" hint sheet,
+   * because a plain <a download> click doesn't reliably save on iOS
+   * Safari. Popping a tab after an async fetch also broke the user-gesture
+   * chain half the time, so guests saw the hint but nothing actually saved.
+   *
+   * Real fix: hand the file straight to the OS via the Web Share API
+   * (navigator.share with a File). Where that's supported — iOS Safari and
+   * Android Chrome both support sharing files — it opens the native share
+   * sheet with a genuine "Save Image" / "Save to Photos" action, no custom
+   * message needed at all. Desktop browsers generally don't support
+   * sharing files, so they transparently fall through to the same
+   * <a download> blob trigger every platform already used for the normal
+   * (non-iOS) case. Same button, same click handler, same code path
+   * everywhere — only the OS-level save mechanism adapts.
+   */
+  async function saveBlob(blob, filename, type) {
+    try {
+      const file = new File([blob], filename, { type: blob.type });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] });
+          return; // saved via the native share sheet
+        } catch (err) {
+          // AbortError = the guest dismissed the share sheet themselves —
+          // that's a cancel, not a failure; don't fall back or show an error.
+          if (err && err.name === "AbortError") return;
+          // Any other share failure: fall through to the anchor download.
+        }
+      }
+    } catch (e) {
+      // File/share construction unsupported in this browser — fall through.
+    }
 
-    const overlay = document.createElement("div");
-    overlay.className = "gallery-ios-hint";
-    overlay.innerHTML = `
-      <div class="gallery-ios-hint-sheet">
-        <h2>${isVideo ? "Save Video" : "Save Photo"}</h2>
-        <p>
-          We've started saving this to your <strong>Files</strong> app.
-          ${isVideo
-            ? "If nothing happens, the video also opened in a new tab — tap and hold it, then choose <strong>Save to Files</strong>."
-            : "If nothing happens, the photo also opened in a new tab — tap and hold it, then choose <strong>Add to Photos</strong> or <strong>Save to Files</strong>."}
-        </p>
-        <button class="gallery-ios-hint-ok">Got it</button>
-      </div>`;
-    overlay.querySelector(".gallery-ios-hint-ok").addEventListener("click", () => overlay.remove());
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-    document.body.appendChild(overlay);
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoking too soon can truncate the save on slower devices or large
+    // video files, before the browser's own download manager has finished
+    // reading it — give it headroom.
+    setTimeout(() => URL.revokeObjectURL(objUrl), 30000);
+    showToast(type === "video" ? "Video saved" : "Photo saved");
   }
 
   // ── Download button HTML ──────────────────────────────────────────────────
