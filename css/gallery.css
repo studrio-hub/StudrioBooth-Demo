@@ -373,6 +373,14 @@ body {
   padding: 20px;
 }
 
+/* CRITICAL: author stylesheets always beat the UA's [hidden]{display:none}
+   default regardless of specificity, so setting el.hidden=true in JS does
+   NOT hide this element unless we say so explicitly here. Without this rule,
+   the loading overlay stays visible and stacks on top of rendered content. */
+.gallery-status[hidden] {
+  display: none;
+}
+
 /* ── Loading spinner ───────────────────────────────────────────────────────── */
 .gallery-loading-spinner {
   width: 36px;
@@ -395,6 +403,12 @@ body {
   padding: 40px 32px;
   gap: 12px;
   z-index: 5;
+}
+
+/* Same [hidden] override as .gallery-status above — required or this
+   overlay stays visible on top of the carousel even when JS hides it. */
+.gallery-not-found[hidden] {
+  display: none;
 }
 
 .gallery-not-found-icon {

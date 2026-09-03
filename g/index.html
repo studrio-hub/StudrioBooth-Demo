@@ -6,7 +6,10 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://oismyjlhnlfavrdfvabg.supabase.co; media-src 'self' blob: https://oismyjlhnlfavrdfvabg.supabase.co; connect-src 'self' https://oismyjlhnlfavrdfvabg.supabase.co;">
 <title>The Gallery — Studrio Booth</title>
 <!-- This file lives at /g/index.html — CSS is one level up. -->
-<link rel="stylesheet" href="../css/gallery.css">
+<!-- ?v= is a cache-buster: GitHub Pages doesn't fingerprint filenames, so
+     mobile Safari can otherwise hold onto a stale cached copy indefinitely
+     across visits. Bump this number whenever gallery.css changes. -->
+<link rel="stylesheet" href="../css/gallery.css?v=2">
 </head>
 <body>
 
@@ -81,9 +84,11 @@
 </div><!-- /#galleryPage -->
 
 <!-- Supabase + gallery logic -->
+<!-- ?v= cache-busters — bump these numbers whenever the corresponding file
+     changes, so mobile browsers can't serve a stale cached copy. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="../js/cloud-storage.js"></script>
-<script src="../js/gallery.js"></script>
+<script src="../js/cloud-storage.js?v=2"></script>
+<script src="../js/gallery.js?v=2"></script>
 
 </body>
 </html>
