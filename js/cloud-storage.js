@@ -208,8 +208,8 @@ const offlineQueue = (() => {
 
 const CLOUD_CONFIG = {
   enabled: true,
-  supabaseUrl: "https://oismyjlhnlfavrdfvabg.supabase.co",
-  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pc215amxobmxmYXZyZGZ2YWJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMTI3OTMsImV4cCI6MjEwMDU4ODc5M30.TLGFzBFDYJsWUErTVV8yP2SlpkL9LzEPoFKV2R3hBGE",
+  supabaseUrl: "https://gbhsitdxorjocsetueul.supabase.co",
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiaHNpdGR4b3Jqb2NzZXR1ZXVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyNDg5NjksImV4cCI6MjEwNDgyNDk2OX0.n8flvS52X6Svhj1WmMrwORCxQIBzXf6ZexATmc_jJU4",
   bucketName: "photobooth",
   galleryBaseUrl: "https://studrio.cc/g/#"
 };
@@ -405,16 +405,27 @@ const cloudStorage = {
     // upload. Order matches selectedShots (a missing/null shot at index i
     // uploads nothing for that slot and leaves a null in the paths array
     // so gallery.js's grid can skip it while keeping the other positions
-    // correct).
+    // correct). Each upload is isolated in its own try/catch — one failed
+    // photo (e.g. a transient network blip) must not throw and abort the
+    // Promise.all below, which would otherwise take the strip/video/QR
+    // upload down with it even though those succeeded independently.
     const individualPhotoPaths = [];
     if (Array.isArray(sessionData.individualPhotos) && sessionData.individualPhotos.length) {
       await Promise.all(
         sessionData.individualPhotos.map(async (photoBlob, i) => {
           if (!photoBlob) { individualPhotoPaths[i] = null; return; }
           const path = `sessions/${sessionData.id}/photo-${i + 1}.jpg`;
-          await this.uploadBlob(photoBlob, path);
-          individualPhotoPaths[i] = path;
+          try {
+            await this.uploadBlob(photoBlob, path);
+            individualPhotoPaths[i] = path;
+          } catch (e) {
+            console.warn(`[cloudStorage] Individual photo ${i + 1} upload failed:`, e.message || e);
+            individualPhotoPaths[i] = null;
+          }
         })
+      );
+      console.info(
+        `[cloudStorage] Individual photos: ${individualPhotoPaths.filter(Boolean).length}/${sessionData.individualPhotos.length} uploaded for session ${sessionData.id}.`
       );
     }
 
@@ -485,6 +496,9 @@ const cloudStorage = {
     // slot); older sessions saved before this field existed just won't
     // have it, so the grid stays hidden for them (gallery.js already
     // handles an empty/missing array).
+    if (!Array.isArray(session.individualPhotoPaths)) {
+      console.info(`[cloudStorage] session ${sessionId} has no individualPhotoPaths — likely saved before that field existed; photo grid will stay hidden.`);
+    }
     const individualPhotoUrls = Array.isArray(session.individualPhotoPaths)
       ? session.individualPhotoPaths.map((p) => (isPath(p) ? sign(p) : (p || null)))
       : (session.individualPhotoUrls || []);
