@@ -3,13 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://oismyjlhnlfavrdfvabg.supabase.co; media-src 'self' blob: https://oismyjlhnlfavrdfvabg.supabase.co; connect-src 'self' https://oismyjlhnlfavrdfvabg.supabase.co;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://gbhsitdxorjocsetueul.supabase.co; media-src 'self' blob: https://gbhsitdxorjocsetueul.supabase.co; connect-src 'self' https://gbhsitdxorjocsetueul.supabase.co;">
 <title>The Gallery — Studrio Booth</title>
 <!-- This file lives at /g/index.html — CSS is one level up. -->
-<!-- ?v= is a cache-buster: GitHub Pages doesn't fingerprint filenames, so
-     mobile Safari can otherwise hold onto a stale cached copy indefinitely
-     across visits. Bump this number whenever gallery.css changes. -->
-<link rel="stylesheet" href="../css/gallery.css?v=2">
+<link rel="stylesheet" href="../css/gallery.css">
 </head>
 <body>
 
@@ -20,7 +17,7 @@
     <h1 class="gallery-title">The Gallery</h1>
     <img
       class="gallery-logo"
-      src="../assets/designs/studrio_logo.png"
+      src="../assets/designs/Logo_White.png"
       alt="Studrio Booth"
       onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
     >
@@ -84,11 +81,9 @@
 </div><!-- /#galleryPage -->
 
 <!-- Supabase + gallery logic -->
-<!-- ?v= cache-busters — bump these numbers whenever the corresponding file
-     changes, so mobile browsers can't serve a stale cached copy. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="../js/cloud-storage.js?v=2"></script>
-<script src="../js/gallery.js?v=2"></script>
+<script src="../js/cloud-storage.js"></script>
+<script src="../js/gallery.js"></script>
 
 </body>
 </html>
